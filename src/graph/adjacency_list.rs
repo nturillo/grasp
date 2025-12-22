@@ -1,10 +1,10 @@
 // Adjacency list implementation of graph
 
-use crate::graph::{adjacency_list, graph_traits::*};
+use crate::graph::{errors::GraphError, graph_traits::*};
 use std::collections::{HashMap, HashSet};
 
-impl SetTrait for HashSet<usize> {
-    fn contains(&self, v: usize) -> bool {
+impl SetTrait for HashSet<VertexType> {
+    fn contains(&self, v: VertexType) -> bool {
         self.contains(&v)
     }
     fn num_vertices(&self) -> usize {
@@ -16,17 +16,17 @@ impl SetTrait for HashSet<usize> {
     fn union(&self, other: &Self) -> Self {
         self | other
     }
-    fn iter(&self) -> impl Iterator<Item=&usize> {
+    fn iter(&self) -> impl Iterator<Item=&VertexType> {
         self.iter()
     }
 }
 
 struct SparseGraph {
-    adjacency_list: HashMap<usize, HashSet<usize>>
+    adjacency_list: HashMap<VertexType, HashSet<VertexType>>
 }
 
 impl GraphTrait for SparseGraph {
-    type NeighborSet = HashSet<usize>;
+    type NeighborSet = HashSet<VertexType>;
     
     fn new() -> Self {
         Self {
@@ -41,25 +41,43 @@ impl GraphTrait for SparseGraph {
         self.adjacency_list.values()
             .fold(0, |acc, set| acc + set.len()) / 2
     }
-    fn has_edge(&self, v1: usize, v2: usize) -> Option<bool> {
-        if !self.adjacency_list.contains_key(&v1) || !self.adjacency_list.contains_key(&v2) {
-            return None
-        }
-        Some(self.adjacency_list[&v1].contains(&v2))
+    fn vertices(&self) -> impl Iterator<Item=VertexType> {
+        self.adjacency_list.keys().cloned()
     }
-    fn neighbors(&self, v: usize) -> Option<&Self::NeighborSet> {
-        self.adjacency_list.get(&v)
+    fn edges(&self) -> impl Iterator<Item=(VertexType,VertexType)> {
+        let mut edges = Vec::new();
+        for (&v, nbhrs) in &self.adjacency_list {
+            for &u in nbhrs {
+                if v < u {
+                    edges.push((v,u));
+                }
+
+            }
+        }
+        edges.into_iter()
+    }
+    fn contains(&self, v: VertexType) -> bool {
+        self.adjacency_list.contains_key(&v)
+    }
+    fn has_edge(&self, v1: VertexType, v2: VertexType) -> Result<bool, GraphError> {
+        if !self.adjacency_list.contains_key(&v1) || !self.adjacency_list.contains_key(&v2) {
+            return Err(GraphError::VertexNotInGraph)
+        }
+        Ok(self.adjacency_list[&v1].contains(&v2))
+    }
+    fn neighbors(&self, v: VertexType) -> Result<&Self::NeighborSet, GraphError> {
+        self.adjacency_list.get(&v).ok_or(GraphError::VertexNotInGraph)
     }
     
-    fn add_vertex(&mut self, v: usize) {
+    fn add_vertex(&mut self, v: VertexType) {
         self.adjacency_list.entry(v).or_default();
     }
-    fn add_edge(&mut self, v1: usize, v2:usize) {
+    fn add_edge(&mut self, v1: VertexType, v2:VertexType) {
         self.adjacency_list.entry(v1).or_default().insert(v2);
         self.adjacency_list.entry(v2).or_default().insert(v1);
     }
-    fn add_neighbors(&mut self, v: usize, nbhrs: impl Iterator<Item=usize>) {
-        let nbhr_vec: Vec<usize> = nbhrs.collect();
+    fn add_neighbors(&mut self, v: VertexType, nbhrs: impl Iterator<Item=VertexType>) {
+        let nbhr_vec: Vec<VertexType> = nbhrs.collect();
         for u in nbhr_vec.clone() {
             self.adjacency_list.entry(u).or_default();
         }
@@ -91,8 +109,8 @@ mod tests {
         assert!(!butterfly.has_edge(3, 4).unwrap());
         assert!(!butterfly.has_edge(2, 5).unwrap());
         
-        assert!(butterfly.has_edge(1, 6).is_none());
-        assert!(butterfly.has_edge(10, 3939).is_none());
+        assert!(butterfly.has_edge(1, 6).expect_err("edge shouldn't exist") == GraphError::VertexNotInGraph);
+        assert!(butterfly.has_edge(10, 3843).expect_err("edge shouldn't exist") == GraphError::VertexNotInGraph);
         
         assert!(butterfly.num_vertices() == 5);
         assert!(butterfly.num_edges() == 6);

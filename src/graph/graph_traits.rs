@@ -1,10 +1,12 @@
+use crate::graph::errors::*;
 
+pub type VertexType = usize;
 pub trait SetTrait: Clone {
-    fn contains(&self, v: usize) -> bool;
+    fn contains(&self, v: VertexType) -> bool;
     fn num_vertices(&self) -> usize;
     fn union(&self, other: &Self) -> Self;
     fn intersection(&self, other: &Self) -> Self;
-    fn iter(&self) -> impl Iterator<Item=&usize>;
+    fn iter(&self) -> impl Iterator<Item=&VertexType>;
 }
 
 pub trait GraphTrait {
@@ -14,14 +16,15 @@ pub trait GraphTrait {
 
     fn num_vertices(&self) -> usize;
     fn num_edges(&self) -> usize;
-    fn has_edge(&self, v1: usize, v2: usize) -> Option<bool>;
-        // None if v1 or v2 don't exist in the graph
-    fn neighbors(&self, v: usize) -> Option<&Self::NeighborSet>;
-        // None if v doesn't exist in the graph
+    fn vertices(&self) -> impl Iterator<Item=VertexType>;
+    fn edges(&self) -> impl Iterator<Item=(VertexType,VertexType)>;
+    fn contains(&self, v: VertexType) -> bool;
+    fn has_edge(&self, v1: VertexType, v2: VertexType) -> Result<bool, GraphError>;
+    fn neighbors(&self, v: VertexType) -> Result<&Self::NeighborSet, GraphError>;
     
-    fn add_vertex(&mut self, v: usize);
-    fn add_edge(&mut self, v1: usize, v2:usize);
+    fn add_vertex(&mut self, v: VertexType);
+    fn add_edge(&mut self, v1: VertexType, v2:VertexType);
         //adds v1 and v2 if they don't exist
-    fn add_neighbors(&mut self, v: usize, nbhrs: impl Iterator<Item=usize>);
+    fn add_neighbors(&mut self, v: VertexType, nbhrs: impl Iterator<Item=VertexType>);
         //adds v and nbhrs if they don't exist
 }
