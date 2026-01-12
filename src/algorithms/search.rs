@@ -77,3 +77,4 @@ impl<'a, G:GraphTrait, F:Frontier> Iterator for TraversalIter<'a, G, F> {
         Some(v)
     }
 }
+
