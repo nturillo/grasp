@@ -3,10 +3,10 @@ use crate::graph::errors::GraphError;
 
 use std::collections::{HashSet, VecDeque};
 
-pub type BfsIter<'a, G:GraphTrait> = TraversalIter<'a, G, VecDeque<VertexType>>;
-pub type DfsIter<'a, G:GraphTrait> = TraversalIter<'a, G, Vec<VertexType>>;
+pub type BfsIter<'a, G> = TraversalIter<'a, G, VecDeque<VertexType>>;
+pub type DfsIter<'a, G> = TraversalIter<'a, G, Vec<VertexType>>;
 
-trait Frontier {
+pub trait Frontier {
     fn new() -> Self;
     fn push(&mut self, v: VertexType);
     fn pop(&mut self) -> Option<VertexType>;

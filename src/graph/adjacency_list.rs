@@ -21,7 +21,7 @@ impl SetTrait for HashSet<VertexType> {
     }
 }
 
-struct SparseGraph {
+pub struct SparseGraph {
     adjacency_list: HashMap<VertexType, HashSet<VertexType>>
 }
 
