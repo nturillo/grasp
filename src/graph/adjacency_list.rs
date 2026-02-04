@@ -59,7 +59,10 @@ impl GraphTrait for SparseGraph {
     fn contains(&self, v: VertexType) -> bool {
         self.adjacency_list.contains_key(&v)
     }
-    fn has_edge(&self, v1: VertexType, v2: VertexType) -> Result<bool, GraphError> {
+    fn has_edge(&self, e: EdgeType) -> Result<bool, GraphError> {
+        let v1 = e.0;
+        let v2 = e.1;
+
         if !self.adjacency_list.contains_key(&v1) || !self.adjacency_list.contains_key(&v2) {
             return Err(GraphError::VertexNotInGraph)
         }
@@ -72,7 +75,9 @@ impl GraphTrait for SparseGraph {
     fn add_vertex(&mut self, v: VertexType) {
         self.adjacency_list.entry(v).or_default();
     }
-    fn add_edge(&mut self, v1: VertexType, v2:VertexType) {
+    fn add_edge(&mut self, e: EdgeType) {
+        let v1 = e.0;
+        let v2 = e.1;
         self.adjacency_list.entry(v1).or_default().insert(v2);
         self.adjacency_list.entry(v2).or_default().insert(v1);
     }
@@ -92,25 +97,25 @@ mod tests {
     #[test]
     fn butterfly_graph() {
         let mut butterfly = SparseGraph::new();
-        butterfly.add_edge(1, 2);
-        butterfly.add_edge(2,3);
-        butterfly.add_edge(1,3);
-        butterfly.add_edge(1,4);
-        butterfly.add_edge(1,5);
-        butterfly.add_edge(4,5);
+        butterfly.add_edge((1,2));
+        butterfly.add_edge((2,3));
+        butterfly.add_edge((1,3));
+        butterfly.add_edge((1,4));
+        butterfly.add_edge((1,5));
+        butterfly.add_edge((4,5));
         
-        assert!(butterfly.has_edge(1, 2).unwrap());
-        assert!(butterfly.has_edge(2, 3).unwrap());
-        assert!(butterfly.has_edge(1, 3).unwrap());
-        assert!(butterfly.has_edge(1, 4).unwrap());
-        assert!(butterfly.has_edge(1, 5).unwrap());
-        assert!(butterfly.has_edge(4, 5).unwrap());
+        assert!(butterfly.has_edge((1, 2)).unwrap());
+        assert!(butterfly.has_edge((2, 3)).unwrap());
+        assert!(butterfly.has_edge((1, 3)).unwrap());
+        assert!(butterfly.has_edge((1, 4)).unwrap());
+        assert!(butterfly.has_edge((1, 5)).unwrap());
+        assert!(butterfly.has_edge((4, 5)).unwrap());
         
-        assert!(!butterfly.has_edge(3, 4).unwrap());
-        assert!(!butterfly.has_edge(2, 5).unwrap());
+        assert!(!butterfly.has_edge((3, 4)).unwrap());
+        assert!(!butterfly.has_edge((2, 5)).unwrap());
         
-        assert!(butterfly.has_edge(1, 6).expect_err("edge shouldn't exist") == GraphError::VertexNotInGraph);
-        assert!(butterfly.has_edge(10, 3843).expect_err("edge shouldn't exist") == GraphError::VertexNotInGraph);
+        assert!(butterfly.has_edge((1, 6)).expect_err("edge shouldn't exist") == GraphError::VertexNotInGraph);
+        assert!(butterfly.has_edge((10, 3843)).expect_err("edge shouldn't exist") == GraphError::VertexNotInGraph);
         
         assert!(butterfly.num_vertices() == 5);
         assert!(butterfly.num_edges() == 6);
