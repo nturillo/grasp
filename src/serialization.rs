@@ -27,12 +27,12 @@ mod tests {
     #[test]
     fn butterfly_dot() {
         let mut butterfly = SparseGraph::new();
-        butterfly.add_edge(1, 2);
-        butterfly.add_edge(2,3);
-        butterfly.add_edge(1,3);
-        butterfly.add_edge(1,4);
-        butterfly.add_edge(1,5);
-        butterfly.add_edge(4,5);
+        butterfly.add_edge((1,2));
+        butterfly.add_edge((2,3));
+        butterfly.add_edge((1,3));
+        butterfly.add_edge((1,4));
+        butterfly.add_edge((1,5));
+        butterfly.add_edge((4,5));
         
         let butterfly_dot = "graph {\
         \n    1;\
