@@ -1,9 +1,9 @@
 use crate::{
-    frame::{header, sandbox},
+    frame::{graph_interaction, header, sandbox, style::Style},
     graph::storage::{Graph, Vertex},
 };
 use eframe::egui::{
-    self, CentralPanel, Context, Id, MenuBar, PointerButton, Popup, Response, Sense,
+    self, CentralPanel, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
     TopBottomPanel, Ui, Vec2,
 };
 
@@ -11,11 +11,16 @@ use eframe::egui::{
 pub(crate) struct GraspApp {
     pub sandbox: sandbox::Sandbox,
     pub graph: Graph,
+    pub style: Style,
 }
 
 impl GraspApp {
     fn new(cc: &eframe::CreationContext<'_>) -> Self {
         Self::default()
+    }
+
+    fn use_style(&mut self, style: Style) {
+        self.style = style;
     }
 }
 
@@ -23,10 +28,10 @@ impl eframe::App for GraspApp {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         TopBottomPanel::top(Id::new("menu_header")).show(ctx, |ui| {
             MenuBar::new().ui(ui, |ui| {
-                header::file_menu(ui);
-                header::edit_menu(ui);
-                header::view_menu(ui);
-                header::tool_menu(ui);
+                header::file_menu(self, ui);
+                header::edit_menu(self, ui);
+                header::view_menu(self, ui);
+                header::tool_menu(self, ui);
             });
         });
 
@@ -51,31 +56,11 @@ impl eframe::App for GraspApp {
                     .context_menu(ui, response.interact_pointer_pos(), &mut self.graph)
             });
 
-            let vertex_list = self.sandbox.draw_graph(ui, &self.graph);
-            for (vertex_response, vertex_id) in vertex_list {
-                if !Popup::is_any_open(ui.ctx()) {
-                    self.handle_vertex_response(ui, vertex_id, vertex_response);
-                }
+            let graph_list = self.sandbox.draw_graph(ui, &self.graph, &self.style);
+            for (vertex_response, vertex_id) in graph_list.0 {
+                graph_interaction::handle_vertex_response(self, ui, vertex_id, vertex_response);
             }
         });
-    }
-}
-
-impl GraspApp {
-    fn vertex_primary_click(&mut self, ui: &mut Ui, vertex_id: usize, response: Response) {
-        if self.graph.selected_list.contains(&vertex_id) {
-            self.graph.selected_list.retain(|&id| id != vertex_id)
-        } else {
-            self.graph.selected_list = vec![vertex_id];
-        }
-    }
-
-    fn handle_vertex_response(&mut self, ui: &mut Ui, vertex_id: usize, response: Response) {
-        if let Some(vertex) = self.graph.vertex_list.get(&vertex_id) {
-            if response.clicked() {
-                self.vertex_primary_click(ui, vertex_id, response);
-            }
-        }
     }
 }
 

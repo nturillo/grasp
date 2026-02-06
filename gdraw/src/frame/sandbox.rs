@@ -1,6 +1,9 @@
-use crate::graph::{
-    graph_widget::VertexWidget,
-    storage::{Graph, Vertex},
+use crate::{
+    frame::style::Style,
+    graph::{
+        graph_widget::{EdgeWidget, VertexWidget},
+        storage::{Graph, Vertex, VertexPair},
+    },
 };
 use eframe::egui::{Pos2, Rect, Response, Ui, Vec2};
 
@@ -39,22 +42,45 @@ impl Sandbox {
         graph.create_vertex(self.screen_to_sandbox(screen_coord));
     }
 
-    pub fn draw_graph(&self, ui: &mut Ui, graph: &Graph) -> Vec<(Response, usize)> {
-        let mut vec = Vec::new();
+    pub fn draw_graph(
+        &self,
+        ui: &mut Ui,
+        graph: &Graph,
+        style: &Style,
+    ) -> (Vec<(Response, usize)>, Vec<(Response, VertexPair)>) {
+        let mut vertex_vec = Vec::new();
+        let mut edge_vec = Vec::new();
 
-        for (&index, vertex) in &graph.vertex_list {
-            vec.push((
-                ui.add(VertexWidget {
-                    radius: 25.0,
-                    vertex: &vertex,
-                    graph: graph,
-                    screen_center: self.sandbox_to_screen(vertex.center),
-                }),
-                index,
-            ));
+        for ([start_index, end_index], edge) in &graph.edge_list {
+            if let (Some(start_vertex), Some(end_vertex)) = (
+                graph.vertex_list.get(start_index),
+                graph.vertex_list.get(end_index),
+            ) {
+                edge_vec.push((
+                    ui.add(EdgeWidget {
+                        edge: &edge,
+                        graph: graph,
+                        style: style,
+                        start_vertex_center: self.sandbox_to_screen(start_vertex.center),
+                        end_vertex_center: self.sandbox_to_screen(end_vertex.center),
+                    }),
+                    [*start_index, *end_index],
+                ));
+            }
         }
 
-        vec
+        for (&index, vertex) in &graph.vertex_list {
+            let widget = ui.add(VertexWidget {
+                vertex: &vertex,
+                graph: graph,
+                style: style,
+                screen_center: self.sandbox_to_screen(vertex.center),
+            });
+
+            vertex_vec.push((widget, index));
+        }
+
+        (vertex_vec, edge_vec)
     }
 
     pub fn context_menu(&mut self, ui: &mut Ui, context_location: Option<Pos2>, graph: &mut Graph) {
