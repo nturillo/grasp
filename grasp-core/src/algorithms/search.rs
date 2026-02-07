@@ -41,8 +41,10 @@ pub struct TraversalIter<'a, G: GraphTrait, F: Frontier> {
     visited: HashSet<VertexType>
 }
 
-pub struct Dijkstra<'a, G: GraphTrait> {
+pub struct Dijkstra<'a, G: GraphTrait, WF>
+where WF: Fn(&G, VertexType, VertexType) -> u64 + 'a, {
     g: &'a G,
+    weight: WF,
     dist: HashMap<VertexType, u64>,
     prev: HashMap<VertexType, VertexType>,
     heap: BinaryHeap<Reverse<(u64, VertexType)>>,
@@ -72,10 +74,7 @@ impl<'a, G:GraphTrait, F:Frontier> Iterator for TraversalIter<'a, G, F> {
     fn next(&mut self) -> Option<Self::Item> {
         let v = self.frontier.pop()?;
         
-        for u in self.g.neighbors(v)
-            .expect("graph should have vertex")
-            .iter()
-        {
+        for u in self.g.neighbors(v).expect("graph should have vertex").iter() {
             if self.visited.contains(u) {
                 continue;
             }
@@ -87,11 +86,13 @@ impl<'a, G:GraphTrait, F:Frontier> Iterator for TraversalIter<'a, G, F> {
     }
 }
 
-impl<'a, G: GraphTrait> Dijkstra<'a, G> {
-    pub fn from_source(source: VertexType, g: &'a G) -> Result<Self, GraphError> {
+impl<'a, G: GraphTrait, WF> Dijkstra<'a, G, WF>
+where WF: Fn(&G, VertexType, VertexType) -> u64 + 'a, {
+    pub fn from_source(source: VertexType, g: &'a G, weight: WF) -> Result<Self, GraphError> {
         if !g.contains(source) {
             return Err(GraphError::VertexNotInGraph);
         }
+
         let mut dist = HashMap::new();
         dist.insert(source, 0u64);
 
@@ -100,10 +101,11 @@ impl<'a, G: GraphTrait> Dijkstra<'a, G> {
 
         Ok(Dijkstra {
             g,
+            weight,
             dist,
             prev: HashMap::new(),
             heap,
-            finished: HashSet::new(),
+            finished: HashSet::new()
         })
     }
 
@@ -127,8 +129,9 @@ impl<'a, G: GraphTrait> Dijkstra<'a, G> {
     }
 }
 
-impl<'a, G: GraphTrait> Iterator for Dijkstra<'a, G> {
-    type Item = (VertexType, u64);
+impl<'a, G: GraphTrait, WF> Iterator for Dijkstra<'a, G, WF>
+where WF: Fn(&G, VertexType, VertexType) -> u64 + 'a {
+    type Item = Result<(VertexType, u64), GraphError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(Reverse((d, v))) = self.heap.pop() {
@@ -143,12 +146,31 @@ impl<'a, G: GraphTrait> Iterator for Dijkstra<'a, G> {
             }
             self.finished.insert(v);
 
-            //This is where logic for relaxing edges would go,
-            //need to wait for edge weights to be implemented
+            let neighbor_list = match self.g.neighbors(v) {
+                Ok(n) => n,
+                Err(e) => return Some(Err(e)),
+            };
 
-            return Some((v, d));
+            for u in neighbor_list.iter() {
+                let w = (self.weight)(self.g, v, *u);
+                let alt = match d.checked_add(w) {
+                    Some(sum) => sum,
+                    None => return Some(Err(GraphError::ArithmeticOverflow)),
+                };
+
+                let is_better = match self.dist.get(u) {
+                    Some(&old) => alt < old,
+                    None => true,
+                };
+
+                if is_better {
+                    self.dist.insert(*u, alt);
+                    self.prev.insert(*u, v);
+                    self.heap.push(Reverse((alt, *u)));
+                }
+            }
+            return Some(Ok((v, d)));
         }
-
-        return None;
+        None
     }
 }
