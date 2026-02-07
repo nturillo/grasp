@@ -1,11 +1,16 @@
 use eframe::egui::{Popup, Response, Ui};
 
 use crate::{
-    app::GraspApp,
+    app::GraspAppHandler,
     graph::storage::{Graph, VertexPair},
 };
 
-fn vertex_primary_click(app: &mut GraspApp, ui: &mut Ui, vertex_id: usize, response: &Response) {
+fn vertex_primary_click(
+    app: &mut GraspAppHandler,
+    ui: &mut Ui,
+    vertex_id: usize,
+    response: &Response,
+) {
     let is_selected = app.graph.selected_list.contains(&vertex_id);
     let single_selection = app.graph.selected_list.len() == 1;
     let shift_held = ui.input(|input| input.modifiers.shift);
@@ -40,7 +45,7 @@ fn vertex_context_try_get_pair(graph: &mut Graph, vertex_id: &usize) -> Option<V
     }
 }
 
-fn vertex_context(app: &mut GraspApp, ui: &mut Ui, vertex_id: &usize) {
+fn vertex_context(app: &mut GraspAppHandler, ui: &mut Ui, vertex_id: &usize) {
     let maybe_pair = vertex_context_try_get_pair(&mut app.graph, vertex_id);
 
     if let Some(vertex_pair) = maybe_pair {
@@ -68,7 +73,7 @@ fn vertex_context(app: &mut GraspApp, ui: &mut Ui, vertex_id: &usize) {
 }
 
 pub fn handle_vertex_response(
-    app: &mut GraspApp,
+    app: &mut GraspAppHandler,
     ui: &mut Ui,
     vertex_id: usize,
     response: Response,

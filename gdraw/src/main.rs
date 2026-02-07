@@ -1,6 +1,9 @@
-use gdraw;
+use gdraw::app::GraspApp;
 
+#[allow(unused)]
 fn main() {
     println!("Hello, world!");
-    let _ = gdraw::app::start();
+    let mut app = GraspApp::default();
+
+    let _ = app.start();
 }

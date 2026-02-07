@@ -8,23 +8,44 @@ use eframe::egui::{
 };
 
 #[derive(Default)]
-pub(crate) struct GraspApp {
-    pub sandbox: sandbox::Sandbox,
-    pub graph: Graph,
+pub struct GraspApp {
     pub style: Style,
 }
 
 impl GraspApp {
-    fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        Self::default()
-    }
-
-    fn use_style(&mut self, style: Style) {
-        self.style = style;
+    /// Opens the visualizer window.
+    ///
+    /// To display a graph, use [`crate::graph::load`] to load the graph before calling this function.
+    pub fn start(&self) -> Result<(), eframe::Error> {
+        let native_options = eframe::NativeOptions::default();
+        eframe::run_native(
+            "Grasp",
+            native_options,
+            Box::new(|cc| {
+                cc.egui_ctx.set_visuals(egui::Visuals::light());
+                Ok(Box::new(GraspAppHandler::new(cc, &self.style)))
+            }),
+        )
     }
 }
 
-impl eframe::App for GraspApp {
+pub(crate) struct GraspAppHandler<'a> {
+    pub sandbox: sandbox::Sandbox,
+    pub graph: Graph,
+    pub style: &'a Style,
+}
+
+impl<'a> GraspAppHandler<'a> {
+    fn new(cc: &eframe::CreationContext<'_>, style: &'a Style) -> Self {
+        Self {
+            sandbox: Default::default(),
+            graph: Default::default(),
+            style: style,
+        }
+    }
+}
+
+impl<'a> eframe::App for GraspAppHandler<'a> {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         TopBottomPanel::top(Id::new("menu_header")).show(ctx, |ui| {
             MenuBar::new().ui(ui, |ui| {
@@ -62,19 +83,4 @@ impl eframe::App for GraspApp {
             }
         });
     }
-}
-
-/// Opens the visualizer window.
-///
-/// To display a graph, use [`crate::graph::load`] to load the graph before calling this function.
-pub fn start() -> Result<(), eframe::Error> {
-    let native_options = eframe::NativeOptions::default();
-    eframe::run_native(
-        "Grasp",
-        native_options,
-        Box::new(|cc| {
-            cc.egui_ctx.set_visuals(egui::Visuals::light());
-            Ok(Box::new(GraspApp::new(cc)))
-        }),
-    )
 }

@@ -1,8 +1,8 @@
 use eframe::egui::{InnerResponse, Ui};
 
-use crate::app::GraspApp;
+use crate::app::GraspAppHandler;
 
-pub fn file_menu(app: &mut GraspApp, ui: &mut Ui) -> InnerResponse<Option<()>> {
+pub fn file_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option<()>> {
     ui.menu_button("File", |ui| {
         if ui.button("New File").clicked() {
             ui.close();
@@ -38,7 +38,7 @@ pub fn file_menu(app: &mut GraspApp, ui: &mut Ui) -> InnerResponse<Option<()>> {
     })
 }
 
-pub fn edit_menu(app: &mut GraspApp, ui: &mut Ui) -> InnerResponse<Option<()>> {
+pub fn edit_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option<()>> {
     ui.menu_button("Edit", |ui| {
         if app.graph.directed && ui.button("Set Undirected").clicked() {
             app.graph.directed = false;
@@ -52,7 +52,7 @@ pub fn edit_menu(app: &mut GraspApp, ui: &mut Ui) -> InnerResponse<Option<()>> {
     })
 }
 
-pub fn view_menu(app: &mut GraspApp, ui: &mut Ui) -> InnerResponse<Option<()>> {
+pub fn view_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option<()>> {
     ui.menu_button("View", |ui| {
         if ui.button("TODO").clicked() {
             ui.close();
@@ -60,7 +60,7 @@ pub fn view_menu(app: &mut GraspApp, ui: &mut Ui) -> InnerResponse<Option<()>> {
     })
 }
 
-pub fn tool_menu(app: &mut GraspApp, ui: &mut Ui) -> InnerResponse<Option<()>> {
+pub fn tool_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option<()>> {
     ui.menu_button("Tools", |ui| {
         if ui.button("TODO").clicked() {
             ui.close();
