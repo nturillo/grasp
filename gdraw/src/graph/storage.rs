@@ -62,7 +62,8 @@ impl Graph {
         self.selected_list = vec![];
     }
 
-    pub fn remove_edge(&mut self, pair: VertexPair) -> Option<Edge> {
-        self.edge_list.remove(&pair)
+    pub fn remove_edge(&mut self, pair: VertexPair) {
+        self.edge_list
+            .retain(|edge, _| edge != &pair && (self.directed || edge != &[pair[1], pair[0]]));
     }
 }
