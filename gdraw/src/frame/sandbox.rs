@@ -93,4 +93,14 @@ impl Sandbox {
             self.create_vertex(self.last_context_location.to_vec2(), graph);
         }
     }
+
+    pub fn update_screen_rect(&mut self, rect: Rect) {
+        if self.screen_rect == Rect::NOTHING {
+            self.screen_rect = rect;
+            return;
+        }
+
+        self.size = self.size * rect.size() / self.screen_rect.size();
+        self.screen_rect = rect;
+    }
 }

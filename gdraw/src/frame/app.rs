@@ -36,7 +36,7 @@ impl eframe::App for GraspApp {
         });
 
         CentralPanel::default().show(ctx, |ui| {
-            self.sandbox.screen_rect = ui.max_rect();
+            self.sandbox.update_screen_rect(ui.max_rect());
 
             let response = ui.interact(
                 ui.max_rect(),
