@@ -1,5 +1,5 @@
 use crate::graph::layout::{self, PartialLayout};
-use eframe::egui::Vec2;
+use eframe::egui::{Color32, Vec2};
 use grasp::graph::{adjacency_list::SparseGraph, errors::GraphError, graph_traits::GraphTrait};
 use std::{
     collections::HashMap,
@@ -15,6 +15,18 @@ pub type VertexPair = [usize; 2];
 pub struct Vertex {
     pub center: Vec2,
     pub id: usize,
+
+    pub color: Option<Color32>,
+}
+
+impl Vertex {
+    pub fn assign_color(&mut self, color: Color32) {
+        self.color = Some(color);
+    }
+
+    pub fn clear_color(&mut self) {
+        self.color = None;
+    }
 }
 
 #[derive(Default, Clone)]
@@ -45,6 +57,7 @@ impl Graph {
             Vertex {
                 center: center,
                 id: self.vertex_id,
+                color: Default::default(),
             },
         );
     }
@@ -116,6 +129,7 @@ impl<G: GraphTrait> From<&G> for Graph {
             graph.insert_vertex(Vertex {
                 id: vertex_id,
                 center: Default::default(),
+                color: Default::default(),
             });
         }
 

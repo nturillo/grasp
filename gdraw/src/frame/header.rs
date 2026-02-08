@@ -27,7 +27,7 @@ pub fn file_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
         ui.separator();
 
         if ui.button("Settings").clicked() {
-            ui.close();
+            app.show_settings = true;
         }
 
         ui.separator();
@@ -48,7 +48,7 @@ pub fn edit_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
 
         ui.menu_button("Layout", |ui| {
             ui.menu_button("Switch Layout", |ui| {
-                if ui.button("Fruchterman & Reingold").clicked() {
+                if ui.button("Fruchterman-Reingold").clicked() {
                     app.graph.layout_config.layout_type = layout::LayoutType::FruchtermanReingold;
                 }
             });

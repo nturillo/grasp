@@ -1,7 +1,7 @@
 use core::f32;
 use std::{
     collections::{HashMap, btree_map::Range},
-    iter,
+    fmt, iter,
 };
 
 use eframe::egui::Vec2;
@@ -16,9 +16,17 @@ pub(crate) enum PartialLayout {
     FruchtermanReingold(f32),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum LayoutType {
     FruchtermanReingold,
+}
+
+impl fmt::Display for LayoutType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            LayoutType::FruchtermanReingold => write!(f, "Fruchterman-Reingold"),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]

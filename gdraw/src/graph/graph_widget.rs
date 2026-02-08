@@ -20,17 +20,27 @@ impl<'a> Widget for VertexWidget<'a> {
             Vec2::splat(2.0 * self.style.vertex_radius),
         );
 
+        let color = if let Some(color) = self.vertex.color {
+            color
+        } else {
+            self.style.vertex_color
+        }
+        .lerp_to_gamma(
+            self.style.highlight_color,
+            if self.graph.selected_list.contains(&self.vertex.id) {
+                self.style.highlight_strength
+            } else {
+                0.0
+            },
+        );
+
         let response = ui.allocate_rect(screen_rect, Sense::click_and_drag());
-        let color = match self.graph.selected_list.contains(&self.vertex.id) {
-            true => Color32::from_rgb(196, 194, 167),
-            false => Color32::from_rgb(200, 200, 200),
-        };
 
         ui.painter().circle(
             screen_rect.center(),
             self.style.vertex_radius,
             color,
-            Stroke::new(2.0, Color32::from_rgb(130, 130, 130)),
+            Stroke::new(self.style.outline_thickness, self.style.outline_color),
         );
 
         response
@@ -53,11 +63,15 @@ impl<'a> Widget for EdgeWidget<'a> {
 
         let response = ui.allocate_rect(screen_rect, Sense::click());
 
+        let radius = if self.style.show_vertices {
+            self.style.vertex_radius
+        } else {
+            0.0
+        };
+
         let dir_vector = (self.end_vertex_center - self.start_vertex_center).normalized();
-        let new_start = self.start_vertex_center
-            + (self.style.vertex_radius + self.style.edge_thickness / 2.0) * dir_vector;
-        let new_end = self.end_vertex_center
-            - (self.style.vertex_radius + self.style.edge_thickness / 2.0) * dir_vector;
+        let new_start = self.start_vertex_center + radius * dir_vector;
+        let new_end = self.end_vertex_center - radius * dir_vector;
 
         if self.graph.directed {
             let line_cutoff = new_end - self.style.arrow_size * dir_vector;

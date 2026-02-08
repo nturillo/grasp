@@ -77,15 +77,17 @@ impl Sandbox {
             }
         }
 
-        for (&index, vertex) in &graph.vertex_list {
-            let widget = ui.add(VertexWidget {
-                vertex: &vertex,
-                graph: graph,
-                style: style,
-                screen_center: self.sandbox_to_screen(vertex.center),
-            });
+        if style.show_vertices {
+            for (&index, vertex) in &graph.vertex_list {
+                let widget = ui.add(VertexWidget {
+                    vertex: &vertex,
+                    graph: graph,
+                    style: style,
+                    screen_center: self.sandbox_to_screen(vertex.center),
+                });
 
-            vertex_vec.push((widget, index));
+                vertex_vec.push((widget, index));
+            }
         }
 
         (vertex_vec, edge_vec)
