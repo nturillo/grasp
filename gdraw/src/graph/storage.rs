@@ -1,18 +1,25 @@
 use eframe::egui::Vec2;
-use std::collections::HashMap;
+use grasp::graph::{errors::GraphError, graph_traits::GraphTrait};
+use std::{
+    collections::HashMap,
+    hash::{DefaultHasher, Hash, Hasher},
+    os::windows::fs::FileTypeExt,
+};
 
 pub type VertexPair = [usize; 2];
 
+#[derive(Default, Clone)]
 pub struct Vertex {
     pub center: Vec2,
     pub id: usize,
 }
 
+#[derive(Default, Clone)]
 pub struct Edge {
     pub vertex_pair: VertexPair,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Graph {
     pub vertex_list: HashMap<usize, Vertex>,
     pub edge_list: HashMap<VertexPair, Edge>,
@@ -24,6 +31,10 @@ pub struct Graph {
 
 impl Graph {
     pub fn create_vertex(&mut self, center: Vec2) {
+        while self.vertex_list.contains_key(&self.vertex_id) {
+            self.vertex_id += 1;
+        }
+
         self.vertex_list.insert(
             self.vertex_id,
             Vertex {
@@ -31,8 +42,10 @@ impl Graph {
                 id: self.vertex_id,
             },
         );
+    }
 
-        self.vertex_id += 1;
+    pub fn insert_vertex(&mut self, vertex: Vertex) -> Option<Vertex> {
+        self.vertex_list.insert(vertex.id, vertex)
     }
 
     pub fn create_edge(&mut self, pair: VertexPair) {
@@ -65,5 +78,37 @@ impl Graph {
     pub fn remove_edge(&mut self, pair: VertexPair) {
         self.edge_list
             .retain(|edge, _| edge != &pair && (self.directed || edge != &[pair[1], pair[0]]));
+    }
+
+    pub fn vertices(&self) -> usize {
+        self.vertex_list.len()
+    }
+
+    pub fn get_hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.vertex_list
+            .values()
+            .for_each(|val| val.id.hash(&mut hasher));
+        self.edge_list.keys().for_each(|val| val.hash(&mut hasher));
+        hasher.finish()
+    }
+}
+
+impl<G: GraphTrait> From<&G> for Graph {
+    fn from(provider: &G) -> Self {
+        let mut graph = Graph::default();
+
+        for vertex_id in provider.vertices() {
+            graph.insert_vertex(Vertex {
+                id: vertex_id,
+                center: Default::default(),
+            });
+        }
+
+        for edge in provider.edges() {
+            graph.create_edge([edge.0, edge.1]);
+        }
+
+        graph
     }
 }

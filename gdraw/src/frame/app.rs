@@ -1,15 +1,36 @@
 use crate::{
-    frame::{graph_interaction, header, sandbox, style::Style},
-    graph::storage::{Graph, Vertex},
+    frame::{
+        graph_interaction, header,
+        sandbox::{self, Sandbox},
+        style::Style,
+    },
+    graph::{
+        layout::{self, LayoutConfig},
+        storage::Graph,
+    },
 };
 use eframe::egui::{
     self, CentralPanel, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
     TopBottomPanel, Ui, Vec2,
 };
+use grasp::graph::graph_traits::GraphTrait;
 
-#[derive(Default)]
 pub struct GraspApp {
     pub style: Style,
+    pub layout_config: LayoutConfig,
+    pub graph: Graph,
+    pub window_size: (f32, f32),
+}
+
+impl Default for GraspApp {
+    fn default() -> Self {
+        Self {
+            style: Default::default(),
+            layout_config: Default::default(),
+            graph: Default::default(),
+            window_size: (800.0, 800.0),
+        }
+    }
 }
 
 impl GraspApp {
@@ -17,15 +38,30 @@ impl GraspApp {
     ///
     /// To display a graph, use [`crate::graph::load`] to load the graph before calling this function.
     pub fn start(&self) -> Result<(), eframe::Error> {
-        let native_options = eframe::NativeOptions::default();
+        let native_options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size(Vec2::from(self.window_size)),
+            ..Default::default()
+        };
+
         eframe::run_native(
             "Grasp",
             native_options,
             Box::new(|cc| {
                 cc.egui_ctx.set_visuals(egui::Visuals::light());
-                Ok(Box::new(GraspAppHandler::new(cc, &self.style)))
+                Ok(Box::new(GraspAppHandler::new(
+                    cc,
+                    self.graph.clone(),
+                    &self.style,
+                )))
             }),
         )
+    }
+
+    /// Loads a graph from anything that implements [`grasp::graph::graph_traits::GraphTrait`]
+    pub fn load<T: GraphTrait>(&mut self, graph: &T) {
+        self.graph = Graph::from(graph);
+        layout::apply(&mut self.graph, &self.layout_config);
     }
 }
 
@@ -36,10 +72,13 @@ pub(crate) struct GraspAppHandler<'a> {
 }
 
 impl<'a> GraspAppHandler<'a> {
-    fn new(cc: &eframe::CreationContext<'_>, style: &'a Style) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, graph: Graph, style: &'a Style) -> Self {
+        let mut sandbox = Sandbox::default();
+        sandbox.scale(3.0);
+
         Self {
-            sandbox: Default::default(),
-            graph: Default::default(),
+            sandbox: sandbox,
+            graph: graph,
             style: style,
         }
     }

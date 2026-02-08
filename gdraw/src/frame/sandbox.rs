@@ -18,7 +18,7 @@ pub(crate) struct Sandbox {
 impl Default for Sandbox {
     fn default() -> Self {
         Self {
-            center: Vec2::new(0.5, 0.5),
+            center: Vec2::new(0.0, 0.0),
             size: Vec2::new(1.0, 1.0),
             screen_rect: Rect::NOTHING,
             last_context_location: Pos2::ZERO,
@@ -102,5 +102,9 @@ impl Sandbox {
 
         self.size = self.size * rect.size() / self.screen_rect.size();
         self.screen_rect = rect;
+    }
+
+    pub fn scale(&mut self, factor: f32) {
+        self.size *= factor;
     }
 }
