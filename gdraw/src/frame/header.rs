@@ -1,6 +1,6 @@
-use eframe::egui::{InnerResponse, Ui};
+use eframe::egui::{InnerResponse, Ui, ViewportCommand};
 
-use crate::app::GraspAppHandler;
+use crate::{app::GraspAppHandler, graph::layout};
 
 pub fn file_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option<()>> {
     ui.menu_button("File", |ui| {
@@ -33,7 +33,7 @@ pub fn file_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
         ui.separator();
 
         if ui.button("Exit").clicked() {
-            ui.close();
+            ui.ctx().send_viewport_cmd(ViewportCommand::Close);
         }
     })
 }
@@ -46,9 +46,30 @@ pub fn edit_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
             app.graph.directed = true;
         }
 
-        if ui.button("TODO").clicked() {
-            ui.close();
-        }
+        ui.menu_button("Layout", |ui| {
+            ui.menu_button("Switch Layout", |ui| {
+                if ui.button("Fruchterman & Reingold").clicked() {
+                    app.graph.layout_config.layout_type = layout::LayoutType::FruchtermanReingold;
+                }
+            });
+
+            if !app.graph.layout_config.run_per_update {
+                if ui.button("Apply (Restart)").clicked() {
+                    layout::apply(&mut app.graph);
+                }
+
+                if ui.button("Apply (Step)").clicked() {
+                    layout::reapply(&mut app.graph);
+                }
+            }
+
+            if !app.graph.layout_config.run_per_update && ui.button("Run Continously").clicked() {
+                app.graph.layout_config.run_per_update = true;
+            } else if app.graph.layout_config.run_per_update && ui.button("Stop Running").clicked()
+            {
+                app.graph.layout_config.run_per_update = false;
+            }
+        });
     })
 }
 

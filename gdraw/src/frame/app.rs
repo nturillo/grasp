@@ -17,8 +17,7 @@ use grasp::graph::graph_traits::GraphTrait;
 
 pub struct GraspApp {
     pub style: Style,
-    pub layout_config: LayoutConfig,
-    pub graph: Graph,
+    graph: Graph,
     pub window_size: (f32, f32),
 }
 
@@ -26,7 +25,6 @@ impl Default for GraspApp {
     fn default() -> Self {
         Self {
             style: Default::default(),
-            layout_config: Default::default(),
             graph: Default::default(),
             window_size: (800.0, 800.0),
         }
@@ -36,8 +34,8 @@ impl Default for GraspApp {
 impl GraspApp {
     /// Opens the visualizer window.
     ///
-    /// To display a graph, use [`crate::graph::load`] to load the graph before calling this function.
-    pub fn start(&self) -> Result<(), eframe::Error> {
+    /// To display a graph, call [`crate::frame::app::GraspApp::load`] to load the graph before calling this function.
+    pub fn start(&mut self) -> Result<(), eframe::Error> {
         let native_options = eframe::NativeOptions {
             viewport: egui::ViewportBuilder::default()
                 .with_inner_size(Vec2::from(self.window_size)),
@@ -51,7 +49,7 @@ impl GraspApp {
                 cc.egui_ctx.set_visuals(egui::Visuals::light());
                 Ok(Box::new(GraspAppHandler::new(
                     cc,
-                    self.graph.clone(),
+                    &mut self.graph,
                     &self.style,
                 )))
             }),
@@ -61,18 +59,26 @@ impl GraspApp {
     /// Loads a graph from anything that implements [`grasp::graph::graph_traits::GraphTrait`]
     pub fn load<T: GraphTrait>(&mut self, graph: &T) {
         self.graph = Graph::from(graph);
-        layout::apply(&mut self.graph, &self.layout_config);
+        layout::apply(&mut self.graph);
+    }
+
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set_layout_config(&mut self, config: LayoutConfig) {
+        self.graph.layout_config = config;
     }
 }
 
 pub(crate) struct GraspAppHandler<'a> {
     pub sandbox: sandbox::Sandbox,
-    pub graph: Graph,
+    pub graph: &'a mut Graph,
     pub style: &'a Style,
 }
 
 impl<'a> GraspAppHandler<'a> {
-    fn new(cc: &eframe::CreationContext<'_>, graph: Graph, style: &'a Style) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, graph: &'a mut Graph, style: &'a Style) -> Self {
         let mut sandbox = Sandbox::default();
         sandbox.scale(3.0);
 
@@ -104,11 +110,28 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 Sense::click_and_drag(),
             );
 
-            if !Popup::is_any_open(ui.ctx()) && response.clicked() {
-                if let Some(coords) = response.interact_pointer_pos() {
+            if !Popup::is_any_open(ui.ctx()) {
+                if response.clicked()
+                    && let Some(coords) = response.interact_pointer_pos()
+                {
                     self.sandbox
                         .create_vertex(coords.to_vec2(), &mut self.graph);
                 }
+
+                if response.dragged() {
+                    self.sandbox.center -= self
+                        .sandbox
+                        .screen_dist_to_sandbox_dist(response.drag_delta());
+                }
+
+                self.sandbox.scale(
+                    (1.0 + self.style.scroll_sensitivity).powf(
+                        -ui.ctx()
+                            .input(|input| input.smooth_scroll_delta)
+                            .y
+                            .clamp(-10.0, 10.0),
+                    ),
+                );
             }
 
             response.context_menu(|ui| {
@@ -119,6 +142,11 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
             let graph_list = self.sandbox.draw_graph(ui, &self.graph, &self.style);
             for (vertex_response, vertex_id) in graph_list.0 {
                 graph_interaction::handle_vertex_response(self, ui, vertex_id, vertex_response);
+            }
+
+            if self.graph.layout_config.run_per_update {
+                layout::reapply(&mut self.graph);
+                ctx.request_repaint();
             }
         });
     }

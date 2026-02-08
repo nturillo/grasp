@@ -1,5 +1,8 @@
 use core::f32;
-use std::collections::{HashMap, btree_map::Range};
+use std::{
+    collections::{HashMap, btree_map::Range},
+    iter,
+};
 
 use eframe::egui::Vec2;
 use rand::prelude::*;
@@ -7,15 +10,28 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::graph::storage::Graph;
 
+#[derive(Clone, Copy)]
+pub(crate) enum PartialLayout {
+    None,
+    FruchtermanReingold(f32),
+}
+
+#[derive(Clone, Copy)]
 pub enum LayoutType {
     FruchtermanReingold,
 }
 
+#[derive(Clone, Copy)]
 pub struct LayoutConfig {
     pub layout_type: LayoutType,
     pub area: (f32, f32),
     pub iterations: usize,
+    pub iterations_per_update: usize,
     pub temperature_decay_factor: f32,
+    pub temperature_decay_factor_per_update: f32,
+    pub run_per_update: bool,
+
+    pub(crate) partial_data: PartialLayout,
 }
 
 impl Default for LayoutConfig {
@@ -23,23 +39,47 @@ impl Default for LayoutConfig {
         Self {
             layout_type: LayoutType::FruchtermanReingold,
             area: (2.0, 2.0),
-            iterations: 200,
+            iterations: 3000,
+            iterations_per_update: 100,
             temperature_decay_factor: 0.95,
+            temperature_decay_factor_per_update: 0.9999,
+            run_per_update: false,
+            partial_data: PartialLayout::None,
         }
     }
 }
 
-pub(crate) fn apply(graph: &mut Graph, config: &LayoutConfig) {
-    match config.layout_type {
-        LayoutType::FruchtermanReingold => fruchterman_reingold(graph, config),
-    }
+pub(crate) fn apply(graph: &mut Graph) {
+    place_randomly(graph);
+    graph.layout_config.partial_data = PartialLayout::None;
+    reapply(graph);
+}
+
+pub(crate) fn reapply(graph: &mut Graph) {
+    graph.layout_config.partial_data = match graph.layout_config.layout_type {
+        LayoutType::FruchtermanReingold => fruchterman_reingold(graph),
+    };
 }
 
 // Algorithm from https://reingold.co/force-directed.pdf
-fn fruchterman_reingold(graph: &mut Graph, config: &LayoutConfig) {
+fn fruchterman_reingold(graph: &mut Graph) -> PartialLayout {
+    let config = graph.layout_config;
+    let (decay_factor, iterations) = if config.run_per_update {
+        (
+            config.temperature_decay_factor_per_update,
+            config.iterations_per_update,
+        )
+    } else {
+        (config.temperature_decay_factor, config.iterations)
+    };
+
     let area_size = config.area.0 * config.area.1;
     let edge_length = (area_size / graph.vertices() as f32).sqrt();
-    let mut temp = f32::min(config.area.0, config.area.1) / 10.0;
+
+    let mut temp = match config.partial_data {
+        PartialLayout::FruchtermanReingold(t) => t,
+        _ => f32::min(config.area.0, config.area.1) / 10.0,
+    };
 
     let force_rep = |v: Vec2, u: Vec2| {
         let displacement = v - u;
@@ -52,9 +92,7 @@ fn fruchterman_reingold(graph: &mut Graph, config: &LayoutConfig) {
 
     let mut vertex_displacement: HashMap<usize, Vec2> = HashMap::new();
 
-    place_randomly(graph, config);
-
-    for _ in 0..config.iterations {
+    for _ in 0..iterations {
         for (v_id, v_vertex) in &graph.vertex_list {
             let v = v_vertex.center;
 
@@ -96,14 +134,21 @@ fn fruchterman_reingold(graph: &mut Graph, config: &LayoutConfig) {
             );
         }
 
-        temp *= config.temperature_decay_factor;
+        temp *= decay_factor;
         vertex_displacement.clear();
+    }
+
+    if config.run_per_update {
+        PartialLayout::FruchtermanReingold(temp)
+    } else {
+        PartialLayout::None
     }
 }
 
-fn place_randomly(graph: &mut Graph, config: &LayoutConfig) {
-    let mut rng = ChaCha8Rng::seed_from_u64(graph.get_hash());
-    let area = Vec2::from(config.area);
+fn place_randomly(graph: &mut Graph) {
+    //let mut rng = ChaCha8Rng::seed_from_u64(graph.get_hash()); // May implement later if needed
+    let mut rng = rand::rng();
+    let area = Vec2::from(graph.layout_config.area);
     let offset = Vec2::splat(0.5);
 
     graph.vertex_list.values_mut().for_each(|vertex| {

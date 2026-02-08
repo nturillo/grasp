@@ -25,4 +25,6 @@ fn main() {
     app.load(&butterfly);
 
     let _ = app.start();
+
+    println!("App closed, now main continues");
 }

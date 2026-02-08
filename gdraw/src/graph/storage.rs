@@ -1,10 +1,13 @@
+use crate::graph::layout::{self, PartialLayout};
 use eframe::egui::Vec2;
-use grasp::graph::{errors::GraphError, graph_traits::GraphTrait};
+use grasp::graph::{adjacency_list::SparseGraph, errors::GraphError, graph_traits::GraphTrait};
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
     os::windows::fs::FileTypeExt,
 };
+
+use crate::graph::layout::LayoutConfig;
 
 pub type VertexPair = [usize; 2];
 
@@ -25,12 +28,14 @@ pub struct Graph {
     pub edge_list: HashMap<VertexPair, Edge>,
     pub selected_list: Vec<usize>,
     pub directed: bool,
+    pub layout_config: LayoutConfig,
 
     vertex_id: usize,
 }
 
 impl Graph {
     pub fn create_vertex(&mut self, center: Vec2) {
+        self.reset_partial_data();
         while self.vertex_list.contains_key(&self.vertex_id) {
             self.vertex_id += 1;
         }
@@ -45,10 +50,12 @@ impl Graph {
     }
 
     pub fn insert_vertex(&mut self, vertex: Vertex) -> Option<Vertex> {
+        self.reset_partial_data();
         self.vertex_list.insert(vertex.id, vertex)
     }
 
     pub fn create_edge(&mut self, pair: VertexPair) {
+        self.reset_partial_data();
         self.edge_list.insert(pair, Edge { vertex_pair: pair });
     }
 
@@ -58,6 +65,7 @@ impl Graph {
     }
 
     pub fn remove_vertex(&mut self, vertex_id: &usize) -> Option<Vertex> {
+        self.reset_partial_data();
         match self.vertex_list.remove(vertex_id) {
             None => None,
             Some(vertex) => {
@@ -70,12 +78,14 @@ impl Graph {
     }
 
     pub fn remove_selected(&mut self) {
+        self.reset_partial_data();
         self.vertex_list
             .retain(|vert, _| !self.selected_list.contains(vert));
         self.selected_list = vec![];
     }
 
     pub fn remove_edge(&mut self, pair: VertexPair) {
+        self.reset_partial_data();
         self.edge_list
             .retain(|edge, _| edge != &pair && (self.directed || edge != &[pair[1], pair[0]]));
     }
@@ -91,6 +101,10 @@ impl Graph {
             .for_each(|val| val.id.hash(&mut hasher));
         self.edge_list.keys().for_each(|val| val.hash(&mut hasher));
         hasher.finish()
+    }
+
+    fn reset_partial_data(&mut self) {
+        self.layout_config.partial_data = PartialLayout::None;
     }
 }
 

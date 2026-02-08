@@ -38,6 +38,14 @@ impl Sandbox {
                 / self.screen_rect.size()
     }
 
+    pub fn sandbox_dist_to_screen_dist(&self, sandbox_dist: Vec2) -> Vec2 {
+        sandbox_dist * self.screen_rect.size() / self.size
+    }
+
+    pub fn screen_dist_to_sandbox_dist(&self, screen_dist: Vec2) -> Vec2 {
+        screen_dist * self.size / self.screen_rect.size()
+    }
+
     pub fn create_vertex(&self, screen_coord: Vec2, graph: &mut Graph) {
         graph.create_vertex(self.screen_to_sandbox(screen_coord));
     }

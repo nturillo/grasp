@@ -23,6 +23,16 @@ fn vertex_primary_click(
     }
 }
 
+fn vertex_dragged(app: &mut GraspAppHandler, ui: &mut Ui, vertex_id: usize, response: &Response) {
+    app.graph
+        .vertex_list
+        .get_mut(&vertex_id)
+        .expect("Unexpected error: Interacted with vertex that does not exist.")
+        .center += app
+        .sandbox
+        .screen_dist_to_sandbox_dist(response.drag_delta());
+}
+
 fn vertex_context_try_get_pair(graph: &mut Graph, vertex_id: &usize) -> Option<VertexPair> {
     let selected_len = graph.selected_list.len();
 
@@ -79,8 +89,14 @@ pub fn handle_vertex_response(
     response: Response,
 ) {
     if let Some(_) = app.graph.vertex_list.get(&vertex_id) {
-        if !Popup::is_any_open(ui.ctx()) && response.clicked() {
-            vertex_primary_click(app, ui, vertex_id, &response);
+        if !Popup::is_any_open(ui.ctx()) {
+            if response.clicked() {
+                vertex_primary_click(app, ui, vertex_id, &response);
+            }
+
+            if response.dragged() && !app.graph.layout_config.run_per_update {
+                vertex_dragged(app, ui, vertex_id, &response);
+            }
         }
 
         response.context_menu(|ui| vertex_context(app, ui, &vertex_id));
