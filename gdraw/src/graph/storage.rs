@@ -4,7 +4,6 @@ use grasp::graph::{adjacency_list::SparseGraph, errors::GraphError, graph_traits
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
-    os::windows::fs::FileTypeExt,
 };
 
 use crate::graph::layout::LayoutConfig;
