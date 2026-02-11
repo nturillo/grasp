@@ -1,17 +1,14 @@
-use crate::graph::graph_traits::{GraphTrait, VertexType};
-use crate::graph::adjacency_list::SparseGraph;
+use crate::graph::{EdgeID, Graph, VertexID};
 
-
-
-pub fn to_dot<G: GraphTrait>(g: G) -> String {
+pub fn to_dot<G: Graph>(g: G) -> String {
     let mut s= "graph {\n".to_string();
-    let mut verts: Vec<VertexType> = g.vertices().collect();
+    let mut verts: Vec<VertexID> = g.vertices().collect();
     verts.sort();
     for v in verts {
         s.push_str(&format!("    {};\n", v));
     }
     s.push_str("\n");
-    let mut edges: Vec<(VertexType, VertexType)> = g.edges().collect();
+    let mut edges: Vec<EdgeID> = g.edges().collect();
     edges.sort();
     for (u,v) in edges {
         s.push_str(&format!("    {} -- {};\n", u, v))
@@ -21,12 +18,13 @@ pub fn to_dot<G: GraphTrait>(g: G) -> String {
 }
 
 #[cfg(test)]
-use pretty_assertions::{assert_eq, assert_ne};
 mod tests {
-    use super::*;
     #[test]
     fn butterfly_dot() {
-        let mut butterfly = SparseGraph::new();
+        use crate::graph::{adjacency_list::SparseGraph, Graph};
+        use super::to_dot;
+
+        let mut butterfly = SparseGraph::default();
         butterfly.add_edge((1,2));
         butterfly.add_edge((2,3));
         butterfly.add_edge((1,3));
