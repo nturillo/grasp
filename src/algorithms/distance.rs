@@ -1,5 +1,5 @@
-use crate::graph::graph_traits::{GraphTrait, VertexType};
+use crate::graph::prelude::*;
 
-fn graph_distance<G: GraphTrait>(g: &G, u: VertexType, v: VertexType) -> u64 {
+pub fn graph_distance<G: Graph>(_g: &G, _u: VertexID, _v: VertexID) -> u64 {
     todo!()
 }
