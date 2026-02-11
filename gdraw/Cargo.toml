@@ -1,0 +1,10 @@
+[package]
+name = "gdraw"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.33.3"
+grasp = { path = ".." }
+rand = "0.9.0"
+rand_chacha = "0.9.0"
