@@ -41,13 +41,14 @@ pub struct TraversalIter<'a, G: GraphTrait, F: Frontier> {
     visited: HashSet<VertexType>
 }
 
-pub struct Dijkstra<'a, G: GraphTrait, WF>
-where WF: Fn(&G, VertexType, VertexType) -> u64 + 'a, {
+pub struct Dijkstra<'a, G: GraphTrait, WF, N>
+where WF: Fn(&G, EdgeType) -> Result<N, GraphError> + 'a,
+N: Number + Ord + Default + Copy + 'a, {
     g: &'a G,
     weight: WF,
-    dist: HashMap<VertexType, u64>,
+    dist: HashMap<VertexType, N>,
     prev: HashMap<VertexType, VertexType>,
-    heap: BinaryHeap<Reverse<(u64, VertexType)>>,
+    heap: BinaryHeap<Reverse<(N, VertexType)>>,
     finished: HashSet<VertexType>
 }
 
@@ -86,18 +87,20 @@ impl<'a, G:GraphTrait, F:Frontier> Iterator for TraversalIter<'a, G, F> {
     }
 }
 
-impl<'a, G: GraphTrait, WF> Dijkstra<'a, G, WF>
-where WF: Fn(&G, VertexType, VertexType) -> u64 + 'a, {
+impl<'a, G: GraphTrait, WF, N> Dijkstra<'a, G, WF, N>
+where WF: Fn(&G, EdgeType) -> Result<N, GraphError> + 'a,
+N: Number + Ord + Default + Copy + 'a, {
     pub fn from_source(source: VertexType, g: &'a G, weight: WF) -> Result<Self, GraphError> {
         if !g.contains(source) {
             return Err(GraphError::VertexNotInGraph);
         }
 
         let mut dist = HashMap::new();
-        dist.insert(source, 0u64);
+        let zero: N = N::default();
+        dist.insert(source, zero);
 
         let mut heap = BinaryHeap::new();
-        heap.push(Reverse((0u64, source)));
+        heap.push(Reverse((zero, source)));
 
         Ok(Dijkstra {
             g,
@@ -124,14 +127,15 @@ where WF: Fn(&G, VertexType, VertexType) -> u64 + 'a, {
         Some(path)
     }
 
-    pub fn distance_to(&self, v: VertexType) -> Option<u64> {
+    pub fn distance_to(&self, v: VertexType) -> Option<N> {
         self.dist.get(&v).cloned()
     }
 }
 
-impl<'a, G: GraphTrait, WF> Iterator for Dijkstra<'a, G, WF>
-where WF: Fn(&G, VertexType, VertexType) -> u64 + 'a {
-    type Item = Result<(VertexType, u64), GraphError>;
+impl<'a, G: GraphTrait, WF, N> Iterator for Dijkstra<'a, G, WF, N>
+where WF: Fn(&G, EdgeType) -> Result<N, GraphError> + 'a,
+N: Number + Ord + Default + Copy + 'a, {
+    type Item = Result<(VertexType, N), GraphError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(Reverse((d, v))) = self.heap.pop() {
@@ -152,11 +156,18 @@ where WF: Fn(&G, VertexType, VertexType) -> u64 + 'a {
             };
 
             for u in neighbor_list.iter() {
-                let w = (self.weight)(self.g, v, *u);
-                let alt = match d.checked_add(w) {
-                    Some(sum) => sum,
-                    None => return Some(Err(GraphError::ArithmeticOverflow)),
+                let edge = (v, *u);
+                match self.g.has_edge(edge) {
+                    Ok(true) => {},
+                    Ok(false) => return Some(Err(GraphError::EdgeNotInGraph)),
+                    Err(e) => return Some(Err(e)),
+                }
+
+                let w: N = match (self.weight)(self.g, edge) {
+                    Ok(val) => val,
+                    Err(e) => return Some(Err(e)),
                 };
+                let alt: N = d + w;
 
                 let is_better = match self.dist.get(u) {
                     Some(&old) => alt < old,
