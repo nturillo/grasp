@@ -11,10 +11,10 @@ use crate::{
     },
 };
 use eframe::egui::{
-    self, CentralPanel, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
+    self, CentralPanel, Color32, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
     TopBottomPanel, Ui, Vec2, Window,
 };
-use grasp::graph::graph_traits::GraphTrait;
+use grasp::graph::graph_traits::{GraphTrait, SetTrait};
 
 pub struct GraspApp {
     pub style: Style,
@@ -69,6 +69,14 @@ impl GraspApp {
 
     pub fn set_layout_config(&mut self, config: LayoutConfig) {
         self.graph.layout_config = config;
+    }
+
+    pub fn highlight_set<S: SetTrait>(&mut self, set: &S, color: Color32) {
+        for vertex in &mut self.graph.vertex_list {
+            if set.contains(*vertex.0) {
+                vertex.1.assign_color(color);
+            }
+        }
     }
 }
 

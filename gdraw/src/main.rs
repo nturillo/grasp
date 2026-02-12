@@ -1,3 +1,4 @@
+use eframe::egui::Color32;
 use gdraw::app::GraspApp;
 use grasp::graph::{adjacency_list::SparseGraph, graph_traits::GraphTrait};
 
@@ -23,6 +24,7 @@ fn main() {
     let mut app = GraspApp::default();
 
     app.load(&butterfly);
+    app.highlight_set(butterfly.neighbors(3).expect(""), Color32::RED);
 
     let _ = app.start();
 
