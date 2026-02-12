@@ -33,15 +33,34 @@ pub struct Edge {
     pub vertex_pair: VertexPair,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct Graph {
     pub vertex_list: HashMap<usize, Vertex>,
     pub edge_list: HashMap<VertexPair, Edge>,
     pub selected_list: Vec<usize>,
     pub directed: bool,
     pub layout_config: LayoutConfig,
+    pub base_graph: Option<SparseGraph>,
 
     vertex_id: usize,
+}
+
+impl Clone for Graph {
+    fn clone(&self) -> Self {
+        Self {
+            vertex_list: self.vertex_list.clone(),
+            edge_list: self.edge_list.clone(),
+            selected_list: self.selected_list.clone(),
+            directed: self.directed,
+            layout_config: self.layout_config.clone(),
+            base_graph: match &self.base_graph {
+                Some(graph) => Some(clone_graph(&graph)),
+                None => None,
+            },
+
+            vertex_id: self.vertex_id,
+        }
+    }
 }
 
 impl Graph {
@@ -61,9 +80,16 @@ impl Graph {
         );
     }
 
-    pub fn insert_vertex(&mut self, vertex: Vertex) -> Option<Vertex> {
+    pub fn insert_vertex(&mut self, vertex: Vertex) -> bool {
+        if self.vertex_list.contains_key(&vertex.id) {
+            return false;
+        }
+
         self.reset_partial_data();
-        self.vertex_list.insert(vertex.id, vertex)
+        return match self.vertex_list.insert(vertex.id, vertex) {
+            None => true,
+            _ => false,
+        };
     }
 
     pub fn create_edge(&mut self, pair: VertexPair) {
@@ -118,6 +144,20 @@ impl Graph {
     fn reset_partial_data(&mut self) {
         self.layout_config.partial_data = PartialLayout::None;
     }
+
+    pub fn save_base_graph(&mut self) {
+        let mut graph = SparseGraph::new();
+
+        for &vertex in self.vertex_list.keys() {
+            graph.add_vertex(vertex);
+        }
+
+        for &edge in self.edge_list.keys() {
+            graph.add_edge((edge[0], edge[1]));
+        }
+
+        self.base_graph = Some(graph);
+    }
 }
 
 impl<G: GraphTrait> From<&G> for Graph {
@@ -138,4 +178,18 @@ impl<G: GraphTrait> From<&G> for Graph {
 
         graph
     }
+}
+
+pub fn clone_graph(in_graph: &SparseGraph) -> SparseGraph {
+    let mut graph = SparseGraph::new();
+
+    for vertex in in_graph.vertices() {
+        graph.add_vertex(vertex);
+    }
+
+    for edge in in_graph.edges() {
+        graph.add_edge(edge);
+    }
+
+    graph
 }

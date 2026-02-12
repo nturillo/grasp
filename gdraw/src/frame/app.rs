@@ -7,14 +7,17 @@ use crate::{
     },
     graph::{
         layout::{self, LayoutConfig},
-        storage::Graph,
+        storage::{self, Graph},
     },
 };
 use eframe::egui::{
     self, CentralPanel, Color32, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
     TopBottomPanel, Ui, Vec2, Window,
 };
-use grasp::graph::graph_traits::{GraphTrait, SetTrait};
+use grasp::graph::{
+    adjacency_list::SparseGraph,
+    graph_traits::{GraphTrait, SetTrait},
+};
 
 pub struct GraspApp {
     pub style: Style,
@@ -63,20 +66,36 @@ impl GraspApp {
         layout::apply(&mut self.graph);
     }
 
+    /// Create a new [`crate::frame::app::GraspApp`]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the visualizer's graph layout.
+    ///
+    /// Layouts are located at [`crate::graph::layout::LayoutType`]
     pub fn set_layout_config(&mut self, config: LayoutConfig) {
         self.graph.layout_config = config;
     }
 
+    /// Highlight a set of vertices.
     pub fn highlight_set<S: SetTrait>(&mut self, set: &S, color: Color32) {
         for vertex in &mut self.graph.vertex_list {
             if set.contains(*vertex.0) {
                 vertex.1.assign_color(color);
             }
         }
+    }
+
+    /// Returns a copy of the [`grasp::graph::adjacency_list::SparseGraph`] underlying the visualizer.
+    pub fn as_sparse_graph(&mut self) -> SparseGraph {
+        self.graph.save_base_graph();
+        storage::clone_graph(
+            self.graph
+                .base_graph
+                .as_ref()
+                .expect("Error: Recently verified"),
+        )
     }
 }
 

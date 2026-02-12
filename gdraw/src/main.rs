@@ -21,10 +21,10 @@ fn main() {
     butterfly.add_edge((9, 1));
     butterfly.add_edge((9, 10));
 
-    let mut app = GraspApp::default();
+    let mut app = GraspApp::new();
 
     app.load(&butterfly);
-    app.highlight_set(butterfly.neighbors(3).expect(""), Color32::RED);
+    app.highlight_set(butterfly.neighbors(1).expect(""), Color32::RED);
 
     let _ = app.start();
 

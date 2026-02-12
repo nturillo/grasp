@@ -1,8 +1,5 @@
 use core::f32;
-use std::{
-    collections::{HashMap, btree_map::Range},
-    fmt, iter,
-};
+use std::{collections::HashMap, fmt};
 
 use eframe::egui::Vec2;
 use rand::prelude::*;
