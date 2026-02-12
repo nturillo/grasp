@@ -42,7 +42,7 @@ pub struct TraversalIter<'a, G: GraphTrait, F: Frontier> {
 }
 
 pub struct Dijkstra<'a, G: GraphTrait, WF, N>
-where WF: Fn(&G, EdgeType) -> Result<N, GraphError> + 'a,
+where WF: Fn(&G, EdgeType) -> Option<N> + 'a,
 N: Number + Ord + Default + Copy + 'a, {
     g: &'a G,
     weight: WF,
@@ -88,7 +88,7 @@ impl<'a, G:GraphTrait, F:Frontier> Iterator for TraversalIter<'a, G, F> {
 }
 
 impl<'a, G: GraphTrait, WF, N> Dijkstra<'a, G, WF, N>
-where WF: Fn(&G, EdgeType) -> Result<N, GraphError> + 'a,
+where WF: Fn(&G, EdgeType) -> Option<N> + 'a,
 N: Number + Ord + Default + Copy + 'a, {
     pub fn from_source(source: VertexType, g: &'a G, weight: WF) -> Result<Self, GraphError> {
         if !g.contains(source) {
@@ -133,7 +133,7 @@ N: Number + Ord + Default + Copy + 'a, {
 }
 
 impl<'a, G: GraphTrait, WF, N> Iterator for Dijkstra<'a, G, WF, N>
-where WF: Fn(&G, EdgeType) -> Result<N, GraphError> + 'a,
+where WF: Fn(&G, EdgeType) -> Option<N> + 'a,
 N: Number + Ord + Default + Copy + 'a, {
     type Item = Result<(VertexType, N), GraphError>;
 
@@ -164,8 +164,8 @@ N: Number + Ord + Default + Copy + 'a, {
                 }
 
                 let w: N = match (self.weight)(self.g, edge) {
-                    Ok(val) => val,
-                    Err(e) => return Some(Err(e)),
+                    Some(val) => val,
+                    None => continue,
                 };
                 let alt: N = d + w;
 
