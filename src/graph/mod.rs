@@ -75,8 +75,10 @@ pub trait Graph: Default{
 pub trait SimpleGraph: Graph{}
 /// Trait Used to represent the promise that edge ab!~ba
 pub trait DiGraph: Graph{
+    type UnderlyingGraph: Graph+SimpleGraph;
     fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
     fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
+    fn underlying_graph(&self) -> Self::UnderlyingGraph;
 }
 
 /// Graph operations that are agnostic to simple graphs and digraphs
