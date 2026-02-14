@@ -177,11 +177,20 @@ impl Graph for SparseDiGraph {
     }
 }
 impl DiGraph for SparseDiGraph{
+    type UnderlyingGraph = SparseSimpleGraph;
     fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
         self.out_adjacency.get(&v).map(|set| Cow::Borrowed(set))
     }
     fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
         self.in_adjacency.get(&v).map(|set| Cow::Borrowed(set))
+    }
+    fn underlying_graph(&self) -> Self::UnderlyingGraph{
+        let mut graph = Self::UnderlyingGraph::default();
+        for v in self.vertices(){
+            let n = self.out_neighbors(v).unwrap();
+            graph.add_neighbors(v, n.into_owned().into_iter());
+        }
+        graph
     }
 }
 

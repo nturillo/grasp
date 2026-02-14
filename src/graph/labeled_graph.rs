@@ -123,11 +123,16 @@ impl<G: LabeledGraph> SimpleGraphOps for G where G::GraphType: SimpleGraphOps{
 }
 impl<G: LabeledGraph> SimpleGraph for G where G::GraphType: SimpleGraph{}
 impl<G: LabeledGraph> DiGraph for G where G::GraphType: DiGraph{
+    type UnderlyingGraph = <G::GraphType as DiGraph>::UnderlyingGraph;
     fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
         self.as_ref().in_neighbors(v)
     }
     fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
         self.as_ref().in_neighbors(v)
+    }
+    fn underlying_graph(&self) -> Self::UnderlyingGraph {
+        // Clone vertex labels as well
+        self.as_ref().underlying_graph()
     }
 }
 
