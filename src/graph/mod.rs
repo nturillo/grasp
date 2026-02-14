@@ -3,10 +3,10 @@ pub mod labeled_graph;
 pub mod adjacency_list;
 
 pub mod prelude{
-    pub use super::{VertexID, EdgeID, VertexMap, Graph, Set, labeled_graph::LabeledGraph, adjacency_list::SparseGraph, error::GraphError};
+    pub use super::{*, labeled_graph::LabeledGraph, adjacency_list::SparseSimpleGraph, error::GraphError};
 }
 
-use std::collections::{HashSet, HashMap};
+use std::{borrow::Cow, collections::{HashMap, HashSet}};
 
 pub trait Set<V>: Clone {
     fn contains(&self, v: V) -> bool;
@@ -45,6 +45,7 @@ pub type VertexID = usize;
 pub type EdgeID = (VertexID, VertexID);
 pub type VertexMap = HashMap<VertexID, VertexID>;
 
+/// Core Graph functionality. Enables edge and vertex manipulation
 pub trait Graph: Default{
     type VertexSet: Set<VertexID>;
     
@@ -54,7 +55,7 @@ pub trait Graph: Default{
     fn edges(&self) -> impl Iterator<Item=EdgeID>;
     fn contains(&self, v: VertexID) -> bool;
     fn has_edge(&self, e: EdgeID) -> bool;
-    fn neighbors(&self, v: VertexID) -> Option<&Self::VertexSet>;
+    fn neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
     fn vertex_set(&self) -> Self::VertexSet;
 
     fn create_vertex(&mut self) -> VertexID;
@@ -65,13 +66,27 @@ pub trait Graph: Default{
     /// adds v and nbhrs if they don't exist
     fn add_neighbors(&mut self, v: VertexID, nbhrs: impl Iterator<Item=VertexID>);
 
-    // Manipulation Functions
+    /// Returns a list of edges it removed as a consequence
+    fn delete_vertex(&mut self, v: VertexID) -> impl Iterator<Item=EdgeID>;
+    fn delete_edge(&mut self, e: EdgeID);
+}
+
+/// Tag Trait Used to represent the promise that edge ab~ba
+pub trait SimpleGraph: Graph{}
+/// Trait Used to represent the promise that edge ab!~ba
+pub trait DiGraph: Graph{
+    fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
+    fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
+}
+
+/// Graph operations that are agnostic to simple graphs and digraphs
+pub trait GraphOps: Graph{
     fn subgraph_vertex(&self, vertices: impl Iterator<Item=VertexID>) -> Self {
         let mut new_graph = Self::default();
         for vertex in vertices{
             let Some(neighbors) = self.neighbors(vertex) else {continue;};
             new_graph.add_vertex(vertex);
-            for neighbor in neighbors.iter(){
+            for neighbor in neighbors.as_ref().iter(){
                 new_graph.add_edge((vertex, *neighbor));
             }
         }
@@ -113,7 +128,10 @@ pub trait Graph: Default{
         }
         (new_graph, self_map, other_map)
     }
+}
 
+/// Graph operations that only work for simple graphs
+pub trait SimpleGraphOps: GraphOps+SimpleGraph{
     fn join(&self, other: &Self) -> (Self, VertexMap, VertexMap) {
         let (mut merged, self_map, other_map) = self.merge(other);
         for v1 in self.vertices(){

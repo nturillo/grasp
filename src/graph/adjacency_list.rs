@@ -1,13 +1,13 @@
 //! Adjacency list implementation of graph
-use super::{Graph, VertexID, EdgeID};
-use std::collections::{HashMap, HashSet};
+use super::{Graph, SimpleGraph, VertexID, EdgeID, DiGraph};
+use std::{borrow::Cow, collections::{HashMap, HashSet}};
 
 
 #[derive(Default, Debug)]
-pub struct SparseGraph {
+pub struct SparseSimpleGraph {
     adjacency_list: HashMap<VertexID, HashSet<VertexID>>
 }
-impl Graph for SparseGraph {
+impl Graph for SparseSimpleGraph {
     type VertexSet = HashSet<VertexID>;
 
     fn vertex_count(&self) -> usize {
@@ -43,8 +43,8 @@ impl Graph for SparseGraph {
         }
         self.adjacency_list[&v1].contains(&v2)
     }
-    fn neighbors(&self, v: VertexID) -> Option<&Self::VertexSet> {
-        self.adjacency_list.get(&v)
+    fn neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
+        self.adjacency_list.get(&v).map(|d| Cow::Borrowed(d))
     }
     fn vertex_set(&self) -> Self::VertexSet {
         self.adjacency_list.keys().cloned().collect()
@@ -69,7 +69,122 @@ impl Graph for SparseGraph {
         }
         self.adjacency_list.entry(v).or_default().extend(nbhr_vec);
     }
+
+    fn delete_vertex(&mut self, v: VertexID) -> impl Iterator<Item=EdgeID> {
+        let neighbors = self.adjacency_list.remove(&v).unwrap_or_default();
+        for v2 in neighbors.iter(){
+            if let Some(set) = self.adjacency_list.get_mut(v2){
+                set.remove(&v);
+            }
+        }
+        IntoIterator::into_iter(neighbors).map(move |v2| (v, v2))
+    }
+    fn delete_edge(&mut self, (v1, v2): EdgeID) {
+        if let Some(set) = self.adjacency_list.get_mut(&v1) {set.remove(&v2);}
+        if let Some(set) = self.adjacency_list.get_mut(&v2) {set.remove(&v1);}
+    }
 }
+impl SimpleGraph for SparseSimpleGraph{}
+
+#[derive(Default, Debug)]
+pub struct SparseDiGraph {
+    out_adjacency: HashMap<VertexID, HashSet<VertexID>>,
+    in_adjacency: HashMap<VertexID, HashSet<VertexID>>
+}
+impl Graph for SparseDiGraph {
+    type VertexSet = HashSet<VertexID>;
+
+    fn vertex_count(&self) -> usize {
+        self.out_adjacency.len()
+    }
+    fn edge_count(&self) -> usize {
+        self.out_adjacency.values().map(|s| s.len()).sum::<usize>()
+    }
+    fn vertices(&self) -> impl Iterator<Item=VertexID> {
+        self.out_adjacency.keys().cloned()
+    }
+    fn edges(&self) -> impl Iterator<Item=(VertexID,VertexID)> {
+        let mut edges = Vec::new();
+        for (&v, nbhrs) in &self.out_adjacency {
+            for &u in nbhrs {
+                edges.push((v,u));
+            }
+        }
+        edges.into_iter()
+    }
+    fn contains(&self, v: VertexID) -> bool {
+        self.out_adjacency.contains_key(&v)
+    }
+    fn has_edge(&self, (v1, v2): EdgeID) -> bool {
+        self.out_adjacency.get(&v1).is_some_and(|set| set.contains(&v2))
+    }
+    fn neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
+        if !self.contains(v) {return None;}
+        let mut neighbors = HashSet::default();
+        if let Some(set) = self.out_adjacency.get(&v) {neighbors.extend(set);}
+        if let Some(set) = self.in_adjacency.get(&v) {neighbors.extend(set);}
+        Some(Cow::Owned(neighbors))
+    }
+    fn vertex_set(&self) -> Self::VertexSet {
+        self.out_adjacency.keys().cloned().collect()
+    }
+    fn create_vertex(&mut self) -> VertexID {
+        if let Some(max) = self.out_adjacency.keys().max() {max+1} else {0}
+    }
+    
+    fn add_vertex(&mut self, v: VertexID) {
+        self.out_adjacency.entry(v).or_default();
+    }
+    fn add_edge(&mut self, e: EdgeID) {
+        let v1 = e.0;
+        let v2 = e.1;
+        self.out_adjacency.entry(v1).or_default().insert(v2);
+        self.in_adjacency.entry(v2).or_default().insert(v1);
+        // create entries for other vertices, but dont add extra arcs
+        self.in_adjacency.entry(v1).or_default();
+        self.in_adjacency.entry(v2).or_default();
+    }
+    fn add_neighbors(&mut self, v: VertexID, nbhrs: impl Iterator<Item=VertexID>) {
+        let nbhr_vec: Vec<VertexID> = nbhrs.collect();
+        for u in nbhr_vec.clone() {
+            self.in_adjacency.entry(u).or_default().insert(v);
+            self.out_adjacency.entry(u).or_default();
+        }
+        self.out_adjacency.entry(v).or_default().extend(nbhr_vec);
+        self.in_adjacency.entry(v).or_default();
+    }
+
+    fn delete_vertex(&mut self, v: VertexID) -> impl Iterator<Item=EdgeID> {
+        let out_neighbors = self.out_adjacency.remove(&v).unwrap_or_default();
+        let in_neighbors = self.in_adjacency.remove(&v).unwrap_or_default();
+        for v2 in out_neighbors.iter(){
+            if let Some(set) = self.in_adjacency.get_mut(v2){
+                set.remove(&v);
+            }
+        }
+        for v1 in in_neighbors.iter(){
+            if let Some(set) = self.out_adjacency.get_mut(v1){
+                set.remove(&v);
+            }
+        }
+        IntoIterator::into_iter(out_neighbors).map(move |v2| (v, v2)).chain(
+            IntoIterator::into_iter(in_neighbors).map(move |v1| (v1, v))
+        )
+    }
+    fn delete_edge(&mut self, (v1, v2): EdgeID) {
+        if let Some(set) = self.out_adjacency.get_mut(&v1) {set.remove(&v2);}
+        if let Some(set) = self.in_adjacency.get_mut(&v2) {set.remove(&v1);}
+    }
+}
+impl DiGraph for SparseDiGraph{
+    fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
+        self.out_adjacency.get(&v).map(|set| Cow::Borrowed(set))
+    }
+    fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
+        self.in_adjacency.get(&v).map(|set| Cow::Borrowed(set))
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -77,7 +192,7 @@ mod tests {
 
     #[test]
     fn butterfly_graph() {
-        let mut butterfly = SparseGraph::default();
+        let mut butterfly = SparseSimpleGraph::default();
         butterfly.add_edge((1,2));
         butterfly.add_edge((2,3));
         butterfly.add_edge((1,3));
