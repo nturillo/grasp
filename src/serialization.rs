@@ -1,6 +1,6 @@
-use crate::graph::{EdgeID, Graph, VertexID};
+use crate::graph::{EdgeID, SimpleGraph, VertexID};
 
-pub fn to_dot<G: Graph>(g: G) -> String {
+pub fn to_dot<G: SimpleGraph>(g: G) -> String {
     let mut s= "graph {\n".to_string();
     let mut verts: Vec<VertexID> = g.vertices().collect();
     verts.sort();
@@ -21,10 +21,10 @@ pub fn to_dot<G: Graph>(g: G) -> String {
 mod tests {
     #[test]
     fn butterfly_dot() {
-        use crate::graph::{adjacency_list::SparseGraph, Graph};
+        use crate::graph::{adjacency_list::SparseSimpleGraph, Graph};
         use super::to_dot;
 
-        let mut butterfly = SparseGraph::default();
+        let mut butterfly = SparseSimpleGraph::default();
         butterfly.add_edge((1,2));
         butterfly.add_edge((2,3));
         butterfly.add_edge((1,3));

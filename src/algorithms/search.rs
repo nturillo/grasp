@@ -32,13 +32,13 @@ impl Frontier for Vec<VertexID> {
         self.pop()
     }
 }
-pub struct TraversalIter<'a, G: Graph, F: Frontier> {
+pub struct TraversalIter<'a, G: SimpleGraph, F: Frontier> {
     g: &'a G,
     frontier: F,
     visited: HashSet<VertexID>
 }
 
-impl<'a, G:Graph, F:Frontier> TraversalIter<'a, G, F> {
+impl<'a, G:SimpleGraph, F:Frontier> TraversalIter<'a, G, F> {
     pub fn from_source(source: VertexID, g: &'a G) -> Result<Self, GraphError> {
         if !g.contains(source) {
             return Err(GraphError::VertexNotInGraph(source));
@@ -56,7 +56,7 @@ impl<'a, G:Graph, F:Frontier> TraversalIter<'a, G, F> {
     }
 }
 
-impl<'a, G:Graph, F:Frontier> Iterator for TraversalIter<'a, G, F> {
+impl<'a, G:SimpleGraph, F:Frontier> Iterator for TraversalIter<'a, G, F> {
     type Item = VertexID;
     fn next(&mut self) -> Option<Self::Item> {
         let v = self.frontier.pop()?;
