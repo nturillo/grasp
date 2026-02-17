@@ -1,4 +1,7 @@
-use std::{collections::{HashMap, HashSet}, hash::Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use crate::graph::graph_traits::{EdgeType, GraphTrait, VertexType};
 
@@ -7,23 +10,23 @@ pub trait LabeledGraphTrait<V, E>: GraphTrait {
     fn get_edge_label(&self, e: &EdgeType) -> Option<&E>;
 }
 
-struct LabeledGraph<G, V, E> {
+pub struct LabeledGraph<G, V, E> {
     graph: G,
     vertex_data: HashMap<VertexType, V>,
-    edge_data: HashMap<EdgeType, E>,    
+    edge_data: HashMap<EdgeType, E>,
 }
 
-impl<G: GraphTrait, V, E> LabeledGraph<G,V,E> {
+impl<G: GraphTrait, V, E> LabeledGraph<G, V, E> {
     fn from_graph(g: G) -> Self {
         Self {
             graph: g,
             vertex_data: HashMap::new(),
-            edge_data: HashMap::new()
+            edge_data: HashMap::new(),
         }
     }
 }
 
-impl<G: GraphTrait, V, E> LabeledGraphTrait<V,E> for LabeledGraph<G,V,E> {
+impl<G: GraphTrait, V, E> LabeledGraphTrait<V, E> for LabeledGraph<G, V, E> {
     fn get_vertex_label(&self, v: &VertexType) -> Option<&V> {
         self.vertex_data.get(v)
     }
@@ -36,7 +39,7 @@ impl<G: GraphTrait, V, E> GraphTrait for LabeledGraph<G, V, E> {
     type NeighborSet = G::NeighborSet;
 
     fn new() -> Self {
-        Self{
+        Self {
             graph: G::new(),
             vertex_data: HashMap::new(),
             edge_data: HashMap::new(),
@@ -48,10 +51,10 @@ impl<G: GraphTrait, V, E> GraphTrait for LabeledGraph<G, V, E> {
     fn num_edges(&self) -> usize {
         self.graph.num_edges()
     }
-    fn vertices(&self) -> impl Iterator<Item=VertexType> {
+    fn vertices(&self) -> impl Iterator<Item = VertexType> {
         self.graph.vertices()
     }
-    fn edges(&self) -> impl Iterator<Item=(VertexType,VertexType)> {
+    fn edges(&self) -> impl Iterator<Item = (VertexType, VertexType)> {
         self.graph.edges()
     }
     fn contains(&self, v: VertexType) -> bool {
@@ -69,7 +72,7 @@ impl<G: GraphTrait, V, E> GraphTrait for LabeledGraph<G, V, E> {
     fn add_edge(&mut self, e: EdgeType) {
         self.graph.add_edge(e);
     }
-    fn add_neighbors(&mut self, v: VertexType, nbhrs: impl Iterator<Item=VertexType>) {
+    fn add_neighbors(&mut self, v: VertexType, nbhrs: impl Iterator<Item = VertexType>) {
         self.graph.add_neighbors(v, nbhrs);
     }
 }
