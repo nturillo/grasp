@@ -1,7 +1,5 @@
 //! Adjacency list implementation of graph
-use crate::graph::{GraphOps, SimpleGraphOps};
-
-use super::{GraphTrait, SimpleGraph, VertexID, EdgeID, DiGraph};
+use super::{GraphTrait, SimpleGraph, VertexID, EdgeID, DiGraph, graph_ops::*};
 use std::{borrow::Cow, collections::{HashMap, HashSet}};
 
 
@@ -52,7 +50,9 @@ impl GraphTrait for SparseSimpleGraph {
         self.adjacency_list.keys().cloned().collect()
     }
     fn create_vertex(&mut self) -> VertexID {
-        if let Some(max) = self.adjacency_list.keys().max() {max+1} else {0}
+        let key= self.adjacency_list.keys().max().map(|max| max+1).unwrap_or(0);
+        self.add_vertex(key);
+        key
     }
     
     fn add_vertex(&mut self, v: VertexID) {
@@ -223,6 +223,8 @@ mod tests {
         assert!(butterfly.has_edge((1, 4)));
         assert!(butterfly.has_edge((1, 5)));
         assert!(butterfly.has_edge((4, 5)));
+
+        assert!(butterfly.has_edge((2, 1)));
         
         assert!(!butterfly.has_edge((3, 4)));
         assert!(!butterfly.has_edge((2, 5)));
@@ -232,11 +234,21 @@ mod tests {
         
         assert!(butterfly.vertex_count() == 5);
         assert!(butterfly.edge_count() == 6);
+
+        butterfly.delete_edge((4, 5));
+        assert!(butterfly.vertex_count() == 5);
+        assert!(butterfly.edge_count() == 5);
+        let _ = butterfly.delete_vertex(2);
+        assert!(butterfly.vertex_count() == 4);
+        assert!(butterfly.edge_count() == 3);
+        assert!(!butterfly.has_edge((2, 3)));
+        assert!(!butterfly.has_edge((4, 5)));
+        assert!(!butterfly.contains(2));
     }
 
     #[test]
     fn sparse_graph_ops(){
-        use crate::graph::test::*;
+        use crate::graph::{test::*, graph_ops::test::*};
         graph_vs_digraph_test::<SparseSimpleGraph, SparseDiGraph>();
         digraph_fn_test::<SparseDiGraph>();
         graph_ops_test::<SparseSimpleGraph>();
