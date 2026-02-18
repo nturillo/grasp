@@ -62,6 +62,38 @@ pub fn to_dot<G: GraphTrait>(g: G) -> String {
     s
 }
 
+pub fn from_dot<G: GraphTrait>(string: String) -> Result<G, String> {
+    let mut graph = G::new();
+    let err = Err("Invalid DOT format.".to_string());
+
+    let mut lines = string
+        .lines()
+        .map(|line| line.trim().replace(" ", "").replace(";", ""));
+
+    match lines.next() {
+        None => return err,
+        Some(line) => {
+            if line != "graph{" {
+                return err;
+            }
+        }
+    }
+
+    while let Some(line) = lines.next() {
+        if let Ok(n) = line.parse() {
+            graph.add_vertex(n);
+        } else if let Some((p1, p2)) = line.split_once("--")
+            && let (Ok(n1), Ok(n2)) = (p1.parse(), p2.parse())
+        {
+            graph.add_edge((n1, n2));
+        } else if !line.is_empty() && !line.starts_with("//") {
+            return err;
+        }
+    }
+
+    Ok(graph)
+}
+
 pub fn to_tgf<G: GraphTrait>(g: G) -> String {
     let mut s = String::new();
     let mut verts: Vec<VertexType> = g.vertices().collect();
@@ -77,6 +109,25 @@ pub fn to_tgf<G: GraphTrait>(g: G) -> String {
     }
     s.pop();
     s
+}
+
+pub fn from_tgf<G: GraphTrait>(string: String) -> Result<G, String> {
+    let mut lines = string.lines().map(|line| line.trim());
+    let mut graph = G::new();
+
+    while let Some(line) = lines.next() {
+        if let Ok(n) = line.parse() {
+            graph.add_vertex(n);
+        } else if let Some((p1, p2)) = line.split_once(" ")
+            && let (Ok(n1), Ok(n2)) = (p1.parse(), p2.parse())
+        {
+            graph.add_edge((n1, n2));
+        } else if line != "#" {
+            return Err("Invalid TGF format.".to_string());
+        }
+    }
+
+    Ok(graph)
 }
 
 pub fn to_gml<G: GraphTrait>(g: G) -> String {
@@ -115,6 +166,75 @@ pub fn to_gml<G: GraphTrait>(g: G) -> String {
     index -= 1;
     s.push_str(&"]".to_string());
     s
+}
+
+pub fn from_gml<G: GraphTrait>(string: String) -> Result<G, String> {
+    let mut graph = G::new();
+    let err = Err("Invalid GML format.".to_string());
+    let mut history = Vec::new();
+    let mut edge_builder = (None, None);
+
+    let mut lines = string.lines().map(|line| line.trim());
+
+    match lines.next() {
+        None => return err,
+        Some(line) => {
+            if line != "graph [" {
+                return err;
+            }
+
+            history.push("graph");
+        }
+    }
+
+    while let Some(line) = lines.next() {
+        if line.is_empty() || line.starts_with("#") || line.starts_with("comment") {
+            continue;
+        }
+
+        if line == "]" {
+            history.pop();
+        } else if let Some((p1, p2)) = line.split_once(" ") {
+            if p2 == "[" {
+                history.push(p1);
+                edge_builder = (None, None);
+                continue;
+            }
+
+            match history.last() {
+                None => return err,
+                Some(&"node") => {
+                    if p1 == "id" {
+                        match p2.parse() {
+                            Ok(n) => graph.add_vertex(n),
+                            Err(_) => return err,
+                        }
+                    }
+                }
+                Some(&"edge") => {
+                    if p1 == "source" {
+                        match p2.parse::<usize>() {
+                            Ok(n) => edge_builder.0 = Some(n),
+                            Err(_) => return err,
+                        }
+                    } else if p1 == "target" {
+                        match p2.parse::<usize>() {
+                            Ok(n) => edge_builder.1 = Some(n),
+                            Err(_) => return err,
+                        }
+                    }
+
+                    if let (Some(source), Some(target)) = edge_builder {
+                        graph.add_edge((source, target));
+                        edge_builder = (None, None);
+                    }
+                }
+                _ => (),
+            };
+        }
+    }
+
+    Ok(graph)
 }
 
 #[cfg(feature = "serde")]
@@ -251,6 +371,67 @@ mod tests {
     }
 
     #[test]
+    fn butterfly_from_dot() {
+        let mut butterfly = SparseGraph::new();
+        butterfly.add_edge((1, 2));
+        butterfly.add_edge((2, 3));
+        butterfly.add_edge((1, 3));
+        butterfly.add_edge((1, 4));
+        butterfly.add_edge((1, 5));
+        butterfly.add_edge((4, 5));
+
+        let butterfly_dot = "graph {\
+        \n    1;\
+        \n    2;\
+        \n    3;\
+        \n    4;\
+        \n    5;\
+        \n\
+        \n    1 -- 2;\
+        \n    1 -- 3;\
+        \n    1 -- 4;\
+        \n    1 -- 5;\
+        \n    2 -- 3;\
+        \n    4 -- 5;\
+        \n}";
+
+        let from = from_dot::<SparseGraph>(butterfly_dot.to_string());
+
+        pretty_assertions::assert_eq!(from.is_ok(), true);
+        pretty_assertions::assert_eq!(butterfly_dot, to_dot(from.expect("Unexpected error")));
+    }
+
+    #[test]
+    fn butterfly_from_tgf() {
+        let mut butterfly = SparseGraph::new();
+        butterfly.add_edge((1, 2));
+        butterfly.add_edge((2, 3));
+        butterfly.add_edge((1, 3));
+        butterfly.add_edge((1, 4));
+        butterfly.add_edge((1, 5));
+        butterfly.add_edge((4, 5));
+
+        let butterfly_tgf = "\
+        1\n\
+        2\n\
+        3\n\
+        4\n\
+        5\n\
+        #\n\
+        1 2\n\
+        1 3\n\
+        1 4\n\
+        1 5\n\
+        2 3\n\
+        4 5";
+
+        let from = from_tgf::<SparseGraph>(butterfly_tgf.to_string());
+
+        pretty_assertions::assert_eq!(from.is_ok(), true);
+        pretty_assertions::assert_eq!(butterfly_tgf, to_tgf(from.expect("Unexpected error")));
+    }
+
+    #[test]
     fn butterfly_tgf() {
         let mut butterfly = SparseGraph::new();
         butterfly.add_edge((1, 2));
@@ -330,6 +511,64 @@ mod tests {
             \n]";
 
         pretty_assertions::assert_eq!(butterfly_gml, to_gml(butterfly));
+    }
+
+    #[test]
+    fn butterfly_from_gml() {
+        let mut butterfly = SparseGraph::new();
+        butterfly.add_edge((1, 2));
+        butterfly.add_edge((2, 3));
+        butterfly.add_edge((1, 3));
+        butterfly.add_edge((1, 4));
+        butterfly.add_edge((1, 5));
+        butterfly.add_edge((4, 5));
+
+        let butterfly_gml = "graph [\
+            \n\tnode [\
+            \n\t\tid 1\
+            \n\t]\
+            \n\tnode [\
+            \n\t\tid 2\
+            \n\t]\
+            \n\tnode [\
+            \n\t\tid 3\
+            \n\t]\
+            \n\tnode [\
+            \n\t\tid 4\
+            \n\t]\
+            \n\tnode [\
+            \n\t\tid 5\
+            \n\t]\
+            \n\tedge [\
+            \n\t\tsource 1\
+            \n\t\ttarget 2\
+            \n\t]\
+            \n\tedge [\
+            \n\t\tsource 1\
+            \n\t\ttarget 3\
+            \n\t]\
+            \n\tedge [\
+            \n\t\tsource 1\
+            \n\t\ttarget 4\
+            \n\t]\
+            \n\tedge [\
+            \n\t\tsource 1\
+            \n\t\ttarget 5\
+            \n\t]\
+            \n\tedge [\
+            \n\t\tsource 2\
+            \n\t\ttarget 3\
+            \n\t]\
+            \n\tedge [\
+            \n\t\tsource 4\
+            \n\t\ttarget 5\
+            \n\t]\
+            \n]";
+
+        let from = from_gml::<SparseGraph>(butterfly_gml.to_string());
+
+        pretty_assertions::assert_eq!(from.is_ok(), true);
+        pretty_assertions::assert_eq!(butterfly_gml, to_gml(from.expect("Unexpected error")));
     }
 
     #[test]
