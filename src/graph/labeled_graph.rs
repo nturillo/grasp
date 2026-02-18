@@ -1,10 +1,10 @@
-use super::{Graph, VertexID, VertexMap, EdgeID, GraphOps, SimpleGraphOps, DiGraph, SimpleGraph};
+use super::{GraphTrait, VertexID, VertexMap, EdgeID, GraphOps, SimpleGraphOps, DiGraph, SimpleGraph};
 use std::{borrow::Cow, collections::HashMap};
 
-pub trait LabeledGraph: Default+AsRef<Self::GraphType>+AsMut<Self::GraphType>{
+pub trait LabeledGraph: AsRef<Self::GraphType>+AsMut<Self::GraphType>{
     type VertexData: Clone;
     type EdgeData: Clone;
-    type GraphType: Graph;
+    type GraphType: GraphTrait;
 
     fn get_vertex_label(&self, v: VertexID) -> Option<&Self::VertexData>;
     fn get_edge_label(&self, e: EdgeID) -> Option<&Self::EdgeData>;
@@ -21,9 +21,10 @@ pub trait LabeledGraph: Default+AsRef<Self::GraphType>+AsMut<Self::GraphType>{
     fn remove_edge_label(&mut self, e: EdgeID) -> Option<Self::EdgeData>;
 
     fn from_graph(graph: Self::GraphType) -> Self;
+    fn to_graph(self) -> Self::GraphType;
 }
-impl<G: LabeledGraph> Graph for G{
-    type VertexSet = <G::GraphType as Graph>::VertexSet;
+impl<G: LabeledGraph> GraphTrait for G{
+    type VertexSet = <G::GraphType as GraphTrait>::VertexSet;
 
     fn vertex_count(&self) -> usize {self.as_ref().vertex_count()}
     fn edge_count(&self) -> usize {self.as_ref().edge_count()}
@@ -53,24 +54,24 @@ impl<G: LabeledGraph> Graph for G{
     }
 }
 impl<G: LabeledGraph> GraphOps for G where G::GraphType: GraphOps{
-    fn subgraph_vertex(&self, vertices: impl Iterator<Item=VertexID>) -> Self {
-        let subgraph = self.as_ref().subgraph_vertex(vertices);
+    fn subgraph_vertex(&self, vertices: impl IntoIterator<Item=VertexID>, graph_builder: impl FnOnce() -> Self) -> Self {
+        let subgraph = self.as_ref().subgraph_vertex(vertices, ||{graph_builder().to_graph()});
         let mut subgraph = Self::from_graph(subgraph);
         subgraph.fill_vertex_labels(|vertex| self.get_vertex_label(vertex).cloned());
         subgraph.fill_edge_labels(|edge| self.get_edge_label(edge).cloned());
         subgraph
     }
 
-    fn subgraph_edges(&self, edges: impl Iterator<Item=EdgeID>) -> Self {
-        let subgraph = self.as_ref().subgraph_edges(edges);
+    fn subgraph_edges(&self, edges: impl IntoIterator<Item=EdgeID>, graph_builder: impl FnOnce() -> Self) -> Self {
+        let subgraph = self.as_ref().subgraph_edges(edges, ||{graph_builder().to_graph()});
         let mut subgraph = Self::from_graph(subgraph);
         subgraph.fill_vertex_labels(|vertex| self.get_vertex_label(vertex).cloned());
         subgraph.fill_edge_labels(|edge| self.get_edge_label(edge).cloned());
         subgraph
     }
 
-    fn merge(&self, other: &Self) -> (Self, VertexMap, VertexMap) {
-        let (merged, self_map, other_map) = self.as_ref().merge(other.as_ref());
+    fn merge(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, VertexMap, VertexMap) {
+        let (merged, self_map, other_map) = self.as_ref().merge(other.as_ref(), ||{graph_builder().to_graph()});
         let mut merged = Self::from_graph(merged);
 
         merged.set_vertex_labels(self.vertex_labels().filter_map(|(vertex, label)|
@@ -87,10 +88,16 @@ impl<G: LabeledGraph> GraphOps for G where G::GraphType: GraphOps{
         ));
         (merged, self_map, other_map)
     }
+
+    fn complement(&self, graph_builder: impl FnOnce() -> Self) -> Self {
+        let mut complement = Self::from_graph(self.as_ref().complement(||{graph_builder().to_graph()}));
+        complement.set_vertex_labels(self.vertex_labels().map(|(v, l)| (*v, l.clone())));
+        complement
+    }
 }
 impl<G: LabeledGraph> SimpleGraphOps for G where G::GraphType: SimpleGraphOps{
-    fn join(&self, other: &Self) -> (Self, VertexMap, VertexMap) {
-        let (join, self_map, other_map) = self.as_ref().merge(other.as_ref());
+    fn join(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, VertexMap, VertexMap) {
+        let (join, self_map, other_map) = self.as_ref().merge(other.as_ref(), ||{graph_builder().to_graph()});
         let mut join = Self::from_graph(join);
         join.set_vertex_labels(self.vertex_labels().filter_map(|(vertex, label)|
             Some((*self_map.get(vertex)?, label.clone()))
@@ -107,18 +114,12 @@ impl<G: LabeledGraph> SimpleGraphOps for G where G::GraphType: SimpleGraphOps{
         (join, self_map, other_map)
     }
 
-    fn product(&self, other: &Self) -> (Self, HashMap<(VertexID, VertexID), VertexID>) {
-        let (product, map) = self.as_ref().product(other.as_ref());
+    fn product(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, HashMap<(VertexID, VertexID), VertexID>) {
+        let (product, map) = self.as_ref().product(other.as_ref(), ||{graph_builder().to_graph()});
         // Since vertex and edge labels are ambiguous here we will leave them empty. 
         // Ideally, the return type of product would switch the vertex label into a tuple of (Option<V>, Option<V>), as that would allow the most correct behaviour.
         // Unfortunately it was not designed to support this and I dont care enough to change it now.
         (Self::from_graph(product), map)
-    }
-
-    fn complement(&self) -> Self {
-        let mut complement = Self::from_graph(self.as_ref().complement());
-        complement.set_vertex_labels(self.vertex_labels().map(|(v, l)| (*v, l.clone())));
-        complement
     }
 }
 impl<G: LabeledGraph> SimpleGraph for G where G::GraphType: SimpleGraph{}
@@ -141,7 +142,7 @@ pub struct HashMapLabeledGraph<G, V=(), E=()> where G: SimpleGraph {
     pub vertex_labels: HashMap<VertexID, V>,
     pub edge_labels: HashMap<EdgeID, E>
 }
-impl<G: SimpleGraph, V, E> Default for HashMapLabeledGraph<G, V, E>{
+impl<G: SimpleGraph+Default, V, E> Default for HashMapLabeledGraph<G, V, E>{
     fn default() -> Self {
         Self{graph: G::default(), vertex_labels: HashMap::default(), edge_labels: HashMap::default()}
     }
@@ -162,9 +163,12 @@ impl<G: SimpleGraph, V: Clone, E: Clone> LabeledGraph for HashMapLabeledGraph<G,
     type GraphType = G;
 
     fn from_graph(graph: Self::GraphType) -> Self {
-        Self{graph, ..Default::default()}
+        Self{graph, vertex_labels: HashMap::default(), edge_labels: HashMap::default()}
     }
-    
+    fn to_graph(self) -> Self::GraphType {
+        self.graph
+    }
+
     fn get_vertex_label(&self, vertex: VertexID) -> Option<&Self::VertexData> {
         if self.graph.contains(vertex) {
             Some(self.vertex_labels.get(&vertex)?)
@@ -215,13 +219,5 @@ impl<G: SimpleGraph, V: Clone, E: Clone> LabeledGraph for HashMapLabeledGraph<G,
         self.edge_labels.remove(&e)
     }
 }
-
-/// Trait used to represent types that can be used as a number
-pub trait Number: Clone+Copy+std::ops::Add<Output=Self>+std::ops::Sub<Output=Self>+std::ops::Mul<Output=Self>+std::ops::Div<Output=Self>+PartialOrd{}
-impl<T> Number for T where T: 
-    Clone+Copy+PartialOrd+
-    std::ops::Add<Output=Self>+std::ops::Sub<Output=Self>+
-    std::ops::Mul<Output=Self>+std::ops::Div<Output=Self>
-{}
 
 // TODO: Tests for Labeled Graphs

@@ -1,5 +1,7 @@
 //! Adjacency list implementation of graph
-use super::{Graph, SimpleGraph, VertexID, EdgeID, DiGraph};
+use crate::graph::{GraphOps, SimpleGraphOps};
+
+use super::{GraphTrait, SimpleGraph, VertexID, EdgeID, DiGraph};
 use std::{borrow::Cow, collections::{HashMap, HashSet}};
 
 
@@ -7,7 +9,7 @@ use std::{borrow::Cow, collections::{HashMap, HashSet}};
 pub struct SparseSimpleGraph {
     adjacency_list: HashMap<VertexID, HashSet<VertexID>>
 }
-impl Graph for SparseSimpleGraph {
+impl GraphTrait for SparseSimpleGraph {
     type VertexSet = HashSet<VertexID>;
 
     fn vertex_count(&self) -> usize {
@@ -85,13 +87,15 @@ impl Graph for SparseSimpleGraph {
     }
 }
 impl SimpleGraph for SparseSimpleGraph{}
+impl GraphOps for SparseSimpleGraph{}
+impl SimpleGraphOps for SparseSimpleGraph{}
 
 #[derive(Default, Debug)]
 pub struct SparseDiGraph {
     out_adjacency: HashMap<VertexID, HashSet<VertexID>>,
     in_adjacency: HashMap<VertexID, HashSet<VertexID>>
 }
-impl Graph for SparseDiGraph {
+impl GraphTrait for SparseDiGraph {
     type VertexSet = HashSet<VertexID>;
 
     fn vertex_count(&self) -> usize {
@@ -129,11 +133,15 @@ impl Graph for SparseDiGraph {
         self.out_adjacency.keys().cloned().collect()
     }
     fn create_vertex(&mut self) -> VertexID {
-        if let Some(max) = self.out_adjacency.keys().max() {max+1} else {0}
+        let key = self.out_adjacency.keys().max().map(|max| max+1).unwrap_or(0);
+        self.out_adjacency.insert(key, HashSet::default());
+        self.in_adjacency.insert(key, HashSet::default());
+        key
     }
     
     fn add_vertex(&mut self, v: VertexID) {
         self.out_adjacency.entry(v).or_default();
+        self.in_adjacency.entry(v).or_default();
     }
     fn add_edge(&mut self, e: EdgeID) {
         let v1 = e.0;
@@ -142,7 +150,7 @@ impl Graph for SparseDiGraph {
         self.in_adjacency.entry(v2).or_default().insert(v1);
         // create entries for other vertices, but dont add extra arcs
         self.in_adjacency.entry(v1).or_default();
-        self.in_adjacency.entry(v2).or_default();
+        self.out_adjacency.entry(v2).or_default();
     }
     fn add_neighbors(&mut self, v: VertexID, nbhrs: impl Iterator<Item=VertexID>) {
         let nbhr_vec: Vec<VertexID> = nbhrs.collect();
@@ -193,7 +201,7 @@ impl DiGraph for SparseDiGraph{
         graph
     }
 }
-
+impl GraphOps for SparseDiGraph{}
 
 #[cfg(test)]
 mod tests {
@@ -224,5 +232,17 @@ mod tests {
         
         assert!(butterfly.vertex_count() == 5);
         assert!(butterfly.edge_count() == 6);
+    }
+
+    #[test]
+    fn sparse_graph_ops(){
+        use crate::graph::test::*;
+        graph_vs_digraph_test::<SparseSimpleGraph, SparseDiGraph>();
+        digraph_fn_test::<SparseDiGraph>();
+        graph_ops_test::<SparseSimpleGraph>();
+        simple_graph_ops_test::<SparseSimpleGraph>();
+        simple_graph_complement_test::<SparseSimpleGraph>();
+        graph_ops_test::<SparseDiGraph>();
+        digraph_complement_test::<SparseDiGraph>();
     }
 }

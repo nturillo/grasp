@@ -21,7 +21,7 @@ pub fn to_dot<G: SimpleGraph>(g: G) -> String {
 mod tests {
     #[test]
     fn butterfly_dot() {
-        use crate::graph::{adjacency_list::SparseSimpleGraph, Graph};
+        use crate::graph::{adjacency_list::SparseSimpleGraph, GraphTrait};
         use super::to_dot;
 
         let mut butterfly = SparseSimpleGraph::default();
