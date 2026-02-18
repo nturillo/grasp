@@ -44,7 +44,9 @@ pub struct TraversalIter<'a, G: GraphTrait, F: Frontier> {
 pub struct OrderedNumber<N>(pub N);
 
 impl<N: PartialEq> PartialEq for OrderedNumber<N> {
-    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
 }
 impl<N: PartialEq> Eq for OrderedNumber<N> {}
 
