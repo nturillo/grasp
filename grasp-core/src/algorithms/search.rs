@@ -2,7 +2,7 @@ use crate::graph::graph_traits::*;
 use crate::graph::errors::GraphError;
 
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
-use std::cmp::Reverse;
+use std::cmp::{Reverse, Ordering};
 
 pub type BfsIter<'a, G> = TraversalIter<'a, G, VecDeque<VertexType>>;
 pub type DfsIter<'a, G> = TraversalIter<'a, G, Vec<VertexType>>;
@@ -41,15 +41,33 @@ pub struct TraversalIter<'a, G: GraphTrait, F: Frontier> {
     visited: HashSet<VertexType>
 }
 
+pub struct OrderedNumber<N>(pub N);
+
+impl<N: PartialEq> PartialEq for OrderedNumber<N> {
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
+}
+impl<N: PartialEq> Eq for OrderedNumber<N> {}
+
+impl<N: PartialOrd> PartialOrd for OrderedNumber<N> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+impl<N: PartialOrd> Ord for OrderedNumber<N> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+    }
+}
+
 pub struct Dijkstra<'a, G: GraphTrait, WF, N>
 where WF: Fn(&G, EdgeType) -> Option<N> + 'a,
-N: Number + Ord + Default + Copy + 'a, {
+N: Number + PartialOrd + Default + Copy + 'a, {
     g: &'a G,
     weight: WF,
     dist: HashMap<VertexType, N>,
     prev: HashMap<VertexType, VertexType>,
-    heap: BinaryHeap<Reverse<(N, VertexType)>>,
-    finished: HashSet<VertexType>
+    heap: BinaryHeap<Reverse<(OrderedNumber<N>, VertexType)>>,
+    finished: HashSet<VertexType>,
 }
 
 impl<'a, G:GraphTrait, F:Frontier> TraversalIter<'a, G, F> {
@@ -89,7 +107,7 @@ impl<'a, G:GraphTrait, F:Frontier> Iterator for TraversalIter<'a, G, F> {
 
 impl<'a, G: GraphTrait, WF, N> Dijkstra<'a, G, WF, N>
 where WF: Fn(&G, EdgeType) -> Option<N> + 'a,
-N: Number + Ord + Default + Copy + 'a, {
+N: Number + PartialOrd + Default + Copy + 'a, {
     pub fn from_source(source: VertexType, g: &'a G, weight: WF) -> Result<Self, GraphError> {
         if !g.contains(source) {
             return Err(GraphError::VertexNotInGraph);
@@ -100,7 +118,7 @@ N: Number + Ord + Default + Copy + 'a, {
         dist.insert(source, zero);
 
         let mut heap = BinaryHeap::new();
-        heap.push(Reverse((zero, source)));
+        heap.push(Reverse((OrderedNumber(zero), source)));
 
         Ok(Dijkstra {
             g,
@@ -108,7 +126,7 @@ N: Number + Ord + Default + Copy + 'a, {
             dist,
             prev: HashMap::new(),
             heap,
-            finished: HashSet::new()
+            finished: HashSet::new(),
         })
     }
 
@@ -134,13 +152,15 @@ N: Number + Ord + Default + Copy + 'a, {
 
 impl<'a, G: GraphTrait, WF, N> Iterator for Dijkstra<'a, G, WF, N>
 where WF: Fn(&G, EdgeType) -> Option<N> + 'a,
-N: Number + Ord + Default + Copy + 'a, {
+N: Number + PartialOrd + Default + Copy + 'a, {
     type Item = Result<(VertexType, N), GraphError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(Reverse((d, v))) = self.heap.pop() {
+        while let Some(Reverse((ord_d, v))) = self.heap.pop() {
+            let d_val: N = ord_d.0;
+
             if let Some(&best) = self.dist.get(&v) {
-                if d > best {
+                if d_val > best {
                     continue;
                 }
             }
@@ -167,7 +187,7 @@ N: Number + Ord + Default + Copy + 'a, {
                     Some(val) => val,
                     None => continue,
                 };
-                let alt: N = d + w;
+                let alt: N = d_val + w;
 
                 let is_better = match self.dist.get(u) {
                     Some(&old) => alt < old,
@@ -177,11 +197,17 @@ N: Number + Ord + Default + Copy + 'a, {
                 if is_better {
                     self.dist.insert(*u, alt);
                     self.prev.insert(*u, v);
-                    self.heap.push(Reverse((alt, *u)));
+                    self.heap.push(Reverse((OrderedNumber(alt), *u)));
                 }
             }
-            return Some(Ok((v, d)));
+            return Some(Ok((v, d_val)));
         }
         None
     }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn dijkstra() {}
 }
