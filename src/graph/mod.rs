@@ -136,6 +136,7 @@ mod test{
         assert!(digraph.in_neighbors(0).is_some_and(|s| *s==in_neighbors));
     }
 
+    /// Assures Underlying Graphs are correctly calculated
     pub fn underlying_graph_test<G: UnderlyingGraph+Default>(){
         // underlying graph
         let mut digraph = G::default();
