@@ -1,6 +1,7 @@
 use super::{GraphTrait, VertexID, VertexMap, EdgeID, graph_ops::*, DiGraph, SimpleGraph};
 use std::{borrow::Cow, collections::HashMap};
 
+/// Graphs that allow setting labels to vertices and edges
 pub trait LabeledGraph: AsRef<Self::GraphType>+AsMut<Self::GraphType>{
     type VertexData: Clone;
     type EdgeData: Clone;
@@ -124,19 +125,15 @@ impl<G: LabeledGraph> SimpleGraphOps for G where G::GraphType: SimpleGraphOps{
 }
 impl<G: LabeledGraph> SimpleGraph for G where G::GraphType: SimpleGraph{}
 impl<G: LabeledGraph> DiGraph for G where G::GraphType: DiGraph{
-    type UnderlyingGraph = <G::GraphType as DiGraph>::UnderlyingGraph;
     fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
         self.as_ref().in_neighbors(v)
     }
     fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
         self.as_ref().in_neighbors(v)
     }
-    fn underlying_graph(&self) -> Self::UnderlyingGraph {
-        // Clone vertex labels as well
-        self.as_ref().underlying_graph()
-    }
 }
 
+/// Basic implementation of a labeled graph which stores labels in a std HashMap
 #[derive(Debug)]
 pub struct HashMapLabeledGraph<G, V=(), E=()> where G: SimpleGraph {
     pub graph: G,
@@ -227,7 +224,6 @@ impl<G: SimpleGraph, V: Clone, E: Clone> LabeledGraph for HashMapLabeledGraph<G,
     }
 }
 
-// TODO: Tests for Labeled Graphs
 #[cfg(test)]
 mod test{
     use std::collections::HashSet;

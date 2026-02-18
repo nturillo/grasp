@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use super::{GraphTrait, VertexID, EdgeID, VertexMap, SimpleGraph};
 
 /// Graph operations that are agnostic to simple graphs and digraphs
+/// graph_builder is a FnOnce which creates a Graph to store the result in, Default::default works for graphs that are Default.
 pub trait GraphOps: GraphTrait+Sized{
+    /// Subgraph from a set of vertices
     fn subgraph_vertex(&self, vertices: impl IntoIterator<Item=VertexID>, graph_builder: impl FnOnce() -> Self) -> Self {
         let mut subgraph = graph_builder();
         for vertex in vertices{
@@ -16,6 +18,7 @@ pub trait GraphOps: GraphTrait+Sized{
         subgraph
     }
 
+    /// Subgraph from a set of edges
     fn subgraph_edges(&self, edges: impl IntoIterator<Item=EdgeID>, graph_builder: impl FnOnce() -> Self) -> Self {
         let mut subgraph = graph_builder();
         for edge in edges{
@@ -25,6 +28,7 @@ pub trait GraphOps: GraphTrait+Sized{
         subgraph
     }
 
+    /// Combines two graphs into one without any new edges. Also returns two maps (self vertex) -> new vertex, and (other vertex) -> new vertex
     fn merge(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, VertexMap, VertexMap) {
         let mut self_map = HashMap::default();
         let mut other_map = HashMap::default();
@@ -52,6 +56,7 @@ pub trait GraphOps: GraphTrait+Sized{
         (merged, self_map, other_map)
     }
 
+    /// Returns the complement of a graph
     fn complement(&self, graph_builder: impl FnOnce() -> Self) -> Self {
         let mut complement = graph_builder();
         for v1 in self.vertices(){
@@ -68,6 +73,7 @@ pub trait GraphOps: GraphTrait+Sized{
 
 /// Graph operations that only work for simple graphs
 pub trait SimpleGraphOps: GraphOps+SimpleGraph{
+    /// Returns the join of two graphs. Also returns two maps (self vertex) -> new vertex and (other vertex) -> new vertex
     fn join(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, VertexMap, VertexMap) {
         let (mut joined, self_map, other_map) = self.merge(other, graph_builder);
         for v1 in self.vertices(){
@@ -80,6 +86,7 @@ pub trait SimpleGraphOps: GraphOps+SimpleGraph{
         (joined, self_map, other_map)
     }
 
+    /// Returns the cartesian product of two graphs. Also returns a map from (self vertex, other vertex) -> new vertex
     fn product(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, HashMap<(VertexID, VertexID), VertexID>) {
         let mut map = HashMap::default();
         let mut product = graph_builder();

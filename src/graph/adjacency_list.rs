@@ -1,4 +1,6 @@
 //! Adjacency list implementation of graph
+use crate::graph::UnderlyingGraph;
+
 use super::{GraphTrait, SimpleGraph, VertexID, EdgeID, DiGraph, graph_ops::*};
 use std::{borrow::Cow, collections::{HashMap, HashSet}};
 
@@ -92,7 +94,9 @@ impl SimpleGraphOps for SparseSimpleGraph{}
 
 #[derive(Default, Debug)]
 pub struct SparseDiGraph {
+    /// Arcs out from key
     out_adjacency: HashMap<VertexID, HashSet<VertexID>>,
+    /// Arcs in to key
     in_adjacency: HashMap<VertexID, HashSet<VertexID>>
 }
 impl GraphTrait for SparseDiGraph {
@@ -185,13 +189,15 @@ impl GraphTrait for SparseDiGraph {
     }
 }
 impl DiGraph for SparseDiGraph{
-    type UnderlyingGraph = SparseSimpleGraph;
     fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
         self.out_adjacency.get(&v).map(|set| Cow::Borrowed(set))
     }
     fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
         self.in_adjacency.get(&v).map(|set| Cow::Borrowed(set))
     }
+}
+impl UnderlyingGraph for SparseDiGraph{
+    type UnderlyingGraph = SparseSimpleGraph;
     fn underlying_graph(&self) -> Self::UnderlyingGraph{
         let mut graph = Self::UnderlyingGraph::default();
         for v in self.vertices(){
@@ -256,5 +262,6 @@ mod tests {
         simple_graph_complement_test::<SparseSimpleGraph>();
         graph_ops_test::<SparseDiGraph>();
         digraph_complement_test::<SparseDiGraph>();
+        underlying_graph_test::<SparseDiGraph>();
     }
 }
