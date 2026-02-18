@@ -1,5 +1,6 @@
 use crate::graph::{GraphTrait, prelude::LabeledGraph};
 
+/// Tests if two graphs are equal, (Not Isomorphic)
 pub fn graphs_eq<G: GraphTrait>(graph_a: &G, graph_b: &G) -> bool{
     for vertex in graph_a.vertices(){if !graph_b.contains(vertex) {return false;}}
     for vertex in graph_b.vertices(){if !graph_a.contains(vertex) {return false;}}
@@ -8,6 +9,7 @@ pub fn graphs_eq<G: GraphTrait>(graph_a: &G, graph_b: &G) -> bool{
     true
 }
 
+/// Tests if two labeled graphs are equal (Not Isomorphic)
 pub fn labeled_graphs_eq<G: LabeledGraph>(graph_a: &G, graph_b: &G) -> bool
 where G::VertexData: PartialEq, G::EdgeData: PartialEq
 {
