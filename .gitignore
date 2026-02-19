@@ -24,6 +24,10 @@ target
 # Added by cargo
 
 /target
+
+# direnv
+.envrc
+/.direnv
 **/target/
 
 .venv/
