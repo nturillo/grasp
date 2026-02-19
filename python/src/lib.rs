@@ -1,9 +1,10 @@
 use pyo3::prelude::*;
-use grasp_core::{SparseGraph, GraphTrait, AlgoTrait, GraphError};
+use grasp_core::graph::prelude::{SparseSimpleGraph, GraphTrait, VertexID, GraphError};
+use grasp_core::algorithms::algo_traits::AlgoTrait;
 
 #[pyclass]
 pub struct PySparseGraph {
-    inner: SparseGraph,
+    inner: SparseSimpleGraph,
 }
 
 #[pymethods]
@@ -11,7 +12,7 @@ impl PySparseGraph {
     #[new]
     fn new() -> Self {
         Self {
-            inner: SparseGraph::new(),
+            inner: SparseSimpleGraph::default(),
         }
     }
 
@@ -24,31 +25,33 @@ impl PySparseGraph {
     }
 
     fn num_vertices(&self) -> usize {
-        self.inner.num_vertices()
+        self.inner.vertex_count()
     }
 
     fn num_edges(&self) -> usize {
-        self.inner.num_edges()
+        self.inner.edge_count()
     }
 
     fn neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
         self.inner
             .neighbors(v)
             .map(|s| s.iter().copied().collect())
-            .map_err(graph_error_to_py)
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                format!("Vertex {} not in graph", v)
+            ))
     }
 
     fn bfs(&self, source: usize) -> PyResult<Vec<usize>> {
         self.inner
             .bfs_iter(source)
-            .map(|it| it.collect())
+            .map(|it| it.collect::<Vec<VertexID>>())
             .map_err(graph_error_to_py)
     }
 
     fn dfs(&self, source: usize) -> PyResult<Vec<usize>> {
         self.inner
             .dfs_iter(source)
-            .map(|it| it.collect())
+            .map(|it| it.collect::<Vec<VertexID>>())
             .map_err(graph_error_to_py)
     }
 }
@@ -58,7 +61,7 @@ fn graph_error_to_py(err: GraphError) -> PyErr {
 }
 
 #[pymodule]
-fn grasp(_py: Python, m: &PyModule) -> PyResult<()> {
+fn grasp(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySparseGraph>()?;
     Ok(())
 }
