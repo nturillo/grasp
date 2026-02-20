@@ -28,3 +28,10 @@ target
 # direnv
 .envrc
 /.direnv
+**/target/
+
+.venv/
+.vscode/
+
+# Python testing files
+*.py
