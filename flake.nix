@@ -33,13 +33,18 @@
           git
           mold
           rust-analyzer
+          python312
         ];
-        buildInputs = nativeBuildInputs;
+        buildInputs = with pkgs; [
+          xorg.libX11 xorg.libXcursor xorg.libXi xorg.libXrandr # To use the x11 feature
+          wayland
+          python312
+        ];
 
         # needed for rust-analyzer
         RUST_SRC_PATH = "${rt}/lib/rustlib/src/rust/library";
         LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-        LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath nativeBuildInputs;
+        LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
       };
       }
     );
