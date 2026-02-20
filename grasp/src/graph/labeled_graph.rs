@@ -2,7 +2,7 @@ use super::{GraphTrait, VertexID, VertexMap, EdgeID, graph_ops::*, DiGraph, Simp
 use std::{borrow::Cow, collections::HashMap};
 
 /// Graphs that allow setting labels to vertices and edges
-pub trait LabeledGraph: AsRef<Self::GraphType>+AsMut<Self::GraphType>{
+pub trait LabeledGraph: AsRef<Self::GraphType>+AsMut<Self::GraphType>+Default {
     type VertexData: Clone;
     type EdgeData: Clone;
     type GraphType: GraphTrait;

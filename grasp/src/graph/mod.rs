@@ -52,7 +52,7 @@ pub type EdgeID = (VertexID, VertexID);
 pub type VertexMap = HashMap<VertexID, VertexID>;
 
 /// Core Graph functionality. Enables edge and vertex manipulation
-pub trait GraphTrait{
+pub trait GraphTrait : Default{
     type VertexSet: Set<VertexID>;
     
     /// Number of vertices
