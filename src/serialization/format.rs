@@ -6,38 +6,43 @@ use crate::graph::{EdgeID, VertexID};
 #[cfg(feature = "serde")]
 use crate::graph::labeled_graph::LabeledGraph;
 #[cfg(feature = "serde")]
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "serde")]
-use serde_json::{Map, Value};
+use crate::serialization::ser::*;
+#[cfg(feature = "serde")]
+use std::collections::BTreeMap;
+
+#[cfg(feature = "serde")]
+pub struct Serializer;
 
 #[cfg(feature = "serde")]
 fn serialize<V: Serialize>(data: &V) -> Value {
-    serde_json::to_value(data).unwrap_or(Value::Null)
+    to_value(data).unwrap_or(Value::Null)
 }
 
 #[cfg(feature = "serde")]
-fn wrap_value(json: Value) -> Map<String, Value> {
-    match json {
+fn wrap_value(val: Value) -> BTreeMap<String, Value> {
+    match val {
         Value::Object(map) => map,
         Value::Array(vec) => {
-            let mut map = Map::new();
+            let mut map = BTreeMap::new();
             map.insert("list".to_string(), Value::Array(vec));
             return map;
         }
-        Value::Null => Map::new(),
+        Value::Null => BTreeMap::new(),
         Value::Bool(_) => {
-            let mut map = Map::new();
-            map.insert("bool".to_string(), json);
+            let mut map = BTreeMap::new();
+            map.insert("bool".to_string(), val);
             return map;
         }
-        Value::Number(_) => {
-            let mut map = Map::new();
-            map.insert("number".to_string(), json);
+        Value::Int(_) | Value::Float(_) | Value::Unsigned(_) => {
+            let mut map = BTreeMap::new();
+            map.insert("number".to_string(), val);
             return map;
         }
         Value::String(_) => {
-            let mut map = Map::new();
-            map.insert("string".to_string(), json);
+            let mut map = BTreeMap::new();
+            map.insert("string".to_string(), val);
             return map;
         }
     }
@@ -240,8 +245,6 @@ where
     G::VertexData: Serialize,
     G::EdgeData: Serialize,
 {
-    use serde_json::Map;
-
     use crate::graph::GraphTrait;
 
     let mut s = "graph [\n".to_string();
@@ -253,15 +256,15 @@ where
         s
     };
 
-    fn flatten(s: String, map: Map<String, serde_json::Value>, index: &usize) -> String {
+    fn flatten(s: String, map: BTreeMap<String, Value>, index: &usize) -> String {
         let mut res = s.clone();
 
         for entry in map {
-            if let serde_json::Value::Object(obj) = entry.1 {
+            if let Value::Object(obj) = entry.1 {
                 res.push_str(&"\t".repeat(*index).add(&format!("{} [", entry.0)).add("\n"));
                 res = flatten(res, obj, &(index + 1));
                 res.push_str(&"\t".repeat(*index).add("]").add("\n"));
-            } else if let serde_json::Value::Array(arr) = entry.1 {
+            } else if let Value::Array(arr) = entry.1 {
                 res.push_str(&"\t".repeat(*index).add(&format!("{} [", entry.0)).add("\n"));
                 for val in arr {
                     res = flatten(res, wrap_value(val), &(index + 1));
@@ -269,10 +272,12 @@ where
                 res.push_str(&"\t".repeat(*index).add("]").add("\n"));
             } else {
                 let value: String = match entry.1 {
-                    serde_json::Value::Null => "null".to_string(),
-                    serde_json::Value::Number(n) => n.to_string(),
-                    serde_json::Value::String(s) => format!("\"{}\"", s),
-                    serde_json::Value::Bool(b) => b.to_string(),
+                    Value::Null => "null".to_string(),
+                    Value::Int(n) => n.to_string(),
+                    Value::Float(n) => n.to_string(),
+                    Value::Unsigned(n) => n.to_string(),
+                    Value::String(s) => format!("\"{}\"", s),
+                    Value::Bool(b) => b.to_string(),
                     _ => continue,
                 };
 
@@ -285,7 +290,7 @@ where
             }
         }
 
-        s
+        res
     }
 
     index += 1;
@@ -329,8 +334,86 @@ where
     s
 }
 
+#[cfg(feature = "serde")]
+pub fn labeled_from_gml<'a, G: LabeledGraph + Default>(string: String) -> Result<G, String>
+where
+    G::VertexData: Deserialize<'a>,
+    G::EdgeData: Deserialize<'a>,
+{
+    let mut graph = G::default();
+    let err = Err("Invalid GML format.".to_string());
+    let mut history = Vec::new();
+    let mut edge_builder = (None, None);
+
+    let mut lines = string.lines().map(|line| line.trim());
+
+    match lines.next() {
+        None => return err,
+        Some(line) => {
+            if line != "graph [" {
+                return err;
+            }
+
+            history.push("graph");
+        }
+    }
+
+    while let Some(line) = lines.next() {
+        if line.is_empty() || line.starts_with("#") || line.starts_with("comment") {
+            continue;
+        }
+
+        if line == "]" {
+            history.pop();
+        } else if let Some((p1, p2)) = line.split_once(" ") {
+            if p2 == "[" {
+                history.push(p1);
+                edge_builder = (None, None);
+                continue;
+            }
+
+            match history.last() {
+                None => return err,
+                Some(&"node") => {
+                    if p1 == "id" {
+                        match p2.parse() {
+                            Ok(n) => graph.add_vertex(n),
+                            Err(_) => return err,
+                        }
+                    }
+                }
+                Some(&"edge") => {
+                    if p1 == "source" {
+                        match p2.parse::<usize>() {
+                            Ok(n) => edge_builder.0 = Some(n),
+                            Err(_) => return err,
+                        }
+                    } else if p1 == "target" {
+                        match p2.parse::<usize>() {
+                            Ok(n) => edge_builder.1 = Some(n),
+                            Err(_) => return err,
+                        }
+                    }
+
+                    if let (Some(source), Some(target)) = edge_builder {
+                        graph.add_edge((source, target));
+                        edge_builder = (None, None);
+                    }
+                }
+                _ => (),
+            };
+        }
+    }
+
+    Ok(graph)
+}
+
 #[cfg(test)]
 mod tests {
+    use serde::Serialize;
+
+    use crate::{graph::prelude::HashMapLabeledGraph, serialization::format::labeled_to_gml};
+
     #[test]
     fn butterfly_dot() {
         use super::to_dot;
@@ -582,9 +665,102 @@ mod tests {
     fn labeled_gml() {
         use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
 
-        let mut base = SparseSimpleGraph::default();
+        #[derive(Clone, Serialize)]
+        struct VData {
+            size: i32,
+            color: &'static str,
+        }
+
+        let mut base = HashMapLabeledGraph::<SparseSimpleGraph, VData, i32>::default();
         base.add_edge((1, 2));
         base.add_edge((2, 3));
-        //let mut labeled: LabeledGraph<SparseGraph, String, i32> = LabeledGraph::from_graph(base);
-    } // TODO
+        base.add_edge((2, 4));
+
+        base.edge_labels.insert((1, 2), 12);
+        base.edge_labels.insert((2, 3), 2);
+        base.edge_labels.insert((2, 4), 7);
+
+        base.vertex_labels.insert(
+            1,
+            VData {
+                size: 0,
+                color: "Red",
+            },
+        );
+        base.vertex_labels.insert(
+            2,
+            VData {
+                size: 3,
+                color: "Green",
+            },
+        );
+        base.vertex_labels.insert(
+            3,
+            VData {
+                size: -2,
+                color: "Blue",
+            },
+        );
+        base.vertex_labels.insert(
+            4,
+            VData {
+                size: 64,
+                color: "Yellow",
+            },
+        );
+
+        let s = "graph [\n\
+                    \tnode [\n\
+                    \t\tid 1\n\
+                    \t\tdata [\n\
+                    \t\t\tcolor \"Red\"\n\
+                    \t\t\tsize 0\n\
+                    \t\t]\n\
+                    \t]\n\
+                    \tnode [\n\
+                    \t\tid 2\n\
+                    \t\tdata [\n\
+                    \t\t\tcolor \"Green\"\n\
+                    \t\t\tsize 3\n\
+                    \t\t]\n\
+                    \t]\n\
+                    \tnode [\n\
+                    \t\tid 3\n\
+                    \t\tdata [\n\
+                    \t\t\tcolor \"Blue\"\n\
+                    \t\t\tsize -2\n\
+                    \t\t]\n\
+                    \t]\n\
+                    \tnode [\n\
+                    \t\tid 4\n\
+                    \t\tdata [\n\
+                    \t\t\tcolor \"Yellow\"\n\
+                    \t\t\tsize 64\n\
+                    \t\t]\n\
+                    \t]\n\
+                    \tedge [\n\
+                    \t\tsource 1\n\
+                    \t\ttarget 2\n\
+                    \t\tdata [\n\
+                    \t\t\tnumber 12\n\
+                    \t\t]\n\
+                    \t]\n\
+                    \tedge [\n\
+                    \t\tsource 2\n\
+                    \t\ttarget 3\n\
+                    \t\tdata [\n\
+                    \t\t\tnumber 2\n\
+                    \t\t]\n\
+                    \t]\n\
+                    \tedge [\n\
+                    \t\tsource 2\n\
+                    \t\ttarget 4\n\
+                    \t\tdata [\n\
+                    \t\t\tnumber 7\n\
+                    \t\t]\n\
+                    \t]\n\
+                    ]";
+
+        pretty_assertions::assert_eq!(s, labeled_to_gml(&base));
+    }
 }
