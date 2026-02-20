@@ -1,6 +1,6 @@
 use crate::graph::layout::{self, PartialLayout};
 use eframe::egui::{Color32, Vec2};
-use grasp::graph::{adjacency_list::SparseGraph, errors::GraphError, graph_traits::GraphTrait};
+use grasp::graph::{self, GraphTrait};
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},

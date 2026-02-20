@@ -1,45 +1,41 @@
 use std::ops::Add;
 
-use crate::graph::SimpleGraph;
-use crate::graph::adjacency_list::SparseGraph;
-use crate::graph::graph_traits::{GraphTrait, VertexType};
-use crate::graph::{EdgeID, SimpleGraph, VertexID};
+use crate::graph::GraphTrait;
+use crate::graph::{EdgeID, VertexID};
 
 #[cfg(feature = "serde")]
 use crate::graph::labeled_graph::LabeledGraph;
 #[cfg(feature = "serde")]
 use serde::Serialize;
 #[cfg(feature = "serde")]
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 #[cfg(feature = "serde")]
-fn serialize<V: Serialize>(data: &V) -> serde_json::Value {
-    serde_json::to_value(data).unwrap_or(serde_json::Value::Null)
+fn serialize<V: Serialize>(data: &V) -> Value {
+    serde_json::to_value(data).unwrap_or(Value::Null)
 }
 
 #[cfg(feature = "serde")]
-fn wrap_value(json: serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
-    use serde_json::Map;
-
+fn wrap_value(json: Value) -> Map<String, Value> {
     match json {
-        serde_json::Value::Object(map) => map,
-        serde_json::Value::Array(vec) => {
+        Value::Object(map) => map,
+        Value::Array(vec) => {
             let mut map = Map::new();
-            map.insert("list".to_string(), serde_json::Value::Array(vec));
+            map.insert("list".to_string(), Value::Array(vec));
             return map;
         }
-        serde_json::Value::Null => Map::new(),
-        serde_json::Value::Bool(_) => {
+        Value::Null => Map::new(),
+        Value::Bool(_) => {
             let mut map = Map::new();
             map.insert("bool".to_string(), json);
             return map;
         }
-        serde_json::Value::Number(_) => {
+        Value::Number(_) => {
             let mut map = Map::new();
             map.insert("number".to_string(), json);
             return map;
         }
-        serde_json::Value::String(_) => {
+        Value::String(_) => {
             let mut map = Map::new();
             map.insert("string".to_string(), json);
             return map;
@@ -47,7 +43,7 @@ fn wrap_value(json: serde_json::Value) -> serde_json::Map<String, serde_json::Va
     }
 }
 
-pub fn to_dot<G: SimpleGraph>(g: G) -> String {
+pub fn to_dot<G: GraphTrait>(g: G) -> String {
     let mut s = "graph {\n".to_string();
     let mut verts: Vec<VertexID> = g.vertices().collect();
     verts.sort();
@@ -64,8 +60,8 @@ pub fn to_dot<G: SimpleGraph>(g: G) -> String {
     s
 }
 
-pub fn from_dot<G: GraphTrait>(string: String) -> Result<G, String> {
-    let mut graph = G::new();
+pub fn from_dot<G: GraphTrait + Default>(string: String) -> Result<G, String> {
+    let mut graph = G::default();
     let err = Err("Invalid DOT format.".to_string());
 
     let mut lines = string
@@ -88,7 +84,7 @@ pub fn from_dot<G: GraphTrait>(string: String) -> Result<G, String> {
             && let (Ok(n1), Ok(n2)) = (p1.parse(), p2.parse())
         {
             graph.add_edge((n1, n2));
-        } else if !line.is_empty() && !line.starts_with("//") {
+        } else if !line.is_empty() && !line.starts_with("//") && line != "}" {
             return err;
         }
     }
@@ -98,13 +94,13 @@ pub fn from_dot<G: GraphTrait>(string: String) -> Result<G, String> {
 
 pub fn to_tgf<G: GraphTrait>(g: G) -> String {
     let mut s = String::new();
-    let mut verts: Vec<VertexType> = g.vertices().collect();
+    let mut verts: Vec<VertexID> = g.vertices().collect();
     verts.sort();
     for v in verts {
         s.push_str(&format!("{}\n", v));
     }
     s.push_str("#\n");
-    let mut edges: Vec<(VertexType, VertexType)> = g.edges().collect();
+    let mut edges: Vec<EdgeID> = g.edges().collect();
     edges.sort();
     for (u, v) in edges {
         s.push_str(&format!("{} {}\n", u, v))
@@ -113,9 +109,9 @@ pub fn to_tgf<G: GraphTrait>(g: G) -> String {
     s
 }
 
-pub fn from_tgf<G: GraphTrait>(string: String) -> Result<G, String> {
+pub fn from_tgf<G: GraphTrait + Default>(string: String) -> Result<G, String> {
     let mut lines = string.lines().map(|line| line.trim());
-    let mut graph = G::new();
+    let mut graph = G::default();
 
     while let Some(line) = lines.next() {
         if let Ok(n) = line.parse() {
@@ -141,7 +137,7 @@ pub fn to_gml<G: GraphTrait>(g: G) -> String {
 
     index += 1;
 
-    let mut verts: Vec<VertexType> = g.vertices().collect();
+    let mut verts: Vec<VertexID> = g.vertices().collect();
     verts.sort();
 
     for v in verts {
@@ -153,7 +149,7 @@ pub fn to_gml<G: GraphTrait>(g: G) -> String {
         push("]".to_string(), &index);
     }
 
-    let mut edges: Vec<(VertexType, VertexType)> = g.edges().collect();
+    let mut edges: Vec<EdgeID> = g.edges().collect();
     edges.sort();
 
     for e in edges {
@@ -165,13 +161,12 @@ pub fn to_gml<G: GraphTrait>(g: G) -> String {
         index -= 1;
         push("]".to_string(), &index);
     }
-    index -= 1;
     s.push_str(&"]".to_string());
     s
 }
 
-pub fn from_gml<G: GraphTrait>(string: String) -> Result<G, String> {
-    let mut graph = G::new();
+pub fn from_gml<G: GraphTrait + Default>(string: String) -> Result<G, String> {
+    let mut graph = G::default();
     let err = Err("Invalid GML format.".to_string());
     let mut history = Vec::new();
     let mut edge_builder = (None, None);
@@ -240,13 +235,14 @@ pub fn from_gml<G: GraphTrait>(string: String) -> Result<G, String> {
 }
 
 #[cfg(feature = "serde")]
-pub fn labeled_to_gml<G, V, E>(g: &LabeledGraph<G, V, E>) -> String
+pub fn labeled_to_gml<G: LabeledGraph>(g: &G) -> String
 where
-    G: GraphTrait,
-    V: Serialize,
-    E: Serialize,
+    G::VertexData: Serialize,
+    G::EdgeData: Serialize,
 {
     use serde_json::Map;
+
+    use crate::graph::GraphTrait;
 
     let mut s = "graph [\n".to_string();
     let mut index = 0;
@@ -294,17 +290,15 @@ where
 
     index += 1;
 
-    let mut verts: Vec<VertexType> = g.vertices().collect();
+    let mut verts: Vec<VertexID> = g.vertices().collect();
     verts.sort();
 
     for v in verts {
-        use crate::graph::labeled_graph::LabeledGraphTrait;
-
         s = push(s, "node [".to_string(), &index);
         index += 1;
 
         s = push(s, format!("id {}", v), &index);
-        if let Some(data) = g.get_vertex_label(&v) {
+        if let Some(data) = g.get_vertex_label(v) {
             s = push(s, "data [".to_string(), &index);
             s = flatten(s, wrap_value(serialize(data)), &(index + 1));
             s = push(s, "]".to_string(), &index);
@@ -314,18 +308,16 @@ where
         s = push(s, "]".to_string(), &index);
     }
 
-    let mut edges: Vec<(VertexType, VertexType)> = g.edges().collect();
+    let mut edges: Vec<EdgeID> = g.edges().collect();
     edges.sort();
 
     for e in edges {
-        use crate::graph::labeled_graph::LabeledGraphTrait;
-
         s = push(s, "edge [".to_string(), &index);
         index += 1;
 
         s = push(s, format!("source {}", &e.0), &index);
         s = push(s, format!("target {}", &e.1), &index);
-        if let Some(data) = g.get_edge_label(&e) {
+        if let Some(data) = g.get_edge_label(e) {
             s = push(s, "data [".to_string(), &index);
             s = flatten(s, wrap_value(serialize(data)), &(index + 1));
             s = push(s, "]".to_string(), &index);
@@ -333,7 +325,6 @@ where
         index -= 1;
         s = push(s, "]".to_string(), &index);
     }
-    index -= 1;
     s.push_str(&"]".to_string());
     s
 }
@@ -373,7 +364,10 @@ mod tests {
 
     #[test]
     fn butterfly_from_dot() {
-        let mut butterfly = SparseGraph::new();
+        use super::*;
+        use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
+
+        let mut butterfly = SparseSimpleGraph::default();
         butterfly.add_edge((1, 2));
         butterfly.add_edge((2, 3));
         butterfly.add_edge((1, 3));
@@ -396,7 +390,7 @@ mod tests {
         \n    4 -- 5;\
         \n}";
 
-        let from = from_dot::<SparseGraph>(butterfly_dot.to_string());
+        let from = from_dot::<SparseSimpleGraph>(butterfly_dot.to_string());
 
         pretty_assertions::assert_eq!(from.is_ok(), true);
         pretty_assertions::assert_eq!(butterfly_dot, to_dot(from.expect("Unexpected error")));
@@ -404,7 +398,10 @@ mod tests {
 
     #[test]
     fn butterfly_from_tgf() {
-        let mut butterfly = SparseGraph::new();
+        use super::*;
+        use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
+
+        let mut butterfly = SparseSimpleGraph::default();
         butterfly.add_edge((1, 2));
         butterfly.add_edge((2, 3));
         butterfly.add_edge((1, 3));
@@ -426,7 +423,7 @@ mod tests {
         2 3\n\
         4 5";
 
-        let from = from_tgf::<SparseGraph>(butterfly_tgf.to_string());
+        let from = from_tgf::<SparseSimpleGraph>(butterfly_tgf.to_string());
 
         pretty_assertions::assert_eq!(from.is_ok(), true);
         pretty_assertions::assert_eq!(butterfly_tgf, to_tgf(from.expect("Unexpected error")));
@@ -434,7 +431,10 @@ mod tests {
 
     #[test]
     fn butterfly_tgf() {
-        let mut butterfly = SparseGraph::new();
+        use super::*;
+        use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
+
+        let mut butterfly = SparseSimpleGraph::default();
         butterfly.add_edge((1, 2));
         butterfly.add_edge((2, 3));
         butterfly.add_edge((1, 3));
@@ -461,7 +461,10 @@ mod tests {
 
     #[test]
     fn butterfly_gml() {
-        let mut butterfly = SparseGraph::new();
+        use super::*;
+        use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
+
+        let mut butterfly = SparseSimpleGraph::default();
         butterfly.add_edge((1, 2));
         butterfly.add_edge((2, 3));
         butterfly.add_edge((1, 3));
@@ -516,7 +519,10 @@ mod tests {
 
     #[test]
     fn butterfly_from_gml() {
-        let mut butterfly = SparseGraph::new();
+        use super::*;
+        use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
+
+        let mut butterfly = SparseSimpleGraph::default();
         butterfly.add_edge((1, 2));
         butterfly.add_edge((2, 3));
         butterfly.add_edge((1, 3));
@@ -566,7 +572,7 @@ mod tests {
             \n\t]\
             \n]";
 
-        let from = from_gml::<SparseGraph>(butterfly_gml.to_string());
+        let from = from_gml::<SparseSimpleGraph>(butterfly_gml.to_string());
 
         pretty_assertions::assert_eq!(from.is_ok(), true);
         pretty_assertions::assert_eq!(butterfly_gml, to_gml(from.expect("Unexpected error")));
@@ -574,7 +580,9 @@ mod tests {
 
     #[test]
     fn labeled_gml() {
-        let mut base = SparseGraph::new();
+        use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
+
+        let mut base = SparseSimpleGraph::default();
         base.add_edge((1, 2));
         base.add_edge((2, 3));
         //let mut labeled: LabeledGraph<SparseGraph, String, i32> = LabeledGraph::from_graph(base);

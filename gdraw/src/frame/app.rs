@@ -14,7 +14,7 @@ use eframe::egui::{
     self, CentralPanel, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
     TopBottomPanel, Ui, Vec2, Window,
 };
-use grasp::graph::graph_traits::GraphTrait;
+use grasp::graph::GraphTrait;
 
 pub struct GraspApp {
     pub style: Style,
