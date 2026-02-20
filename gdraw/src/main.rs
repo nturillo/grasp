@@ -1,5 +1,5 @@
 use gdraw::app::GraspApp;
-use grasp::graph::{GraphTrait, prelude::SparseSimpleGraph};
+use grasp::graph::{adjacency_list::SparseSimpleGraph, graph_ops::GraphOps, GraphTrait};
 
 #[allow(unused)]
 fn main() {

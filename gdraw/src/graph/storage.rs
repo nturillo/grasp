@@ -1,6 +1,6 @@
 use crate::graph::layout::{self, PartialLayout};
 use eframe::egui::{Color32, Vec2};
-use grasp::graph::{self, GraphTrait};
+use grasp::graph::{adjacency_list::SparseSimpleGraph, error::GraphError, graph_ops::GraphOps, GraphTrait};
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
@@ -120,7 +120,7 @@ impl Graph {
     }
 }
 
-impl<G: GraphTrait> From<&G> for Graph {
+impl<G: GraphOps> From<&G> for Graph {
     fn from(provider: &G) -> Self {
         let mut graph = Graph::default();
 

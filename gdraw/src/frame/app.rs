@@ -14,7 +14,7 @@ use eframe::egui::{
     self, CentralPanel, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
     TopBottomPanel, Ui, Vec2, Window,
 };
-use grasp::graph::GraphTrait;
+use grasp::graph::graph_ops::GraphOps;
 
 pub struct GraspApp {
     pub style: Style,
@@ -58,7 +58,7 @@ impl GraspApp {
     }
 
     /// Loads a graph from anything that implements [`grasp::graph::graph_traits::GraphTrait`]
-    pub fn load<T: GraphTrait>(&mut self, graph: &T) {
+    pub fn load<T: GraphOps>(&mut self, graph: &T) {
         self.graph = Graph::from(graph);
         layout::apply(&mut self.graph);
     }
