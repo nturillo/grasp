@@ -1,5 +1,11 @@
 [workspace]
 members = [
-    "grasp-core",
+    "grasp",
     "python",
+    "gdraw"
+]
+
+default-members = [
+    "grasp",
+    "gdraw",
 ]

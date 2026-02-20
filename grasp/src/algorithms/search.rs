@@ -195,6 +195,45 @@ N: Number + PartialOrd + Default + Copy + 'a, {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
-    fn dijkstra() {}
+    fn dijkstra() {
+        // Create a simple weighted graph
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((0, 1));
+        graph.add_edge((1, 2));
+        graph.add_edge((0, 2));
+        graph.add_edge((2, 3));
+        
+        // Weight function: (0,1)=1, (1,2)=2, (0,2)=5, (2,3)=1
+        let weight = |_g: &SparseSimpleGraph, (v1, v2): EdgeID| -> Option<i32> {
+            match ((v1.min(v2), v1.max(v2))) {
+                (0, 1) => Some(1),
+                (1, 2) => Some(2),
+                (0, 2) => Some(5),
+                (2, 3) => Some(1),
+                _ => None,
+            }
+        };
+        
+        // Run Dijkstra from vertex 0
+        let mut dijkstra = Dijkstra::from_source(0, &graph, weight).unwrap();
+        let mut results = Vec::new();
+        while let Some(result) = dijkstra.next() {
+            if let Ok((v, dist)) = result {
+                results.push((v, dist));
+            }
+        }
+        
+        // Verify distances
+        assert_eq!(dijkstra.distance_to(0), Some(0));
+        assert_eq!(dijkstra.distance_to(1), Some(1));
+        assert_eq!(dijkstra.distance_to(2), Some(3));
+        assert_eq!(dijkstra.distance_to(3), Some(4));
+        
+        // Verify shortest path
+        assert_eq!(dijkstra.shortest_path_to(3), Some(vec![0, 1, 2, 3]));
+        assert_eq!(dijkstra.shortest_path_to(0), Some(vec![0]));
+    }
 }

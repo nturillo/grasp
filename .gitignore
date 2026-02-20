@@ -32,3 +32,6 @@ target
 
 .venv/
 .vscode/
+
+# Python testing files
+*.py
