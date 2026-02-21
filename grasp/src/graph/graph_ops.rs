@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use crate::graph::Set;
+
 use super::{GraphTrait, VertexID, EdgeID, VertexMap, SimpleGraph};
 
 /// Graph operations that are agnostic to simple graphs and digraphs
@@ -68,6 +70,26 @@ pub trait GraphOps: GraphTrait+Sized{
             }
         }
         complement
+    }
+
+    /// Contracts an edge in a graph, keeping only the first vertex
+    /// if the contraction by edge (a, b) would result in two edges (a, c), only one is included
+    fn contract(&mut self, e: EdgeID) {
+        if !self.has_edge(e) {
+            return;
+        }
+        let deleted_edges: Vec<_> = self.delete_vertex(e.1).collect();
+        for (a, b) in deleted_edges {
+            if a == e.0 || b == e.0 {
+                continue;
+            }
+            if a == e.1 {
+                self.add_edge((e.0, b));
+            }
+            if b == e.1 {
+                self.add_edge((a, e.1));
+            }
+        }
     }
 }
 
@@ -142,7 +164,22 @@ pub mod test{
         test_graph.add_edge((*map_b.get(&2).unwrap(), *map_b.get(&0).unwrap()));
         assert!(graphs_eq(&merged, &test_graph));
     }
-
+    
+    pub fn contract_test<G: GraphOps>() {
+        let mut g = G::default();
+        g.add_edge((0, 1));
+        g.add_edge((1, 2));
+        g.add_edge((1, 3));
+        g.add_edge((3, 1));
+        g.contract((0, 1));
+        
+        let mut test = G::default();
+        test.add_edge((0, 2));
+        test.add_edge((0, 3));
+        test.add_edge((3, 0));
+        assert!(graphs_eq(&g, &test));
+    }
+    
     pub fn simple_graph_complement_test<G: GraphOps+Default>(){
         // Complement
         let mut graph = G::default();

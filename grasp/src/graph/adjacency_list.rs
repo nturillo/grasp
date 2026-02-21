@@ -263,5 +263,7 @@ mod tests {
         graph_ops_test::<SparseDiGraph>();
         digraph_complement_test::<SparseDiGraph>();
         underlying_graph_test::<SparseDiGraph>();
+        contract_test::<SparseSimpleGraph>();
+        contract_test::<SparseDiGraph>();
     }
 }
