@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::serialization::error::{Error, Result};
 use serde::{
-    Deserialize, Deserializer, Serialize, de::{EnumAccess, IntoDeserializer, VariantAccess, value::{MapDeserializer, SeqDeserializer}}, ser
+    Deserialize, Deserializer, Serialize, de::{DeserializeOwned, EnumAccess, IntoDeserializer, VariantAccess, value::{MapDeserializer, SeqDeserializer}}, ser
 };
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -90,7 +90,11 @@ impl<'a> serde::Deserializer<'a> for Value {
             Value::String(s) => visitor.visit_string(s),
             Value::Int(i) => visitor.visit_i64(i),
             Value::Float(f) => visitor.visit_f64(f),
-            Value::Unsigned(u) => visitor.visit_u64(u),
+            Value::Unsigned(u) => {if let Ok(i) = i64::try_from(u) {
+                    visitor.visit_i64(i)
+                } else {
+                    visitor.visit_u64(u)
+                }},
         }
     }
 
@@ -113,6 +117,10 @@ impl<'a> serde::Deserializer<'a> for Value {
                 i.try_into()
                     .map_err(|_| Error::Message("Int too large".to_string()))?,
             ),
+            Value::Unsigned(i) => visitor.visit_i8(
+                i.try_into()
+                    .map_err(|_| Error::Message("Int too large".to_string()))?,
+            ),
             _ => Err(Error::Message("Not int type".to_string())),
         }
     }
@@ -123,6 +131,10 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Int(i) => visitor.visit_i16(
+                i.try_into()
+                    .map_err(|_| Error::Message("Int too large".to_string()))?,
+            ),
+            Value::Unsigned(i) => visitor.visit_i16(
                 i.try_into()
                     .map_err(|_| Error::Message("Int too large".to_string()))?,
             ),
@@ -139,6 +151,10 @@ impl<'a> serde::Deserializer<'a> for Value {
                 i.try_into()
                     .map_err(|_| Error::Message("Int too large".to_string()))?,
             ),
+            Value::Unsigned(i) => visitor.visit_i32(
+                i.try_into()
+                    .map_err(|_| Error::Message("Int too large".to_string()))?,
+            ),
             _ => Err(Error::Message("Not int type".to_string())),
         }
     }
@@ -149,6 +165,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Int(i) => visitor.visit_i64(i),
+            Value::Unsigned(i) => visitor.visit_i64(i as i64),
             _ => Err(Error::Message("Not int type".to_string())),
         }
     }
@@ -399,7 +416,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     }
 }
 
-pub(crate) fn from_value<T: for<'a> Deserialize<'a>>(value: Value) -> Result<T> {
+pub(crate) fn from_value<T: DeserializeOwned>(value: Value) -> Result<T> {
     T::deserialize(value)
 }
 struct Serializer;
