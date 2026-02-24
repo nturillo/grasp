@@ -1,5 +1,7 @@
+use crate::graph::set::Set;
+
 use super::{GraphTrait, VertexID, VertexMap, EdgeID, graph_ops::*, DiGraph, SimpleGraph};
-use std::{borrow::Cow, collections::HashMap};
+use std::collections::HashMap;
 
 /// Graphs that allow setting labels to vertices and edges
 pub trait LabeledGraph: AsRef<Self::GraphType>+AsMut<Self::GraphType>{
@@ -25,16 +27,14 @@ pub trait LabeledGraph: AsRef<Self::GraphType>+AsMut<Self::GraphType>{
     fn to_graph(self) -> Self::GraphType;
 }
 impl<G: LabeledGraph> GraphTrait for G{
-    type VertexSet = <G::GraphType as GraphTrait>::VertexSet;
-
     fn vertex_count(&self) -> usize {self.as_ref().vertex_count()}
     fn edge_count(&self) -> usize {self.as_ref().edge_count()}
     fn vertices(&self) -> impl Iterator<Item=VertexID> {self.as_ref().vertices()}
     fn edges(&self) -> impl Iterator<Item=EdgeID> {self.as_ref().edges()}
     fn contains(&self, v: VertexID) -> bool {self.as_ref().contains(v)}
     fn has_edge(&self, e: EdgeID) -> bool {self.as_ref().has_edge(e)}
-    fn neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {self.as_ref().neighbors(v)}
-    fn vertex_set(&self) -> Self::VertexSet {self.as_ref().vertex_set()}
+    fn neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {self.as_ref().neighbors(v)}
+    fn vertex_set(&self) -> impl Set<Item=VertexID> {self.as_ref().vertex_set()}
     fn create_vertex(&mut self) -> VertexID {self.as_mut().create_vertex()}
     fn add_vertex(&mut self, v: VertexID) {self.as_mut().add_vertex(v)}
     fn add_edge(&mut self, e: EdgeID) {self.as_mut().add_edge(e)}
@@ -125,10 +125,10 @@ impl<G: LabeledGraph> SimpleGraphOps for G where G::GraphType: SimpleGraphOps{
 }
 impl<G: LabeledGraph> SimpleGraph for G where G::GraphType: SimpleGraph{}
 impl<G: LabeledGraph> DiGraph for G where G::GraphType: DiGraph{
-    fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
+    fn in_neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {
         self.as_ref().in_neighbors(v)
     }
-    fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
+    fn out_neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {
         self.as_ref().in_neighbors(v)
     }
 }

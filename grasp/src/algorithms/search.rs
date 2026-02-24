@@ -208,7 +208,7 @@ mod tests {
         
         // Weight function: (0,1)=1, (1,2)=2, (0,2)=5, (2,3)=1
         let weight = |_g: &SparseSimpleGraph, (v1, v2): EdgeID| -> Option<i32> {
-            match ((v1.min(v2), v1.max(v2))) {
+            match (v1.min(v2), v1.max(v2)) {
                 (0, 1) => Some(1),
                 (1, 2) => Some(2),
                 (0, 2) => Some(5),
