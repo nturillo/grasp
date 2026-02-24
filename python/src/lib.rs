@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use grasp::graph::prelude::{SparseSimpleGraph, GraphTrait, VertexID, GraphError};
+use grasp::graph::prelude::{SparseSimpleGraph, GraphTrait, VertexID, GraphError, Set};
 use grasp::algorithms::algo_traits::AlgoTrait;
 
 #[pyclass]
@@ -61,7 +61,8 @@ fn graph_error_to_py(err: GraphError) -> PyErr {
 }
 
 #[pymodule]
-fn _grasp(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pyo3(name="grasp")]
+fn grasp_lib(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySparseGraph>()?;
     Ok(())
 }
