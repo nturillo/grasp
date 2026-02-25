@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 pretty_assertions = "1.4.1"
 serde = { version = "1.0", features = ["derive"], optional = true}
+quick-xml = { version = "0.39.2", features = ["serialize"], optional = true}
 
 [features]
 serde = ["dep:serde"]
+xml = ["dep:quick-xml"]

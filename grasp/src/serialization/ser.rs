@@ -1,6 +1,7 @@
 // Boilerplate provided by serde
 
 use std::collections::BTreeMap;
+use std::ops::Add;
 
 use crate::serialization::error::{Error, Result};
 use serde::{
@@ -8,7 +9,7 @@ use serde::{
 };
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
-pub(crate) enum Value {
+pub enum Value {
     Null,
     Object(BTreeMap<String, Value>),
     Array(Vec<Value>),
@@ -17,6 +18,15 @@ pub(crate) enum Value {
     Int(i64),
     Float(f64),
     Unsigned(u64),
+}
+
+impl Value {
+    pub(crate) fn is_primative(&self) -> bool {
+        match self {
+            Value::Array(_) | Value::Object(_) => false,
+            _ => true,
+        }
+    }
 }
 
 impl<'a> IntoDeserializer<'a, Error> for Value {
@@ -787,4 +797,75 @@ impl<'a> ser::SerializeStructVariant for NamedStruct {
 
 pub(crate) fn to_value<T: Serialize>(data: T) -> Result<Value> {
     data.serialize(Serializer)
+}
+
+#[cfg(feature = "serde")]
+pub fn serialize<V: Serialize>(data: &V) -> Value {
+    to_value(data).unwrap_or(Value::Null)
+}
+
+#[cfg(feature = "serde")]
+pub fn wrap_value(val: Value) -> BTreeMap<String, Value> {
+    match val {
+        Value::Object(map) => map,
+        Value::Array(vec) => {
+            let mut map = BTreeMap::new();
+            map.insert("data".to_string(), Value::Array(vec));
+            return map;
+        }
+        Value::Null => BTreeMap::new(),
+        Value::Bool(_) => {
+            let mut map = BTreeMap::new();
+            map.insert("data".to_string(), val);
+            return map;
+        }
+        Value::Int(_) | Value::Float(_) | Value::Unsigned(_) => {
+            let mut map = BTreeMap::new();
+            map.insert("data".to_string(), val);
+            return map;
+        }
+        Value::String(_) => {
+            let mut map = BTreeMap::new();
+            map.insert("label".to_string(), val);
+            return map;
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+pub fn get_flat_map(key: String, val: Value, map: &mut BTreeMap<String, (String, String)>) {
+    match val {
+        Value::Object(obj) => {
+            let prefix = if key.is_empty() {String::new()} else {key.add(".")};
+
+            for (name, data) in obj {
+                get_flat_map(prefix.clone().add(name.as_str()), data, map);
+            }
+        }
+        Value::Array(arr) => {
+            let prefix = if key.is_empty() {String::new()} else {key.add(".")};
+
+            for (index, data) in arr.iter().enumerate() {
+                get_flat_map(prefix.clone().add(index.to_string().as_str()), data.clone(), map);
+            }
+        }
+        Value::Unsigned(n) => {
+            map.insert(key, (n.to_string(), "long".to_string()));
+        }
+        Value::Int(n) => {
+            map.insert(key, (n.to_string(), "long".to_string()));
+        }
+        Value::Float(n) => {
+            map.insert(key, (n.to_string(), "double".to_string()));
+        }
+        Value::Bool(b) => {
+            map.insert(key, (b.to_string(), "boolean".to_string()));
+        }
+        Value::String(s) => {
+            map.insert(key, (s, "string".to_string()));
+        }
+        Value::Null => {
+            map.insert(key, (String::new(), String::new()));
+        }
+    }
 }
