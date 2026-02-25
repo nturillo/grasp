@@ -65,6 +65,7 @@ pub fn edit_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
 
             if !app.graph.layout_config.run_per_update && ui.button("Run Continously").clicked() {
                 app.graph.layout_config.run_per_update = true;
+                app.graph.layout_config.partial_data = layout::PartialLayout::None;
             } else if app.graph.layout_config.run_per_update && ui.button("Stop Running").clicked()
             {
                 app.graph.layout_config.run_per_update = false;
