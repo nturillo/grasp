@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::ops::Add;
 
-use crate::serialization::error::{Error, Result};
+use crate::serialization::error::{SerializationError, Result};
 use serde::{
     Deserialize, Deserializer, Serialize, de::{DeserializeOwned, EnumAccess, IntoDeserializer, VariantAccess, value::{MapDeserializer, SeqDeserializer}}, ser
 };
@@ -29,7 +29,7 @@ impl Value {
     }
 }
 
-impl<'a> IntoDeserializer<'a, Error> for Value {
+impl<'a> IntoDeserializer<'a, SerializationError> for Value {
     type Deserializer = Value;
 
     fn into_deserializer(self) -> Self::Deserializer {
@@ -38,7 +38,7 @@ impl<'a> IntoDeserializer<'a, Error> for Value {
 }
 
 impl<'a> VariantAccess<'a> for Value {
-    type Error = Error;
+    type Error = SerializationError;
 
     fn unit_variant(self) -> Result<()> {
         Ok(())
@@ -68,7 +68,7 @@ impl<'a> VariantAccess<'a> for Value {
 }
 
 impl<'a> EnumAccess<'a> for Value {
-    type Error = Error;
+    type Error = SerializationError;
     type Variant = Value;
 
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
@@ -76,17 +76,17 @@ impl<'a> EnumAccess<'a> for Value {
         V: serde::de::DeserializeSeed<'a> {
         match self {
             Value::Object(map) => {
-                let (key, value) = map.into_iter().next().ok_or(Error::Message("Invalid enum".to_string()))?;
+                let (key, value) = map.into_iter().next().ok_or(SerializationError::Message("Invalid enum".to_string()))?;
                 Ok((seed.deserialize(Value::String(key).into_deserializer())?, value))
             },
             Value::String(s) => Ok((seed.deserialize(Value::String(s).into_deserializer())?, Value::Null)),
-            _ => Err(Error::Message("Invalid enum".to_string()))
+            _ => Err(SerializationError::Message("Invalid enum".to_string()))
         }
     }
 }
 
 impl<'a> serde::Deserializer<'a> for Value {
-    type Error = Error;
+    type Error = SerializationError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where
@@ -114,7 +114,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Bool(b) => visitor.visit_bool(b),
-            _ => Err(Error::Message("Not bool type".to_string())),
+            _ => Err(SerializationError::Message("Not bool type".to_string())),
         }
     }
 
@@ -125,13 +125,13 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Int(i) => visitor.visit_i8(
                 i.try_into()
-                    .map_err(|_| Error::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
             ),
             Value::Unsigned(i) => visitor.visit_i8(
                 i.try_into()
-                    .map_err(|_| Error::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
             ),
-            _ => Err(Error::Message("Not int type".to_string())),
+            _ => Err(SerializationError::Message("Not int type".to_string())),
         }
     }
 
@@ -142,13 +142,13 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Int(i) => visitor.visit_i16(
                 i.try_into()
-                    .map_err(|_| Error::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
             ),
             Value::Unsigned(i) => visitor.visit_i16(
                 i.try_into()
-                    .map_err(|_| Error::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
             ),
-            _ => Err(Error::Message("Not int type".to_string())),
+            _ => Err(SerializationError::Message("Not int type".to_string())),
         }
     }
 
@@ -159,13 +159,13 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Int(i) => visitor.visit_i32(
                 i.try_into()
-                    .map_err(|_| Error::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
             ),
             Value::Unsigned(i) => visitor.visit_i32(
                 i.try_into()
-                    .map_err(|_| Error::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
             ),
-            _ => Err(Error::Message("Not int type".to_string())),
+            _ => Err(SerializationError::Message("Not int type".to_string())),
         }
     }
 
@@ -176,7 +176,7 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Int(i) => visitor.visit_i64(i),
             Value::Unsigned(i) => visitor.visit_i64(i as i64),
-            _ => Err(Error::Message("Not int type".to_string())),
+            _ => Err(SerializationError::Message("Not int type".to_string())),
         }
     }
 
@@ -187,9 +187,9 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Unsigned(u) => visitor.visit_u8(
                 u.try_into()
-                    .map_err(|_| Error::Message("Unsigned int too large".to_string()))?,
+                    .map_err(|_| SerializationError::Message("Unsigned int too large".to_string()))?,
             ),
-            _ => Err(Error::Message("Not unsigned int type".to_string())),
+            _ => Err(SerializationError::Message("Not unsigned int type".to_string())),
         }
     }
 
@@ -200,9 +200,9 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Unsigned(u) => visitor.visit_u16(
                 u.try_into()
-                    .map_err(|_| Error::Message("Unsigned int too large".to_string()))?,
+                    .map_err(|_| SerializationError::Message("Unsigned int too large".to_string()))?,
             ),
-            _ => Err(Error::Message("Not unsigned int type".to_string())),
+            _ => Err(SerializationError::Message("Not unsigned int type".to_string())),
         }
     }
 
@@ -213,9 +213,9 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Unsigned(u) => visitor.visit_u32(
                 u.try_into()
-                    .map_err(|_| Error::Message("Unsigned int too large".to_string()))?,
+                    .map_err(|_| SerializationError::Message("Unsigned int too large".to_string()))?,
             ),
-            _ => Err(Error::Message("Not unsigned int type".to_string())),
+            _ => Err(SerializationError::Message("Not unsigned int type".to_string())),
         }
     }
 
@@ -225,7 +225,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Unsigned(u) => visitor.visit_u64(u),
-            _ => Err(Error::Message("Not unsigned int type".to_string())),
+            _ => Err(SerializationError::Message("Not unsigned int type".to_string())),
         }
     }
 
@@ -235,7 +235,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Float(f) => visitor.visit_f32(f as f32),
-            _ => Err(Error::Message("Not float type".to_string())),
+            _ => Err(SerializationError::Message("Not float type".to_string())),
         }
     }
 
@@ -245,7 +245,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Float(f) => visitor.visit_f64(f),
-            _ => Err(Error::Message("Not float type".to_string())),
+            _ => Err(SerializationError::Message("Not float type".to_string())),
         }
     }
 
@@ -255,9 +255,9 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::String(s) => visitor.visit_char(s.parse::<char>().map_err(|_| {
-                Error::Message("Cannot convert multi-char string into char".to_string())
+                SerializationError::Message("Cannot convert multi-char string into char".to_string())
             })?),
-            _ => Err(Error::Message("Not char type".to_string())),
+            _ => Err(SerializationError::Message("Not char type".to_string())),
         }
     }
 
@@ -267,7 +267,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::String(s) => visitor.visit_str(s.as_str()),
-            _ => Err(Error::Message("Not str type".to_string())),
+            _ => Err(SerializationError::Message("Not str type".to_string())),
         }
     }
 
@@ -277,7 +277,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::String(s) => visitor.visit_string(s),
-            _ => Err(Error::Message("Not string type".to_string())),
+            _ => Err(SerializationError::Message("Not string type".to_string())),
         }
     }
 
@@ -292,7 +292,7 @@ impl<'a> serde::Deserializer<'a> for Value {
                     .collect::<Result<Vec<u8>>>()?
                     .as_slice(),
             ),
-            _ => Err(Error::Message("Not byte list type".to_string())),
+            _ => Err(SerializationError::Message("Not byte list type".to_string())),
         }
     }
 
@@ -307,7 +307,7 @@ impl<'a> serde::Deserializer<'a> for Value {
                     .collect::<Result<Vec<u8>>>()?
                     .as_slice(),
             ),
-            _ => Err(Error::Message("Not byte list type".to_string())),
+            _ => Err(SerializationError::Message("Not byte list type".to_string())),
         }
     }
 
@@ -327,7 +327,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Null => visitor.visit_unit(),
-            _ => Err(Error::Message("Not unit/null type".to_string())),
+            _ => Err(SerializationError::Message("Not unit/null type".to_string())),
         }
     }
 
@@ -351,7 +351,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Array(a) => visitor.visit_seq(SeqDeserializer::new(a.into_iter())),
-            _ => Err(Error::Message("Not list type".to_string())),
+            _ => Err(SerializationError::Message("Not list type".to_string())),
         }
     }
 
@@ -380,7 +380,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Object(map) => visitor.visit_map(MapDeserializer::new(map.into_iter())),
-            _ => Err(Error::Message("Not map type".to_string())),
+            _ => Err(SerializationError::Message("Not map type".to_string())),
         }
     }
 
@@ -433,7 +433,7 @@ struct Serializer;
 
 impl<'a> ser::Serializer for Serializer {
     type Ok = Value;
-    type Error = Error;
+    type Error = SerializationError;
 
     fn serialize_bool(self, v: bool) -> Result<Value> {
         Ok(Value::Bool(v))
@@ -628,7 +628,7 @@ pub(crate) struct Seq {
 
 impl<'a> ser::SerializeSeq for Seq {
     type Ok = Value;
-    type Error = Error;
+    type Error = SerializationError;
 
     fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where
@@ -646,7 +646,7 @@ impl<'a> ser::SerializeSeq for Seq {
 
 impl<'a> ser::SerializeTuple for Seq {
     type Ok = Value;
-    type Error = Error;
+    type Error = SerializationError;
 
     fn serialize_element<T>(&mut self, value: &T) -> Result<()>
     where
@@ -664,7 +664,7 @@ impl<'a> ser::SerializeTuple for Seq {
 
 impl<'a> ser::SerializeTupleStruct for Seq {
     type Ok = Value;
-    type Error = Error;
+    type Error = SerializationError;
 
     fn end(self) -> Result<Value> {
         Ok(Value::Array(self.sequence))
@@ -687,7 +687,7 @@ pub(crate) struct NamedSeq {
 
 impl<'a> ser::SerializeTupleVariant for NamedSeq {
     type Ok = Value;
-    type Error = Error;
+    type Error = SerializationError;
 
     fn serialize_field<T>(&mut self, value: &T) -> Result<()>
     where
@@ -712,7 +712,7 @@ pub(crate) struct Map {
 
 impl<'a> ser::SerializeMap for Map {
     type Ok = Value;
-    type Error = Error;
+    type Error = SerializationError;
 
     fn serialize_key<T>(&mut self, key: &T) -> Result<()>
     where
@@ -722,7 +722,7 @@ impl<'a> ser::SerializeMap for Map {
             self.key = Some(s);
             Ok(())
         } else {
-            Err(Error::Message("Expected string type for keys".to_string()))
+            Err(SerializationError::Message("Expected string type for keys".to_string()))
         }
     }
 
@@ -752,7 +752,7 @@ pub(crate) struct StructObj {
 
 impl<'a> ser::SerializeStruct for StructObj {
     type Ok = Value;
-    type Error = Error;
+    type Error = SerializationError;
 
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
     where
@@ -776,7 +776,7 @@ pub(crate) struct NamedStruct {
 
 impl<'a> ser::SerializeStructVariant for NamedStruct {
     type Ok = Value;
-    type Error = Error;
+    type Error = SerializationError;
 
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<()>
     where

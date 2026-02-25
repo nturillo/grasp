@@ -5,31 +5,31 @@ use std::fmt::{self, Display};
 
 use serde::{de, ser};
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, SerializationError>;
 
 #[derive(Debug)]
-pub enum Error {
+pub enum SerializationError {
     Message(String),
 }
 
-impl ser::Error for Error {
+impl ser::Error for SerializationError {
     fn custom<T: Display>(msg: T) -> Self {
-        Error::Message(msg.to_string())
+        SerializationError::Message(msg.to_string())
     }
 }
 
-impl de::Error for Error {
+impl de::Error for SerializationError {
     fn custom<T: Display>(msg: T) -> Self {
-        Error::Message(msg.to_string())
+        SerializationError::Message(msg.to_string())
     }
 }
 
-impl Display for Error {
+impl Display for SerializationError {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::Message(msg) => formatter.write_str(msg),
+            SerializationError::Message(msg) => formatter.write_str(msg),
         }
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for SerializationError {}

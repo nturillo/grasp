@@ -5,7 +5,7 @@ use {
     serde::{Serialize},
     crate::serialization::ser::*,
     std::collections::BTreeMap,
-    crate::serialization::error::Error,
+    crate::serialization::error::SerializationError,
     std::slice::from_ref,
 };
 
@@ -299,7 +299,7 @@ where
     let mut graph = G::default();
     let err = Err("Invalid GML format.".to_string());
 
-    fn parse_map(parser: &mut Parse) -> Result<Value, Error> {
+    fn parse_map(parser: &mut Parse) -> Result<Value, SerializationError> {
         let mut map = BTreeMap::<String, Value>::new();
 
         while let Some(word) = parser.next_word() {
@@ -327,10 +327,10 @@ where
             }
         }
 
-        Err(Error::Message("Invalid GML format".to_string()))
+        Err(SerializationError::Message("Invalid GML format".to_string()))
     }
 
-    fn parse_val(parser: &mut Parse) -> Result<Value, Error> {
+    fn parse_val(parser: &mut Parse) -> Result<Value, SerializationError> {
         parser.skip_whitespace();
         if let Some(ch) = parser.peek() {
             if ch == '[' {
@@ -341,7 +341,7 @@ where
             if ch == '\"' {
                 parser.next();
                 parser.mark();
-                while parser.peek().ok_or(Error::Message("String not closed".to_string()))? != '\"' {
+                while parser.peek().ok_or(SerializationError::Message("String not closed".to_string()))? != '\"' {
                     parser.next();
                 }
                 let ret = parser.read_from_mark().to_string();
@@ -349,7 +349,7 @@ where
                 return Ok(Value::String(ret));
             }
 
-            let word = parser.next_word().ok_or(Error::Message("Expected value, found none".to_string()))?;
+            let word = parser.next_word().ok_or(SerializationError::Message("Expected value, found none".to_string()))?;
 
             if word == "true" { return Ok(Value::Bool(true)); }
             if word == "false" { return Ok(Value::Bool(false)); }
@@ -358,10 +358,10 @@ where
             if let Ok(num) = word.parse::<i64>() { return Ok(Value::Int(num)); }
             if let Ok(num) = word.parse::<f64>() { return Ok(Value::Float(num)); }
 
-            return Err(Error::Message("Unknown value type: ".to_string().add(word)));
+            return Err(SerializationError::Message("Unknown value type: ".to_string().add(word)));
         }
 
-        Err(Error::Message("Missing value after key".to_string()))
+        Err(SerializationError::Message("Missing value after key".to_string()))
     }
 
     let parser = &mut Parse::new(string.as_str());
