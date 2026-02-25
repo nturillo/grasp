@@ -434,9 +434,13 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "serde")]
     use serde::{Deserialize, Serialize};
+    #[cfg(feature = "serde")]
+    use crate::serialization::gml::{labeled_from_gml, labeled_to_gml};
 
-    use crate::{graph::{GraphTrait, prelude::{HashMapLabeledGraph, SparseSimpleGraph}}, serialization::gml::{from_gml, labeled_from_gml, labeled_to_gml, to_gml}};
+    use crate::serialization::gml::{from_gml, to_gml};
+    use crate::{graph::{GraphTrait, prelude::{HashMapLabeledGraph, SparseSimpleGraph}}};
 
     #[test]
     fn butterfly_gml() {
@@ -543,6 +547,7 @@ mod tests {
         pretty_assertions::assert_eq!(butterfly_gml, to_gml(from.expect("Unexpected error")));
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn to_labeled_gml() {
         #[derive(Clone, Serialize)]
@@ -638,6 +643,7 @@ mod tests {
         pretty_assertions::assert_eq!(s, labeled_to_gml(&base));
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn from_labeled_gml() {
         #[derive(Clone, Serialize, Deserialize)]

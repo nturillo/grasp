@@ -379,14 +379,17 @@ where
     Ok(graph)
 }
 
+#[cfg(feature = "xml")]
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "serde")]
     use serde::{Deserialize, Serialize};
     use crate::graph::prelude::SparseDiGraph;
     use crate::serialization::graphml::*;
     use crate::{graph::prelude::HashMapLabeledGraph};
     use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
 
+    #[cfg(feature = "xml")]
     #[test]
     fn simple_graphml() {
         let mut butterfly = SparseSimpleGraph::default();
@@ -415,6 +418,7 @@ mod tests {
         pretty_assertions::assert_eq!(s, to_graphml_simple(butterfly));
     }
 
+    #[cfg(feature = "xml")]
     #[test]
     fn digraph_graphml() {
         let mut butterfly = SparseDiGraph::default();
@@ -443,6 +447,7 @@ mod tests {
         pretty_assertions::assert_eq!(s, to_graphml_digraph(butterfly));
     }
 
+    #[cfg(feature = "xml")]
     #[test]
     fn test_from_graphml() {
         let s = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<graphml xmlns=\"http://graphml.graphdrawing.org/xmlns\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd\">\n  \
@@ -466,6 +471,7 @@ mod tests {
         pretty_assertions::assert_eq!(s, to_graphml_simple(from.expect("preverified")));
     }
 
+    #[cfg(all(feature = "xml", feature = "serde"))]
     #[test]
     fn to_labeled_graphml() {
         #[derive(Clone, Serialize)]
@@ -516,6 +522,7 @@ mod tests {
         pretty_assertions::assert_eq!(s, labeled_to_graphml_simple(base));
     }
 
+    #[cfg(all(feature = "xml", feature = "serde"))]
     #[test]
     fn to_nested_graphml() {
         #[derive(Clone, Serialize)]
@@ -560,6 +567,7 @@ mod tests {
         pretty_assertions::assert_eq!(s, labeled_to_graphml_simple(base));
     }
 
+    #[cfg(all(feature = "xml", feature = "serde"))]
     #[test]
     fn from_nested_graphml() {
         #[derive(Clone, Serialize, Deserialize)]
