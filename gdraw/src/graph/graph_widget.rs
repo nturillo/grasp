@@ -1,7 +1,6 @@
 use eframe::egui::{Color32, Rect, Response, Sense, Stroke, Ui, Vec2, Widget};
 
 use crate::{
-    app::GraspAppHandler,
     frame::style::Style,
     graph::storage::{Edge, Graph, Vertex},
 };

@@ -7,14 +7,14 @@ use crate::{
     },
     graph::{
         layout::{self, LayoutConfig},
-        storage::{self, Graph},
+        storage::Graph,
     },
 };
 use eframe::egui::{
-    self, CentralPanel, Color32, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
-    TopBottomPanel, Ui, Vec2, Window,
+    self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Sense,
+    TopBottomPanel, Vec2, Window,
 };
-use grasp::graph::graph_ops::GraphOps;
+use grasp::graph::{GraphTrait, Set, UnderlyingGraph, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
 
 pub struct GraspApp {
     pub style: Style,
@@ -58,7 +58,7 @@ impl GraspApp {
     }
 
     /// Loads a graph from anything that implements [`grasp::graph::graph_traits::GraphTrait`]
-    pub fn load<T: GraphOps>(&mut self, graph: &T) {
+    pub fn load<T: GraphTrait + Default>(&mut self, graph: &T) {
         self.graph = Graph::from(graph);
         layout::apply(&mut self.graph);
     }
@@ -76,23 +76,21 @@ impl GraspApp {
     }
 
     /// Highlight a set of vertices.
-    pub fn highlight_set<S: SetTrait>(&mut self, set: &S, color: Color32) {
-        for vertex in &mut self.graph.vertex_list {
-            if set.contains(*vertex.0) {
-                vertex.1.assign_color(color);
-            }
-        }
+    pub fn highlight_set<S: Set<VertexID>>(&mut self, set: &S, color: Color32) {
+        set.iter().for_each(|&vertex| {
+            self.graph.vertex_labels.get_mut(&vertex)
+            .map(|v| v.assign_color(color));
+        });
     }
 
-    /// Returns a copy of the [`grasp::graph::adjacency_list::SparseGraph`] underlying the visualizer.
-    pub fn as_sparse_graph(&mut self) -> SparseGraph {
-        self.graph.save_base_graph();
-        storage::clone_graph(
-            self.graph
-                .base_graph
-                .as_ref()
-                .expect("Error: Recently verified"),
-        )
+    /// Returns a copy of the [`grasp::graph::adjacency_list::SparseDiGraph`] underlying the visualizer.
+    pub fn as_sparse_digraph(&mut self) -> SparseDiGraph {
+        self.graph.clone().base
+    }
+
+    /// Returns a copy of the [`grasp::graph::adjacency_list::SparseSimpleGraph`] underlying the visualizer.
+    pub fn as_sparse_simplegraph(&mut self) -> SparseSimpleGraph {
+        self.graph.clone().base.underlying_graph()
     }
 }
 
@@ -105,7 +103,7 @@ pub(crate) struct GraspAppHandler<'a> {
 }
 
 impl<'a> GraspAppHandler<'a> {
-    fn new(cc: &eframe::CreationContext<'_>, graph: &'a mut Graph, style: Style) -> Self {
+    fn new(_cc: &eframe::CreationContext<'_>, graph: &'a mut Graph, style: Style) -> Self {
         let mut sandbox = Sandbox::default();
         sandbox.scale(3.0);
 
@@ -120,7 +118,7 @@ impl<'a> GraspAppHandler<'a> {
 }
 
 impl<'a> eframe::App for GraspAppHandler<'a> {
-    fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         TopBottomPanel::top(Id::new("menu_header")).show(ctx, |ui| {
             MenuBar::new().ui(ui, |ui| {
                 header::file_menu(self, ui);
