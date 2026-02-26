@@ -157,6 +157,18 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
                     .fixed_decimals(4),
                 )
             });
+
+            ui.horizontal(|ui| {
+                ui.label("Minimum Temperature on Drag");
+                ui.add(
+                    widgets::Slider::new(
+                        &mut app.graph.layout_config.min_temperature_on_drag,
+                        RangeInclusive::new(0.0001, 0.001),
+                    )
+                    .clamping(widgets::SliderClamping::Always)
+                    .fixed_decimals(5),
+                )
+            });
         });
     });
 

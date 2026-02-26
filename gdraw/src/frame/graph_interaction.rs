@@ -24,6 +24,13 @@ fn vertex_primary_click(
 }
 
 fn vertex_dragged(app: &mut GraspAppHandler, vertex_id: usize, response: &Response) {
+    if app.graph.layout_config.run_per_update {
+        match &mut app.graph.layout_config.partial_data {
+            crate::graph::layout::PartialLayout::None => (),
+            crate::graph::layout::PartialLayout::FruchtermanReingold(temp) => *temp = temp.max(app.graph.layout_config.min_temperature_on_drag),
+        }
+    }
+
     app.graph
         .vertex_labels
         .get_mut(&vertex_id)
@@ -85,7 +92,7 @@ fn vertex_context(app: &mut GraspAppHandler, ui: &mut Ui, vertex_id: &usize) {
 pub fn handle_vertex_response(
     app: &mut GraspAppHandler,
     ui: &mut Ui,
-    vertex_id: usize,
+    vertex_id: VertexID,
     response: Response,
 ) {
     if let Some(_) = app.graph.vertex_labels.get(&vertex_id) {
@@ -94,8 +101,17 @@ pub fn handle_vertex_response(
                 vertex_primary_click(app, ui, vertex_id);
             }
 
-            if response.dragged() && !app.graph.layout_config.run_per_update {
+            if response.drag_started() {
+                app.graph.layout_config.common_partial_data.vertex_locks.push(vertex_id);
+            }
+
+            if response.dragged() {
+                //app.graph.reset_partial_data();
                 vertex_dragged(app, vertex_id, &response);
+            }
+
+            if response.drag_stopped() {
+                app.graph.layout_config.common_partial_data.vertex_locks.retain(|&v| v != vertex_id);
             }
         }
 

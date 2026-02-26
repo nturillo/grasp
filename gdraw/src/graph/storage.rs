@@ -121,7 +121,7 @@ impl Graph {
         }
     }
 
-    fn reset_partial_data(&mut self) {
+    pub fn reset_partial_data(&mut self) {
         self.layout_config.partial_data = PartialLayout::None;
     }
 }

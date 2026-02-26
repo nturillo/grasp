@@ -2,7 +2,7 @@ use core::f32;
 use std::{collections::HashMap, fmt};
 
 use eframe::egui::Vec2;
-use grasp::graph::GraphTrait;
+use grasp::graph::{GraphTrait, VertexID};
 use rand::prelude::*;
 
 use crate::graph::storage::Graph;
@@ -11,6 +11,11 @@ use crate::graph::storage::Graph;
 pub(crate) enum PartialLayout {
     None,
     FruchtermanReingold(f32),
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct CommonPartialData {
+    pub vertex_locks: Vec<VertexID>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -26,7 +31,7 @@ impl fmt::Display for LayoutType {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct LayoutConfig {
     pub layout_type: LayoutType,
     pub area: (f32, f32),
@@ -34,9 +39,11 @@ pub struct LayoutConfig {
     pub iterations_per_update: usize,
     pub temperature_decay_factor: f32,
     pub temperature_decay_factor_per_update: f32,
+    pub min_temperature_on_drag: f32,
     pub run_per_update: bool,
 
     pub(crate) partial_data: PartialLayout,
+    pub(crate) common_partial_data: CommonPartialData,
 }
 
 impl Default for LayoutConfig {
@@ -48,8 +55,10 @@ impl Default for LayoutConfig {
             iterations_per_update: 100,
             temperature_decay_factor: 0.95,
             temperature_decay_factor_per_update: 0.9999,
+            min_temperature_on_drag: 0.0003,
             run_per_update: false,
             partial_data: PartialLayout::None,
+            common_partial_data: CommonPartialData::default(),
         }
     }
 }
@@ -68,7 +77,7 @@ pub(crate) fn reapply(graph: &mut Graph) {
 
 // Algorithm from https://reingold.co/force-directed.pdf
 fn fruchterman_reingold(graph: &mut Graph) -> PartialLayout {
-    let config = graph.layout_config;
+    let config = &graph.layout_config;
     let (decay_factor, iterations) = if config.run_per_update {
         (
             config.temperature_decay_factor_per_update,
@@ -126,6 +135,8 @@ fn fruchterman_reingold(graph: &mut Graph) -> PartialLayout {
         }
 
         for (id, vertex) in &mut graph.vertex_labels {
+            if graph.layout_config.common_partial_data.vertex_locks.contains(id) {continue;}
+
             let disp = vertex_displacement.get(id).unwrap_or(&Vec2::ZERO);
 
             vertex.center += disp.normalized() * f32::min(disp.length(), temp);
