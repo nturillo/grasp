@@ -1,7 +1,11 @@
-[package]
-name = "grasp"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = [
+    "grasp",
+    "python",
+    "gdraw"
+]
 
-[dependencies]
-pretty_assertions = "1.4.1"
+default-members = [
+    "grasp",
+    "gdraw",
+]

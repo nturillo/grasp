@@ -1,10 +1,10 @@
 use eframe::egui::Color32;
 use gdraw::app::GraspApp;
-use grasp::graph::{adjacency_list::SparseGraph, graph_traits::GraphTrait};
+use grasp::graph::{adjacency_list::SparseSimpleGraph, graph_ops::GraphOps, GraphTrait};
 
 #[allow(unused)]
 fn main() {
-    let mut butterfly = SparseGraph::new();
+    let mut butterfly = SparseSimpleGraph::default();
     butterfly.add_edge((1, 2));
     butterfly.add_edge((2, 3));
     butterfly.add_edge((1, 3));
