@@ -204,6 +204,20 @@ impl UnderlyingGraph for SparseDiGraph{
 }
 impl GraphOps for SparseDiGraph{}
 
+/// Placed here instead of in set.rs since it is not standard behaviour
+impl<'a, K> Set for &'a HashMap<VertexID, K>{
+    type Item = VertexID;
+    fn contains(&self, v: &Self::Item) -> bool {
+        self.contains_key(v)
+    }
+    fn count(&self) -> usize {
+        self.len()
+    }
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> {
+        self.keys()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

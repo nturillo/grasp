@@ -1,31 +1,5 @@
-use std::{collections::{HashMap, HashSet}, ops::{Deref, DerefMut}, usize};
+use std::{collections::HashSet, ops::{Deref, DerefMut}, usize};
 use crate::graph::VertexID;
-
-pub struct VertexSet<S: Set<Item = VertexID>>{
-    set: S
-}
-impl<S: Set<Item = VertexID>> Deref for VertexSet<S>{
-    type Target = S;
-    fn deref(&self) -> &Self::Target {
-        &self.set
-    }
-}
-impl<S: Set<Item = VertexID>> DerefMut for VertexSet<S>{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.set
-    }
-}
-impl<S: Set<Item = VertexID>> From<S> for VertexSet<S>{
-    fn from(value: S) -> Self {
-        Self{set: value}
-    }
-}
-impl<S1, S2> PartialEq<VertexSet<S2>> for VertexSet<S1> where S1: Set<Item = VertexID>, S2: Set<Item = VertexID>{
-    fn eq(&self, other: &VertexSet<S2>) -> bool {
-        self.iter().all(|v| other.contains(v)) &&
-        other.iter().all(|v| self.contains(v))
-    }
-}
 
 pub trait Set {
     type Item;
@@ -35,25 +9,29 @@ pub trait Set {
 
     fn count(&self) -> usize {self.iter().count()}
 
-    fn union<S>(self, other: S) -> SetUnion<Self, S::IntoSetType>
-    where 
-        S: IntoSet<Item = Self::Item>, 
-        Self: Sized
-    {
+    fn self_union(self, other: Self) -> impl Set<Item = Self::Item> 
+    where Self: Sized{
+        SetUnion::new(self, other)
+    }
+    fn self_intersection(self, other: Self) -> impl Set<Item = Self::Item> 
+    where Self: Sized{
+        SetIntersection::new(self, other)
+    }
+    fn self_difference(self, other: Self) -> impl Set<Item = Self::Item> 
+    where Self: Sized{
+        SetDifference::new(self, other)
+    }
+
+    fn union(self, other: impl IntoSet<Item = Self::Item>) -> impl Set<Item = Self::Item> 
+    where Self: Sized {
         SetUnion::new(self, other.into_set())
     }
-    fn intersection<S>(self, other: S) -> SetIntersection<Self, S::IntoSetType>
-    where 
-        S: IntoSet<Item = Self::Item>, 
-        Self: Sized
-    {
+    fn intersection(self, other: impl IntoSet<Item = Self::Item>) -> impl Set<Item = Self::Item> 
+    where Self: Sized {
         SetIntersection::new(self, other.into_set())
     }
-    fn difference<S>(self, other: S) -> SetDifference<Self, S::IntoSetType>
-    where 
-        S: IntoSet<Item = Self::Item>, 
-        Self: Sized
-    {
+    fn difference(self, other: impl IntoSet<Item = Self::Item>) -> impl Set<Item = Self::Item> 
+    where Self: Sized {
         SetDifference::new(self, other.into_set())
     }
 }
@@ -123,6 +101,40 @@ impl<A, B> Set for SetDifference<A, B> where A: Set, B: Set<Item = A::Item>{
     }
 }
 
+/*
+    Helper Struct for Equality
+*/
+
+pub struct VertexSet<S: Set<Item = VertexID>>{
+    set: S
+}
+impl<S: Set<Item = VertexID>> Deref for VertexSet<S>{
+    type Target = S;
+    fn deref(&self) -> &Self::Target {
+        &self.set
+    }
+}
+impl<S: Set<Item = VertexID>> DerefMut for VertexSet<S>{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.set
+    }
+}
+impl<S: Set<Item = VertexID>> From<S> for VertexSet<S>{
+    fn from(value: S) -> Self {
+        Self{set: value}
+    }
+}
+impl<S1, S2> PartialEq<VertexSet<S2>> for VertexSet<S1> where S1: Set<Item = VertexID>, S2: Set<Item = VertexID>{
+    fn eq(&self, other: &VertexSet<S2>) -> bool {
+        self.iter().all(|v| other.contains(v)) &&
+        other.iter().all(|v| self.contains(v))
+    }
+}
+
+/*
+    Default Implementations
+*/
+
 impl Set for HashSet<VertexID>{
     type Item = VertexID;
     fn contains(&self, v: &Self::Item) -> bool {
@@ -157,18 +169,6 @@ impl<'a> Set for HashSet<&'a VertexID>{
     }
     fn iter(&self) -> impl Iterator<Item = &Self::Item> {
         HashSet::iter(self).map(|v| *v)
-    }
-}
-impl<'a, K> Set for &'a HashMap<VertexID, K>{
-    type Item = VertexID;
-    fn contains(&self, v: &Self::Item) -> bool {
-        self.contains_key(v)
-    }
-    fn count(&self) -> usize {
-        self.len()
-    }
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> {
-        self.keys()
     }
 }
 impl<V: PartialEq, const U: usize> Set for [V; U] where{
