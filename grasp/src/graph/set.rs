@@ -35,6 +35,15 @@ pub trait Set {
         SetDifference::new(self, other.into_set())
     }
 }
+impl<'a, S: Set> Set for &'a S{
+    type Item = S::Item;
+    fn contains(&self, v: &Self::Item) -> bool {
+        S::contains(self, v)
+    }
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> {
+        S::iter(self)
+    }
+}
 
 pub trait IntoSet{
     type Item;
@@ -136,18 +145,6 @@ impl<S1, S2> PartialEq<VertexSet<S2>> for VertexSet<S1> where S1: Set<Item = Ver
 */
 
 impl Set for HashSet<VertexID>{
-    type Item = VertexID;
-    fn contains(&self, v: &Self::Item) -> bool {
-        HashSet::contains(self, v)
-    }
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> {
-        HashSet::iter(self)
-    }
-    fn count(&self) -> usize {
-        HashSet::len(self)
-    }
-}
-impl<'a> Set for &'a HashSet<VertexID>{
     type Item = VertexID;
     fn contains(&self, v: &Self::Item) -> bool {
         HashSet::contains(self, v)

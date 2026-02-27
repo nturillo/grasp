@@ -298,10 +298,10 @@ mod test{
         // product
         let (product, map) = line.product(&line);
         let mut test_product = TestGraph::default();
-        test_product.add_edge((*map.get(&(0, 0)).unwrap(), *map.get(&(1, 0)).unwrap()));
-        test_product.add_edge((*map.get(&(0, 1)).unwrap(), *map.get(&(1, 1)).unwrap()));
-        test_product.add_edge((*map.get(&(0, 0)).unwrap(), *map.get(&(0, 1)).unwrap()));
-        test_product.add_edge((*map.get(&(1, 0)).unwrap(), *map.get(&(1, 1)).unwrap()));
+        test_product.set_edge_label((*map.get(&(0, 0)).unwrap(), *map.get(&(1, 0)).unwrap()), 5.0);
+        test_product.set_edge_label((*map.get(&(0, 1)).unwrap(), *map.get(&(1, 1)).unwrap()), 5.0);
+        test_product.set_edge_label((*map.get(&(0, 0)).unwrap(), *map.get(&(0, 1)).unwrap()), 5.0);
+        test_product.set_edge_label((*map.get(&(1, 0)).unwrap(), *map.get(&(1, 1)).unwrap()), 5.0);
         assert!(labeled_graphs_eq(&product, &test_product));
         // complement
         line.set_edge_label((1, 2), 10.0);

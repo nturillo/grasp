@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
+use crate::graph::set::Set;
 use super::{GraphTrait, VertexID, EdgeID, VertexMap, SimpleGraph};
 
 /// Graph operations that are agnostic to simple graphs and digraphs
@@ -61,6 +62,33 @@ pub trait GraphOps: GraphTrait+Sized{
                 complement.add_edge((v1, v2));
             }
         }
+    }
+
+    /// Gets a list of VertexID sets which correspond to each component of a graph
+    fn get_components(&self) -> Vec<impl Set<Item = VertexID>>{
+        if self.vertex_count()==0 {return Vec::new();}
+        let mut components = vec![];
+        let mut unvisited: HashSet<VertexID> = self.vertices().collect();
+        let mut stack: VecDeque<VertexID> = VecDeque::default();
+        
+        while !unvisited.is_empty(){
+            // get start vertex
+            let root = *unvisited.iter().next().unwrap(); 
+            unvisited.remove(&root); stack.push_back(root);
+            let mut component = HashSet::default(); component.insert(root);
+            // start building 
+            while let Some(v) = stack.pop_front(){
+                for neighbor in self.neighbors(v).unwrap().iter(){
+                    if unvisited.contains(neighbor) {
+                        unvisited.remove(neighbor); 
+                        stack.push_back(*neighbor);
+                        component.insert(*neighbor);
+                    }
+                }
+            }
+            components.push(component);
+        }
+        components
     }
 
     /// Subgraph from a set of vertices
@@ -153,7 +181,9 @@ pub trait SimpleGraphOps: GraphOps+SimpleGraph{
 
 #[cfg(test)]
 pub mod test{
-    use crate::graph::prelude::*;
+    use std::collections::HashSet;
+
+    use crate::graph::{prelude::*, set::VertexSet};
 
     /// Assures Graph Ops functionality
     pub fn graph_ops_test<G: GraphOps+Default>(){
@@ -175,6 +205,17 @@ pub mod test{
         test_graph.add_edge((*map_b.get(&1).unwrap(), *map_b.get(&2).unwrap()));
         test_graph.add_edge((*map_b.get(&2).unwrap(), *map_b.get(&0).unwrap()));
         assert!(graphs_eq(&merged, &test_graph));
+        // Test graph components
+        let mut disc_graph = G::default();
+        disc_graph.add_edge((0, 1)); disc_graph.add_edge((2, 3));
+        let components = disc_graph.get_components();
+        let comp_1:VertexSet<_> = HashSet::from([0, 1]).into();
+        let comp_2:VertexSet<_> = HashSet::from([2, 3]).into();
+        assert!(components.len()==2);
+        assert!(
+            comp_1 == (&components[0]).into() && comp_2 == (&components[1]).into() || 
+            comp_1 == (&components[1]).into() && comp_2 == (&components[0]).into()
+        );
     }
 
     pub fn simple_graph_complement_test<G: GraphOps+Default>(){
