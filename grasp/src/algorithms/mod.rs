@@ -1,4 +1,3 @@
-pub mod test;
 #[cfg(feature = "meta")]
 pub mod registry;
 pub mod algo_traits;
