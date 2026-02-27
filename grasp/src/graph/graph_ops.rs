@@ -1,12 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
+use crate::graph::set::Set;
 use super::{GraphTrait, VertexID, EdgeID, VertexMap, SimpleGraph};
 
 /// Graph operations that are agnostic to simple graphs and digraphs
 /// graph_builder is a FnOnce which creates a Graph to store the result in, Default::default works for graphs that are Default.
 pub trait GraphOps: GraphTrait+Sized{
-    /// Subgraph from a set of vertices
-    fn subgraph_vertex(&self, vertices: impl IntoIterator<Item=VertexID>, graph_builder: impl FnOnce() -> Self) -> Self {
-        let mut subgraph = graph_builder();
+    /// Places subgraph from a set of vertices into subgraph
+    fn build_subgraph_vertex(&self, vertices: impl IntoIterator<Item=VertexID>, subgraph: &mut Self) {
         for vertex in vertices{
             subgraph.add_vertex(vertex);
         }
@@ -15,24 +15,20 @@ pub trait GraphOps: GraphTrait+Sized{
                 subgraph.add_edge((v1, v2));
             }
         }
-        subgraph
     }
 
-    /// Subgraph from a set of edges
-    fn subgraph_edges(&self, edges: impl IntoIterator<Item=EdgeID>, graph_builder: impl FnOnce() -> Self) -> Self {
-        let mut subgraph = graph_builder();
+    /// Places subgraph from a set of edges into subgraph
+    fn build_subgraph_edges(&self, edges: impl IntoIterator<Item=EdgeID>, subgraph: &mut Self) {
         for edge in edges{
             if !self.has_edge(edge) {continue;}
             subgraph.add_edge(edge);
         }
-        subgraph
     }
 
-    /// Combines two graphs into one without any new edges. Also returns two maps (self vertex) -> new vertex, and (other vertex) -> new vertex
-    fn merge(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, VertexMap, VertexMap) {
+    /// Places the combination of self and other into merged. Also returns two maps (self vertex) -> new vertex, and (other vertex) -> new vertex
+    fn build_merge(&self, other: &Self, merged: &mut Self) -> (VertexMap, VertexMap) {
         let mut self_map = HashMap::default();
         let mut other_map = HashMap::default();
-        let mut merged = graph_builder();
         // vertices
         for v in self.vertices() {
             let new_vertex = merged.create_vertex();
@@ -53,12 +49,11 @@ pub trait GraphOps: GraphTrait+Sized{
             let Some(v2) = other_map.get(&v2) else {continue;};
             merged.add_edge((*v1, *v2));
         }
-        (merged, self_map, other_map)
+        (self_map, other_map)
     }
 
-    /// Returns the complement of a graph
-    fn complement(&self, graph_builder: impl FnOnce() -> Self) -> Self {
-        let mut complement = graph_builder();
+    /// Places the complement of self into complement
+    fn build_complement(&self, complement: &mut Self) {
         for v1 in self.vertices(){
             complement.add_vertex(v1);
             for v2 in self.vertices(){
@@ -67,15 +62,69 @@ pub trait GraphOps: GraphTrait+Sized{
                 complement.add_edge((v1, v2));
             }
         }
-        complement
+    }
+
+    /// Gets a list of VertexID sets which correspond to each component of a graph
+    fn get_components(&self) -> Vec<impl Set<Item = VertexID>>{
+        if self.vertex_count()==0 {return Vec::new();}
+        let mut components = vec![];
+        let mut unvisited: HashSet<VertexID> = self.vertices().collect();
+        let mut stack: VecDeque<VertexID> = VecDeque::default();
+        
+        while !unvisited.is_empty(){
+            // get start vertex
+            let root = *unvisited.iter().next().unwrap(); 
+            unvisited.remove(&root); stack.push_back(root);
+            let mut component = HashSet::default(); component.insert(root);
+            // start building 
+            while let Some(v) = stack.pop_front(){
+                for neighbor in self.neighbors(v).unwrap().iter(){
+                    if unvisited.contains(neighbor) {
+                        unvisited.remove(neighbor); 
+                        stack.push_back(*neighbor);
+                        component.insert(*neighbor);
+                    }
+                }
+            }
+            components.push(component);
+        }
+        components
+    }
+
+    /// Subgraph from a set of vertices
+    fn subgraph_vertex(&self, vertices: impl IntoIterator<Item=VertexID>) -> Self where Self: Default{
+        let mut graph = Self::default();
+        self.build_subgraph_vertex(vertices, &mut graph);
+        graph
+    }
+
+    /// Subgraph from a set of edges
+    fn subgraph_edges(&self, edges: impl IntoIterator<Item=EdgeID>) -> Self where Self: Default{
+        let mut graph = Self::default();
+        self.build_subgraph_edges(edges, &mut graph);
+        graph
+    }
+
+    /// Combines two graphs into one without any new edges. Also returns two maps (self vertex) -> new vertex, and (other vertex) -> new vertex
+    fn merge(&self, other: &Self) -> (Self, VertexMap, VertexMap) where Self: Default{
+        let mut graph = Self::default();
+        let (self_map, other_map) = self.build_merge(other, &mut graph);
+        (graph, self_map, other_map)
+    }
+
+    /// Returns the complement of a graph
+    fn complement(&self) -> Self where Self: Default{
+        let mut graph = Self::default();
+        self.build_complement(&mut graph);
+        graph
     }
 }
 
 /// Graph operations that only work for simple graphs
 pub trait SimpleGraphOps: GraphOps+SimpleGraph{
-    /// Returns the join of two graphs. Also returns two maps (self vertex) -> new vertex and (other vertex) -> new vertex
-    fn join(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, VertexMap, VertexMap) {
-        let (mut joined, self_map, other_map) = self.merge(other, graph_builder);
+    /// Places the join of two graphs into joined. Also returns two maps (self vertex) -> new vertex and (other vertex) -> new vertex
+    fn build_join(&self, other: &Self, joined: &mut Self) -> (VertexMap, VertexMap) {
+        let (self_map, other_map) = self.build_merge(other, joined);
         for v1 in self.vertices(){
             let Some(v1) = self_map.get(&v1) else {continue;};
             for v2 in other.vertices(){
@@ -83,13 +132,12 @@ pub trait SimpleGraphOps: GraphOps+SimpleGraph{
                 joined.add_edge((*v1, *v2));
             }
         }
-        (joined, self_map, other_map)
+        (self_map, other_map)
     }
 
-    /// Returns the cartesian product of two graphs. Also returns a map from (self vertex, other vertex) -> new vertex
-    fn product(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, HashMap<(VertexID, VertexID), VertexID>) {
+    /// Places the cartesian product of two graphs into product. Also returns a map from (self vertex, other vertex) -> new vertex
+    fn build_product(&self, other: &Self, product: &mut Self) -> HashMap<(VertexID, VertexID), VertexID> {
         let mut map = HashMap::default();
-        let mut product = graph_builder();
         // Vertices and map
         for v1 in self.vertices(){
             for v2 in other.vertices(){
@@ -113,26 +161,42 @@ pub trait SimpleGraphOps: GraphOps+SimpleGraph{
                 product.add_edge((*v1, *v2));
             }
         }
-        (product, map)
+        map
+    }
+
+    /// Returns the join of two graphs. Also returns two maps (self vertex) -> new vertex and (other vertex) -> new vertex
+    fn join(&self, other: &Self) -> (Self, VertexMap, VertexMap) where Self: Default {
+        let mut graph = Self::default();
+        let (self_map, other_map) = self.build_join(other, &mut graph);
+        (graph, self_map, other_map)
+    }
+
+    /// Returns the cartesian product of two graphs. Also returns a map from (self vertex, other vertex) -> new vertex
+    fn product(&self, other: &Self) -> (Self, HashMap<(VertexID, VertexID), VertexID>) where Self: Default {
+        let mut graph = Self::default();
+        let map = self.build_product(other, &mut graph);
+        (graph, map)
     }
 }
 
 #[cfg(test)]
 pub mod test{
-    use crate::graph::prelude::*;
+    use std::collections::HashSet;
+
+    use crate::graph::{prelude::*, set::VertexSet};
 
     /// Assures Graph Ops functionality
     pub fn graph_ops_test<G: GraphOps+Default>(){
         let mut graph_a =  G::default();
         graph_a.add_edge((0, 1)); graph_a.add_edge((1, 2)); graph_a.add_edge((2, 0));
         // ensure subgraphs work
-        let subgraph_vertices_a = graph_a.subgraph_vertex([0, 1], G::default);
-        let subgraph_edges_a = graph_a.subgraph_edges([(0, 1)], G::default);
+        let subgraph_vertices_a = graph_a.subgraph_vertex([0, 1]);
+        let subgraph_edges_a = graph_a.subgraph_edges([(0, 1)]);
         let mut test_subgraph = G::default(); test_subgraph.add_edge((0, 1));
         assert!(graphs_eq(&subgraph_edges_a, &test_subgraph));
         assert!(graphs_eq(&subgraph_vertices_a, &test_subgraph));
         // create merged graph manually and test to ensure equality
-        let (merged, map_a, map_b) = graph_a.merge(&graph_a, G::default);
+        let (merged, map_a, map_b) = graph_a.merge(&graph_a);
         let mut test_graph = G::default();
         test_graph.add_edge((*map_a.get(&0).unwrap(), *map_a.get(&1).unwrap()));
         test_graph.add_edge((*map_a.get(&1).unwrap(), *map_a.get(&2).unwrap()));
@@ -141,13 +205,24 @@ pub mod test{
         test_graph.add_edge((*map_b.get(&1).unwrap(), *map_b.get(&2).unwrap()));
         test_graph.add_edge((*map_b.get(&2).unwrap(), *map_b.get(&0).unwrap()));
         assert!(graphs_eq(&merged, &test_graph));
+        // Test graph components
+        let mut disc_graph = G::default();
+        disc_graph.add_edge((0, 1)); disc_graph.add_edge((2, 3));
+        let components = disc_graph.get_components();
+        let comp_1:VertexSet<_> = HashSet::from([0, 1]).into();
+        let comp_2:VertexSet<_> = HashSet::from([2, 3]).into();
+        assert!(components.len()==2);
+        assert!(
+            comp_1 == (&components[0]).into() && comp_2 == (&components[1]).into() || 
+            comp_1 == (&components[1]).into() && comp_2 == (&components[0]).into()
+        );
     }
 
     pub fn simple_graph_complement_test<G: GraphOps+Default>(){
         // Complement
         let mut graph = G::default();
         graph.add_edge((0, 1)); graph.add_edge((1, 2));
-        let complement = graph.complement(G::default);
+        let complement = graph.complement();
         let mut test_complement = G::default();
         test_complement.add_edge((0, 2)); test_complement.add_vertex(1);
         assert!(graphs_eq(&complement, &test_complement));
@@ -157,7 +232,7 @@ pub mod test{
         // Complement
         let mut graph = G::default();
         graph.add_edge((0, 1)); graph.add_edge((1, 2));
-        let complement = graph.complement(G::default);
+        let complement = graph.complement();
         let mut test_complement = G::default();
         test_complement.add_edge((1, 0)); test_complement.add_edge((2, 1));
         test_complement.add_edge((0, 2)); test_complement.add_edge((2, 0));
@@ -169,7 +244,7 @@ pub mod test{
         let mut line = G::default();
         line.add_vertex(0); line.add_vertex(1);
         // Join
-        let (join, map_a, map_b) = line.join(&line, G::default);
+        let (join, map_a, map_b) = line.join(&line);
         let mut test_join = G::default();
         test_join.add_edge((*map_a.get(&0).unwrap(), *map_b.get(&0).unwrap()));
         test_join.add_edge((*map_a.get(&0).unwrap(), *map_b.get(&1).unwrap()));
@@ -178,7 +253,7 @@ pub mod test{
         assert!(graphs_eq(&join, &test_join));
         // Product
         line.add_edge((0, 1));
-        let (square, map) = line.product(&line, G::default);
+        let (square, map) = line.product(&line);
         let mut test_square = G::default();
         test_square.add_edge((*map.get(&(0, 0)).unwrap(), *map.get(&(0, 1)).unwrap()));
         test_square.add_edge((*map.get(&(1, 0)).unwrap(), *map.get(&(1, 1)).unwrap()));

@@ -3,49 +3,22 @@ pub mod labeled_graph;
 pub mod adjacency_list;
 pub mod graph_ops;
 pub mod util;
+pub mod set;
 
 pub mod prelude{
     pub use super::{
-        Set, VertexID, EdgeID, VertexMap, GraphTrait, SimpleGraph, DiGraph, UnderlyingGraph,
+        VertexID, EdgeID, VertexMap, GraphTrait, SimpleGraph, DiGraph, UnderlyingGraph,
         labeled_graph::{LabeledGraph, HashMapLabeledGraph}, 
         adjacency_list::{SparseSimpleGraph, SparseDiGraph}, 
         error::GraphError,
         graph_ops::*,
-        util::*
+        util::*, set::{Set, IntoSet}
     };
 }
 
-use std::{borrow::Cow, collections::{HashMap, HashSet}};
+use std::collections::HashMap;
+use set::Set;
 
-/// Trait for types that can act as a set of 'V'.
-pub trait Set<V>: Clone+FromIterator<V>+PartialEq+IntoIterator<Item = V>{
-    fn contains(&self, v: V) -> bool;
-    fn count(&self) -> usize;
-    fn union(&self, other: &Self) -> Self;
-    fn intersection(&self, other: &Self) -> Self;
-    fn difference(&self, other: &Self) -> Self;
-    fn iter<'a>(&'a self) -> impl Iterator<Item=&'a V> where V: 'a;
-}
-impl<V: Clone+Eq+std::hash::Hash> Set<V> for HashSet<V>{
-    fn contains(&self, v: V) -> bool {
-        HashSet::contains(self, &v)
-    }
-    fn count(&self) -> usize {
-        self.len()
-    }
-    fn union(&self, other: &Self) -> Self {
-        self | other
-    }
-    fn intersection(&self, other: &Self) -> Self {
-        self & other
-    }
-    fn difference(&self, other: &Self) -> Self {
-        HashSet::difference(self, other).cloned().collect()
-    }
-    fn iter<'a>(&'a self) -> impl Iterator<Item=&'a V> where V: 'a {
-        HashSet::iter(&self)
-    }
-}
 
 pub type VertexID = usize;
 pub type EdgeID = (VertexID, VertexID);
@@ -53,8 +26,6 @@ pub type VertexMap = HashMap<VertexID, VertexID>;
 
 /// Core Graph functionality. Enables edge and vertex manipulation
 pub trait GraphTrait{
-    type VertexSet: Set<VertexID>;
-    
     /// Number of vertices
     fn vertex_count(&self) -> usize;
     /// Number of edges
@@ -68,9 +39,9 @@ pub trait GraphTrait{
     /// Whether the graph contains the edge
     fn has_edge(&self, e: EdgeID) -> bool;
     /// Returns a set of vertices adjacent to given vertex. Returns None if the vertex is not in the graph
-    fn neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
+    fn neighbors(&self, v: VertexID) -> Option<impl Set<Item = VertexID>>;
     /// Returns a set of all vertices in the graph
-    fn vertex_set(&self) -> Self::VertexSet;
+    fn vertex_set(&self) -> impl Set<Item = VertexID>;
 
     /// Creates a new vertex in the graph and returns its ID
     fn create_vertex(&mut self) -> VertexID;
@@ -82,7 +53,9 @@ pub trait GraphTrait{
     fn add_edge(&mut self, e: EdgeID);
     /// Creates edges from v1 to the neighbors. \
     /// adds v and nbhrs if they don't exist
-    fn add_neighbors(&mut self, v: VertexID, nbhrs: impl Iterator<Item=VertexID>);
+    fn add_neighbors(&mut self, v: VertexID, nbhrs: impl Iterator<Item=VertexID>){
+        for v2 in nbhrs {self.add_edge((v, v2));}
+    }
     /// Removes a vertex from the graph \
     /// Returns a list of edges it removed as a consequence
     fn delete_vertex(&mut self, v: VertexID) -> impl Iterator<Item=EdgeID>;
@@ -95,9 +68,9 @@ pub trait SimpleGraph: GraphTrait{}
 /// Trait Used to represent the promise that edge ab!=ba
 pub trait DiGraph: GraphTrait{
     /// Set of vertices that have arcs going to the specified vertex.
-    fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
+    fn in_neighbors(&self, v: VertexID) -> Option<impl Set<Item = VertexID>>;
     /// Set of vertices that have arcs coming from the specified vertex.
-    fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
+    fn out_neighbors(&self, v: VertexID) -> Option<impl Set<Item = VertexID>>;
 }
 /// Trait that allows DiGraphs to be converted into SimpleGraphs
 pub trait UnderlyingGraph: DiGraph{
@@ -109,7 +82,9 @@ pub trait UnderlyingGraph: DiGraph{
 /// Contains test templates for GraphOps and SimpleGraphOps, should be used as a seperate test for each graph implementation
 #[cfg(test)]
 mod test{
-    use crate::graph::{UnderlyingGraph, prelude::*};
+    use std::collections::HashSet;
+
+    use crate::graph::{UnderlyingGraph, prelude::*, set::VertexSet};
 
     /// Assures SimpleGraph and DiGraph traits work as intended.
     pub fn graph_vs_digraph_test<S: SimpleGraph+Default, D: DiGraph+Default>(){
@@ -128,12 +103,12 @@ mod test{
         let mut digraph = G::default();
         digraph.add_edge((0, 1)); digraph.add_edge((2, 0));
         // neighborhoods
-        let neighbors = G::VertexSet::from_iter([1, 2]);
-        let out_neighbors = G::VertexSet::from_iter([1]);
-        let in_neighbors = G::VertexSet::from_iter([2]);
-        assert!(digraph.neighbors(0).is_some_and(|s| *s==neighbors));
-        assert!(digraph.out_neighbors(0).is_some_and(|s| *s==out_neighbors));
-        assert!(digraph.in_neighbors(0).is_some_and(|s| *s==in_neighbors));
+        let neighbors: VertexSet<_> = HashSet::from_iter([1, 2]).into();
+        let out_neighbors: VertexSet<_> = HashSet::from_iter([1]).into();
+        let in_neighbors: VertexSet<_> = HashSet::from_iter([2]).into();
+        assert!(digraph.neighbors(0).is_some_and(|s| VertexSet::from(s)==neighbors));
+        assert!(digraph.out_neighbors(0).is_some_and(|s| VertexSet::from(s)==out_neighbors));
+        assert!(digraph.in_neighbors(0).is_some_and(|s| VertexSet::from(s)==in_neighbors));
     }
 
     /// Assures Underlying Graphs are correctly calculated

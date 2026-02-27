@@ -1,8 +1,8 @@
 //! Adjacency list implementation of graph
-use crate::graph::UnderlyingGraph;
+use crate::graph::{UnderlyingGraph, set::Set};
 
 use super::{GraphTrait, SimpleGraph, VertexID, EdgeID, DiGraph, graph_ops::*};
-use std::{borrow::Cow, collections::{HashMap, HashSet}};
+use std::collections::{HashMap, HashSet};
 
 
 #[derive(Default, Debug)]
@@ -10,8 +10,6 @@ pub struct SparseSimpleGraph {
     adjacency_list: HashMap<VertexID, HashSet<VertexID>>
 }
 impl GraphTrait for SparseSimpleGraph {
-    type VertexSet = HashSet<VertexID>;
-
     fn vertex_count(&self) -> usize {
         self.adjacency_list.len()
     }
@@ -45,11 +43,11 @@ impl GraphTrait for SparseSimpleGraph {
         }
         self.adjacency_list[&v1].contains(&v2)
     }
-    fn neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
-        self.adjacency_list.get(&v).map(|d| Cow::Borrowed(d))
+    fn neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {
+        self.adjacency_list.get(&v)
     }
-    fn vertex_set(&self) -> Self::VertexSet {
-        self.adjacency_list.keys().cloned().collect()
+    fn vertex_set(&self) -> impl Set<Item=VertexID> {
+        &self.adjacency_list
     }
     fn create_vertex(&mut self) -> VertexID {
         let key= self.adjacency_list.keys().max().map(|max| max+1).unwrap_or(0);
@@ -100,8 +98,6 @@ pub struct SparseDiGraph {
     in_adjacency: HashMap<VertexID, HashSet<VertexID>>
 }
 impl GraphTrait for SparseDiGraph {
-    type VertexSet = HashSet<VertexID>;
-
     fn vertex_count(&self) -> usize {
         self.out_adjacency.len()
     }
@@ -126,15 +122,14 @@ impl GraphTrait for SparseDiGraph {
     fn has_edge(&self, (v1, v2): EdgeID) -> bool {
         self.out_adjacency.get(&v1).is_some_and(|set| set.contains(&v2))
     }
-    fn neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
+    fn neighbors(&self, v: VertexID) -> Option<impl Set<Item = VertexID>> {
         if !self.contains(v) {return None;}
-        let mut neighbors = HashSet::default();
-        if let Some(set) = self.out_adjacency.get(&v) {neighbors.extend(set);}
-        if let Some(set) = self.in_adjacency.get(&v) {neighbors.extend(set);}
-        Some(Cow::Owned(neighbors))
+        let out_set = self.out_adjacency.get(&v).unwrap();
+        let in_set = self.in_adjacency.get(&v).unwrap();
+        Some(Set::union(out_set, in_set))
     }
-    fn vertex_set(&self) -> Self::VertexSet {
-        self.out_adjacency.keys().cloned().collect()
+    fn vertex_set(&self) -> impl Set<Item = VertexID> {
+        &self.out_adjacency
     }
     fn create_vertex(&mut self) -> VertexID {
         let key = self.out_adjacency.keys().max().map(|max| max+1).unwrap_or(0);
@@ -189,11 +184,11 @@ impl GraphTrait for SparseDiGraph {
     }
 }
 impl DiGraph for SparseDiGraph{
-    fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
-        self.out_adjacency.get(&v).map(|set| Cow::Borrowed(set))
+    fn out_neighbors(&self, v: VertexID) -> Option<impl Set<Item = VertexID>> {
+        self.out_adjacency.get(&v).map(|set| set)
     }
-    fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
-        self.in_adjacency.get(&v).map(|set| Cow::Borrowed(set))
+    fn in_neighbors(&self, v: VertexID) -> Option<impl Set<Item = VertexID>> {
+        self.in_adjacency.get(&v).map(|set| set)
     }
 }
 impl UnderlyingGraph for SparseDiGraph{
@@ -202,12 +197,26 @@ impl UnderlyingGraph for SparseDiGraph{
         let mut graph = Self::UnderlyingGraph::default();
         for v in self.vertices(){
             let n = self.out_neighbors(v).unwrap();
-            graph.add_neighbors(v, n.into_owned().into_iter());
+            graph.add_neighbors(v, n.iter().cloned());
         }
         graph
     }
 }
 impl GraphOps for SparseDiGraph{}
+
+/// Placed here instead of in set.rs since it is not standard behaviour
+impl<'a, K> Set for &'a HashMap<VertexID, K>{
+    type Item = VertexID;
+    fn contains(&self, v: &Self::Item) -> bool {
+        self.contains_key(v)
+    }
+    fn count(&self) -> usize {
+        self.len()
+    }
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> {
+        self.keys()
+    }
+}
 
 #[cfg(test)]
 mod tests {

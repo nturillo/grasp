@@ -1,8 +1,10 @@
+use crate::graph::set::Set;
+
 use super::{GraphTrait, VertexID, VertexMap, EdgeID, graph_ops::*, DiGraph, SimpleGraph};
-use std::{borrow::Cow, collections::HashMap};
+use std::collections::HashMap;
 
 /// Graphs that allow setting labels to vertices and edges
-pub trait LabeledGraph: AsRef<Self::GraphType>+AsMut<Self::GraphType>{
+pub trait LabeledGraph{
     type VertexData: Clone;
     type EdgeData: Clone;
     type GraphType: GraphTrait;
@@ -23,25 +25,25 @@ pub trait LabeledGraph: AsRef<Self::GraphType>+AsMut<Self::GraphType>{
 
     fn from_graph(graph: Self::GraphType) -> Self;
     fn to_graph(self) -> Self::GraphType;
+    fn graph(&self) -> &Self::GraphType;
+    fn graph_mut(&mut self) -> &mut Self::GraphType;
 }
 impl<G: LabeledGraph> GraphTrait for G{
-    type VertexSet = <G::GraphType as GraphTrait>::VertexSet;
-
-    fn vertex_count(&self) -> usize {self.as_ref().vertex_count()}
-    fn edge_count(&self) -> usize {self.as_ref().edge_count()}
-    fn vertices(&self) -> impl Iterator<Item=VertexID> {self.as_ref().vertices()}
-    fn edges(&self) -> impl Iterator<Item=EdgeID> {self.as_ref().edges()}
-    fn contains(&self, v: VertexID) -> bool {self.as_ref().contains(v)}
-    fn has_edge(&self, e: EdgeID) -> bool {self.as_ref().has_edge(e)}
-    fn neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {self.as_ref().neighbors(v)}
-    fn vertex_set(&self) -> Self::VertexSet {self.as_ref().vertex_set()}
-    fn create_vertex(&mut self) -> VertexID {self.as_mut().create_vertex()}
-    fn add_vertex(&mut self, v: VertexID) {self.as_mut().add_vertex(v)}
-    fn add_edge(&mut self, e: EdgeID) {self.as_mut().add_edge(e)}
-    fn add_neighbors(&mut self, v: VertexID, nbhrs: impl Iterator<Item=VertexID>) {self.as_mut().add_neighbors(v, nbhrs)}
+    fn vertex_count(&self) -> usize {self.graph().vertex_count()}
+    fn edge_count(&self) -> usize {self.graph().edge_count()}
+    fn vertices(&self) -> impl Iterator<Item=VertexID> {self.graph().vertices()}
+    fn edges(&self) -> impl Iterator<Item=EdgeID> {self.graph().edges()}
+    fn contains(&self, v: VertexID) -> bool {self.graph().contains(v)}
+    fn has_edge(&self, e: EdgeID) -> bool {self.graph().has_edge(e)}
+    fn neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {self.graph().neighbors(v)}
+    fn vertex_set(&self) -> impl Set<Item=VertexID> {self.graph().vertex_set()}
+    fn create_vertex(&mut self) -> VertexID {self.graph_mut().create_vertex()}
+    fn add_vertex(&mut self, v: VertexID) {self.graph_mut().add_vertex(v)}
+    fn add_edge(&mut self, e: EdgeID) {self.graph_mut().add_edge(e)}
+    fn add_neighbors(&mut self, v: VertexID, nbhrs: impl Iterator<Item=VertexID>) {self.graph_mut().add_neighbors(v, nbhrs)}
 
     fn delete_vertex(&mut self, v: VertexID) -> impl Iterator<Item = EdgeID> {
-        let edges: Vec<EdgeID> = self.as_mut().delete_vertex(v).collect();
+        let edges: Vec<EdgeID> = self.graph_mut().delete_vertex(v).collect();
         for e in edges.iter() {
             // delete edge data
             self.remove_edge_label(*e);
@@ -50,30 +52,25 @@ impl<G: LabeledGraph> GraphTrait for G{
         edges.into_iter()
     }
     fn delete_edge(&mut self, e: EdgeID) {
-        self.as_mut().delete_edge(e);
+        self.graph_mut().delete_edge(e);
         self.remove_edge_label(e);
     }
 }
 impl<G: LabeledGraph> GraphOps for G where G::GraphType: GraphOps{
-    fn subgraph_vertex(&self, vertices: impl IntoIterator<Item=VertexID>, graph_builder: impl FnOnce() -> Self) -> Self {
-        let subgraph = self.as_ref().subgraph_vertex(vertices, ||{graph_builder().to_graph()});
-        let mut subgraph = Self::from_graph(subgraph);
+    fn build_subgraph_vertex(&self, vertices: impl IntoIterator<Item=VertexID>, subgraph: &mut Self) {
+        self.graph().build_subgraph_vertex(vertices, subgraph.graph_mut());
         subgraph.fill_vertex_labels(|vertex| self.get_vertex_label(vertex).cloned());
         subgraph.fill_edge_labels(|edge| self.get_edge_label(edge).cloned());
-        subgraph
     }
 
-    fn subgraph_edges(&self, edges: impl IntoIterator<Item=EdgeID>, graph_builder: impl FnOnce() -> Self) -> Self {
-        let subgraph = self.as_ref().subgraph_edges(edges, ||{graph_builder().to_graph()});
-        let mut subgraph = Self::from_graph(subgraph);
+    fn build_subgraph_edges(&self, edges: impl IntoIterator<Item=EdgeID>, subgraph: &mut Self) {
+        self.graph().build_subgraph_edges(edges, subgraph.graph_mut());
         subgraph.fill_vertex_labels(|vertex| self.get_vertex_label(vertex).cloned());
         subgraph.fill_edge_labels(|edge| self.get_edge_label(edge).cloned());
-        subgraph
     }
 
-    fn merge(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, VertexMap, VertexMap) {
-        let (merged, self_map, other_map) = self.as_ref().merge(other.as_ref(), ||{graph_builder().to_graph()});
-        let mut merged = Self::from_graph(merged);
+    fn build_merge(&self, other: &Self, merged: &mut Self) -> (VertexMap, VertexMap) {
+        let (self_map, other_map) = self.graph().build_merge(other.graph(), merged.graph_mut());
 
         merged.set_vertex_labels(self.vertex_labels().filter_map(|(vertex, label)|
             Some((*self_map.get(vertex)?, label.clone()))
@@ -87,49 +84,57 @@ impl<G: LabeledGraph> GraphOps for G where G::GraphType: GraphOps{
         merged.set_edge_labels(other.edge_labels().filter_map(|((v1, v2), label)|
             Some(((*other_map.get(v1)?, *other_map.get(v2)?), label.clone()))
         ));
-        (merged, self_map, other_map)
+        (self_map, other_map)
     }
 
-    fn complement(&self, graph_builder: impl FnOnce() -> Self) -> Self {
-        let mut complement = Self::from_graph(self.as_ref().complement(||{graph_builder().to_graph()}));
+    fn build_complement(&self, complement: &mut Self) {
+        self.graph().build_complement(complement.graph_mut());
         complement.set_vertex_labels(self.vertex_labels().map(|(v, l)| (*v, l.clone())));
-        complement
     }
 }
 impl<G: LabeledGraph> SimpleGraphOps for G where G::GraphType: SimpleGraphOps{
-    fn join(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, VertexMap, VertexMap) {
-        let (join, self_map, other_map) = self.as_ref().join(other.as_ref(), ||{graph_builder().to_graph()});
-        let mut join = Self::from_graph(join);
-        join.set_vertex_labels(self.vertex_labels().filter_map(|(vertex, label)|
+    fn build_join(&self, other: &Self, joined: &mut Self) -> (VertexMap, VertexMap) {
+        let (self_map, other_map) = self.graph().build_join(other.graph(), joined.graph_mut());
+        joined.set_vertex_labels(self.vertex_labels().filter_map(|(vertex, label)|
             Some((*self_map.get(vertex)?, label.clone()))
         ));
-        join.set_vertex_labels(other.vertex_labels().filter_map(|(vertex, label)|
+        joined.set_vertex_labels(other.vertex_labels().filter_map(|(vertex, label)|
             Some((*other_map.get(vertex)?, label.clone()))
         ));
-        join.set_edge_labels(self.edge_labels().filter_map(|((v1, v2), label)|
+        joined.set_edge_labels(self.edge_labels().filter_map(|((v1, v2), label)|
             Some(((*self_map.get(v1)?, *self_map.get(v2)?), label.clone()))
         ));
-        join.set_edge_labels(other.edge_labels().filter_map(|((v1, v2), label)|
+        joined.set_edge_labels(other.edge_labels().filter_map(|((v1, v2), label)|
             Some(((*other_map.get(v1)?, *other_map.get(v2)?), label.clone()))
         ));
-        (join, self_map, other_map)
+        (self_map, other_map)
     }
 
-    fn product(&self, other: &Self, graph_builder: impl FnOnce() -> Self) -> (Self, HashMap<(VertexID, VertexID), VertexID>) {
-        let (product, map) = self.as_ref().product(other.as_ref(), ||{graph_builder().to_graph()});
-        // Since vertex and edge labels are ambiguous here we will leave them empty. 
-        // Ideally, the return type of product would switch the vertex label into a tuple of (Option<V>, Option<V>), as that would allow the most correct behaviour.
-        // Unfortunately it was not designed to support this and I dont care enough to change it now.
-        (Self::from_graph(product), map)
+    fn build_product(&self, other: &Self, product: &mut Self) -> HashMap<(VertexID, VertexID), VertexID> {
+        let map = self.graph().build_product(other.graph(), product.graph_mut());
+        // invert map
+        let inv_map: HashMap<VertexID, (VertexID, VertexID)> = map.iter().map(|(k, v)| (*v, *k)).collect();
+        product.fill_edge_labels(|(v1, v2)| {
+            let Some((s1, o1)) = inv_map.get(&v1) else {return None;};
+            let Some((s2, o2)) = inv_map.get(&v2) else {return None;};
+            if s1==s2 && o1==o2 {return None;}
+            if s1==s2 { // Edge from other
+                return other.get_edge_label((*o1, *o2)).cloned();
+            } else if o1==o2 { // Edge from self
+                return self.get_edge_label((*s1, *s2)).cloned();
+            }
+            None
+        });
+        map
     }
 }
 impl<G: LabeledGraph> SimpleGraph for G where G::GraphType: SimpleGraph{}
 impl<G: LabeledGraph> DiGraph for G where G::GraphType: DiGraph{
-    fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
-        self.as_ref().in_neighbors(v)
+    fn in_neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {
+        self.graph().in_neighbors(v)
     }
-    fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>> {
-        self.as_ref().in_neighbors(v)
+    fn out_neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {
+        self.graph().in_neighbors(v)
     }
 }
 
@@ -165,6 +170,12 @@ impl<G: SimpleGraph, V: Clone, E: Clone> LabeledGraph for HashMapLabeledGraph<G,
     }
     fn to_graph(self) -> Self::GraphType {
         self.graph
+    }
+    fn graph(&self) -> &Self::GraphType {
+        &self.graph
+    }
+    fn graph_mut(&mut self) -> &mut Self::GraphType {
+        &mut self.graph
     }
 
     fn get_vertex_label(&self, vertex: VertexID) -> Option<&Self::VertexData> {
@@ -258,7 +269,7 @@ mod test{
         line.set_vertex_label(1, 8_u8);
         // Test graph ops
         // Merged
-        let (merged, map_dot, map_line) = dot.merge(&line, Default::default);
+        let (merged, map_dot, map_line) = dot.merge(&line);
         let mut test_merged = TestGraph::default();
         test_merged.set_vertex_label(*map_dot.get(&0).unwrap(), 1_u8);
         test_merged.set_edge_label((*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()), 5.0);
@@ -268,15 +279,15 @@ mod test{
         let mut triangle = TestGraph::default();
         triangle.set_edge_labels([((1, 0), 1.0), ((2, 1), 2.0), ((0, 2), 3.0)]);
         triangle.set_vertex_labels([(0, 1_u8), (1, 2_u8), (2, 3_u8)]);
-        let subgraph_vertex = triangle.subgraph_vertex([0, 1], Default::default);
-        let subgraph_edge = triangle.subgraph_edges([(0, 1)], Default::default);
+        let subgraph_vertex = triangle.subgraph_vertex([0, 1]);
+        let subgraph_edge = triangle.subgraph_edges([(0, 1)]);
         let mut test_subgraph = TestGraph::default();
         test_subgraph.set_edge_label((1, 0), 1.0);
         test_subgraph.set_vertex_labels([(0, 1_u8), (1, 2_u8)]);
         assert!(labeled_graphs_eq(&subgraph_vertex, &test_subgraph));
         assert!(labeled_graphs_eq(&subgraph_edge, &test_subgraph));
         // join
-        let (join, map_dot, map_line) = dot.join(&line, Default::default);
+        let (join, map_dot, map_line) = dot.join(&line);
         let mut test_join = TestGraph::default();
         test_join.set_vertex_label(*map_dot.get(&0).unwrap(), 1_u8);
         test_join.set_vertex_label(*map_line.get(&1).unwrap(), 8_u8);
@@ -285,16 +296,16 @@ mod test{
         test_join.add_edge((*map_dot.get(&0).unwrap(), *map_line.get(&1).unwrap()));
         assert!(labeled_graphs_eq(&join, &test_join));
         // product
-        let (product, map) = line.product(&line, Default::default);
+        let (product, map) = line.product(&line);
         let mut test_product = TestGraph::default();
-        test_product.add_edge((*map.get(&(0, 0)).unwrap(), *map.get(&(1, 0)).unwrap()));
-        test_product.add_edge((*map.get(&(0, 1)).unwrap(), *map.get(&(1, 1)).unwrap()));
-        test_product.add_edge((*map.get(&(0, 0)).unwrap(), *map.get(&(0, 1)).unwrap()));
-        test_product.add_edge((*map.get(&(1, 0)).unwrap(), *map.get(&(1, 1)).unwrap()));
+        test_product.set_edge_label((*map.get(&(0, 0)).unwrap(), *map.get(&(1, 0)).unwrap()), 5.0);
+        test_product.set_edge_label((*map.get(&(0, 1)).unwrap(), *map.get(&(1, 1)).unwrap()), 5.0);
+        test_product.set_edge_label((*map.get(&(0, 0)).unwrap(), *map.get(&(0, 1)).unwrap()), 5.0);
+        test_product.set_edge_label((*map.get(&(1, 0)).unwrap(), *map.get(&(1, 1)).unwrap()), 5.0);
         assert!(labeled_graphs_eq(&product, &test_product));
         // complement
         line.set_edge_label((1, 2), 10.0);
-        let complement = line.complement(Default::default);
+        let complement = line.complement();
         let mut test_complement = TestGraph::default();
         test_complement.set_vertex_label(1, 8_u8);
         test_complement.add_edge((0, 2));
