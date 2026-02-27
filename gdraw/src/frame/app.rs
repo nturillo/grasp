@@ -1,9 +1,6 @@
 use crate::{
     frame::{
-        graph_interaction, header,
-        sandbox::{self, Sandbox},
-        style::Style,
-        windows,
+        function_window::FunctionWindow, graph_interaction, header, sandbox::{self, Sandbox}, style::Style, windows
     },
     graph::{
         layout::{self, LayoutConfig},
@@ -77,10 +74,7 @@ impl GraspApp {
 
     /// Highlight a set of vertices.
     pub fn highlight_set<S: Set<VertexID>>(&mut self, set: &S, color: Color32) {
-        set.iter().for_each(|&vertex| {
-            self.graph.vertex_labels.get_mut(&vertex)
-            .map(|v| v.assign_color(color));
-        });
+        self.graph.highlight_set(set, color);
     }
 
     /// Returns a copy of the [`grasp::graph::adjacency_list::SparseDiGraph`] underlying the visualizer.
@@ -100,6 +94,7 @@ pub(crate) struct GraspAppHandler<'a> {
     pub style: Style,
 
     pub show_settings: bool,
+    pub func_window: FunctionWindow,
 }
 
 impl<'a> GraspAppHandler<'a> {
@@ -113,6 +108,7 @@ impl<'a> GraspAppHandler<'a> {
             style: style,
 
             show_settings: false,
+            func_window: Default::default(),
         }
     }
 }
@@ -126,14 +122,18 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 header::view_menu(self, ui);
                 header::tool_menu(self, ui);
             });
-
-            if self.show_settings {
-                Window::new("Settings")
-                    .collapsible(false)
-                    .resizable(false)
-                    .show(ui.ctx(), |ui| windows::settings_window(self, ui));
-            }
         });
+
+        if self.show_settings {
+            Window::new("Settings")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| windows::settings_window(self, ui));
+        }
+
+        if self.func_window.visible {
+            self.func_window.show(self.graph, &self.style, ctx);
+        }
 
         CentralPanel::default().show(ctx, |ui| {
             self.sandbox.update_screen_rect(ui.max_rect());

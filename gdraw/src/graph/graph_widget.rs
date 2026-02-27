@@ -1,4 +1,4 @@
-use eframe::egui::{Color32, Rect, Response, Sense, Stroke, Ui, Vec2, Widget};
+use eframe::egui::{Rect, Response, Sense, Stroke, Ui, Vec2, Widget};
 
 use crate::{
     frame::style::Style,
@@ -25,9 +25,9 @@ impl<'a> Widget for VertexWidget<'a> {
             self.style.vertex_color
         }
         .lerp_to_gamma(
-            self.style.highlight_color,
+            self.style.select_color,
             if self.graph.selected_list.contains(&self.vertex.id) {
-                self.style.highlight_strength
+                self.style.select_color_strength
             } else {
                 0.0
             },
@@ -68,6 +68,12 @@ impl<'a> Widget for EdgeWidget<'a> {
             0.0
         };
 
+        let color = if let Some(color) = self.edge.color {
+            color
+        } else {
+            self.style.edge_color
+        };
+
         let dir_vector = (self.end_vertex_center - self.start_vertex_center).normalized();
         let new_start = self.start_vertex_center + radius * dir_vector;
         let new_end = self.end_vertex_center - radius * dir_vector;
@@ -77,18 +83,18 @@ impl<'a> Widget for EdgeWidget<'a> {
 
             ui.painter().line(
                 vec![line_cutoff.to_pos2(), new_start.to_pos2()],
-                Stroke::new(self.style.edge_thickness, Color32::BLACK),
+                Stroke::new(self.style.edge_thickness, color),
             );
 
             ui.painter().arrow(
                 line_cutoff.to_pos2(),
                 new_end - line_cutoff,
-                Stroke::new(self.style.edge_thickness, Color32::BLACK),
+                Stroke::new(self.style.edge_thickness, color),
             );
         } else {
             ui.painter().line(
                 vec![new_end.to_pos2(), new_start.to_pos2()],
-                Stroke::new(self.style.edge_thickness, Color32::BLACK),
+                Stroke::new(self.style.edge_thickness, color),
             );
         }
 

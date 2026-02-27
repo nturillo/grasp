@@ -1,6 +1,6 @@
 use crate::graph::layout::{PartialLayout};
 use eframe::egui::{Color32, Vec2};
-use grasp::graph::{EdgeID, GraphTrait, VertexID, adjacency_list::SparseDiGraph};
+use grasp::graph::{EdgeID, GraphTrait, Set, VertexID, adjacency_list::SparseDiGraph};
 use std::{
     collections::HashMap,
 };
@@ -28,6 +28,24 @@ impl Vertex {
 #[derive(Default, Clone)]
 pub struct Edge {
     pub vertex_pair: EdgeID,
+    pub color: Option<Color32>,
+}
+
+impl Edge {
+    pub fn assign_color(&mut self, color: Color32) {
+        self.color = Some(color);
+    }
+
+    pub fn clear_color(&mut self) {
+        self.color = None;
+    }
+
+    pub fn new(pair: EdgeID) -> Self {
+        Self {
+            vertex_pair: pair,
+            color: None,
+        }
+    }
 }
 
 pub struct Graph {
@@ -79,7 +97,7 @@ impl Graph {
     pub fn create_edge(&mut self, pair: EdgeID) {
         self.reset_partial_data();
         self.base.add_edge(pair);
-        self.edge_labels.insert(pair, Edge { vertex_pair: pair });
+        self.edge_labels.insert(pair, Edge::new(pair));
     }
 
     pub fn has_edge(&self, pair: EdgeID) -> bool {
@@ -124,6 +142,31 @@ impl Graph {
     pub fn reset_partial_data(&mut self) {
         self.layout_config.partial_data = PartialLayout::None;
     }
+
+    pub fn highlight_set<S: Set<VertexID>>(&mut self, set: &S, color: Color32) {
+        set.iter().for_each(|&vertex| {
+            self.vertex_labels.get_mut(&vertex)
+            .map(|v| v.assign_color(color));
+        });
+    }
+
+    pub fn highlight_edges<S: Set<EdgeID>>(&mut self, set: &S, color: Color32) {
+        set.iter().for_each(|&edge| {
+            self.edge_labels.get_mut(&edge)
+            .map(|e| e.assign_color(color));
+
+            if !self.directed {
+                self.edge_labels.get_mut(&(edge.1, edge.0))
+                .map(|e| e.assign_color(color));
+            }
+        });
+    }
+
+    pub fn clear_highlights(&mut self) {
+        self.vertex_labels.iter_mut().for_each(|(_, val)| val.clear_color() );
+        self.edge_labels.iter_mut().for_each(|(_, val)| val.clear_color() );
+    }
+
 }
 
 impl<G: GraphTrait + Default> From<&G> for Graph {
