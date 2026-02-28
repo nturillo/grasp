@@ -1,9 +1,6 @@
 use crate::{
     frame::{
-        graph_interaction, header,
-        sandbox::{self, Sandbox},
-        style::Style,
-        windows,
+        function_window::FunctionWindow, graph_interaction, header, sandbox::{self, Sandbox}, style::Style, windows
     },
     graph::{
         layout::{self, LayoutConfig},
@@ -11,10 +8,10 @@ use crate::{
     },
 };
 use eframe::egui::{
-    self, CentralPanel, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
-    TopBottomPanel, Ui, Vec2, Window,
+    self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Sense,
+    TopBottomPanel, Vec2, Window,
 };
-use grasp::graph::graph_ops::GraphOps;
+use grasp::graph::{GraphTrait, Set, UnderlyingGraph, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
 
 pub struct GraspApp {
     pub style: Style,
@@ -58,17 +55,36 @@ impl GraspApp {
     }
 
     /// Loads a graph from anything that implements [`grasp::graph::graph_traits::GraphTrait`]
-    pub fn load<T: GraphOps>(&mut self, graph: &T) {
+    pub fn load<T: GraphTrait + Default>(&mut self, graph: &T) {
         self.graph = Graph::from(graph);
         layout::apply(&mut self.graph);
     }
 
+    /// Create a new [`crate::frame::app::GraspApp`]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the visualizer's graph layout.
+    ///
+    /// Layouts are located at [`crate::graph::layout::LayoutType`]
     pub fn set_layout_config(&mut self, config: LayoutConfig) {
         self.graph.layout_config = config;
+    }
+
+    /// Highlight a set of vertices.
+    pub fn highlight_set<S: Set<VertexID>>(&mut self, set: &S, color: Color32) {
+        self.graph.highlight_set(set, color);
+    }
+
+    /// Returns a copy of the [`grasp::graph::adjacency_list::SparseDiGraph`] underlying the visualizer.
+    pub fn as_sparse_digraph(&mut self) -> SparseDiGraph {
+        self.graph.clone().base
+    }
+
+    /// Returns a copy of the [`grasp::graph::adjacency_list::SparseSimpleGraph`] underlying the visualizer.
+    pub fn as_sparse_simplegraph(&mut self) -> SparseSimpleGraph {
+        self.graph.clone().base.underlying_graph()
     }
 }
 
@@ -78,10 +94,11 @@ pub(crate) struct GraspAppHandler<'a> {
     pub style: Style,
 
     pub show_settings: bool,
+    pub func_window: FunctionWindow,
 }
 
 impl<'a> GraspAppHandler<'a> {
-    fn new(cc: &eframe::CreationContext<'_>, graph: &'a mut Graph, style: Style) -> Self {
+    fn new(_cc: &eframe::CreationContext<'_>, graph: &'a mut Graph, style: Style) -> Self {
         let mut sandbox = Sandbox::default();
         sandbox.scale(3.0);
 
@@ -91,12 +108,13 @@ impl<'a> GraspAppHandler<'a> {
             style: style,
 
             show_settings: false,
+            func_window: Default::default(),
         }
     }
 }
 
 impl<'a> eframe::App for GraspAppHandler<'a> {
-    fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         TopBottomPanel::top(Id::new("menu_header")).show(ctx, |ui| {
             MenuBar::new().ui(ui, |ui| {
                 header::file_menu(self, ui);
@@ -104,14 +122,18 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 header::view_menu(self, ui);
                 header::tool_menu(self, ui);
             });
-
-            if self.show_settings {
-                Window::new("Settings")
-                    .collapsible(false)
-                    .resizable(false)
-                    .show(ui.ctx(), |ui| windows::settings_window(self, ui));
-            }
         });
+
+        if self.show_settings {
+            Window::new("Settings")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| windows::settings_window(self, ui));
+        }
+
+        if self.func_window.visible {
+            self.func_window.show(self.graph, &self.style, ctx);
+        }
 
         CentralPanel::default().show(ctx, |ui| {
             self.sandbox.update_screen_rect(ui.max_rect());

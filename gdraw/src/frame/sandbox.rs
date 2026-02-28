@@ -2,10 +2,11 @@ use crate::{
     frame::style::Style,
     graph::{
         graph_widget::{EdgeWidget, VertexWidget},
-        storage::{Graph, Vertex, VertexPair},
+        storage::{Graph},
     },
 };
 use eframe::egui::{Pos2, Rect, Response, Ui, Vec2};
+use grasp::graph::{EdgeID, VertexID};
 
 pub(crate) struct Sandbox {
     pub center: Vec2,
@@ -55,14 +56,14 @@ impl Sandbox {
         ui: &mut Ui,
         graph: &Graph,
         style: &Style,
-    ) -> (Vec<(Response, usize)>, Vec<(Response, VertexPair)>) {
+    ) -> (Vec<(Response, VertexID)>, Vec<(Response, EdgeID)>) {
         let mut vertex_vec = Vec::new();
         let mut edge_vec = Vec::new();
 
-        for ([start_index, end_index], edge) in &graph.edge_list {
+        for ((start_index, end_index), edge) in &graph.edge_labels {
             if let (Some(start_vertex), Some(end_vertex)) = (
-                graph.vertex_list.get(start_index),
-                graph.vertex_list.get(end_index),
+                graph.vertex_labels.get(start_index),
+                graph.vertex_labels.get(end_index),
             ) {
                 edge_vec.push((
                     ui.add(EdgeWidget {
@@ -72,13 +73,13 @@ impl Sandbox {
                         start_vertex_center: self.sandbox_to_screen(start_vertex.center),
                         end_vertex_center: self.sandbox_to_screen(end_vertex.center),
                     }),
-                    [*start_index, *end_index],
+                    (*start_index, *end_index),
                 ));
             }
         }
 
         if style.show_vertices {
-            for (&index, vertex) in &graph.vertex_list {
+            for (&index, vertex) in &graph.vertex_labels {
                 let widget = ui.add(VertexWidget {
                     vertex: &vertex,
                     graph: graph,

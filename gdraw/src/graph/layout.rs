@@ -1,12 +1,9 @@
 use core::f32;
-use std::{
-    collections::{HashMap, btree_map::Range},
-    fmt, iter,
-};
+use std::{collections::HashMap, fmt};
 
 use eframe::egui::Vec2;
+use grasp::graph::{GraphTrait, VertexID};
 use rand::prelude::*;
-use rand_chacha::ChaCha8Rng;
 
 use crate::graph::storage::Graph;
 
@@ -14,6 +11,11 @@ use crate::graph::storage::Graph;
 pub(crate) enum PartialLayout {
     None,
     FruchtermanReingold(f32),
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct CommonPartialData {
+    pub vertex_locks: Vec<VertexID>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -29,7 +31,7 @@ impl fmt::Display for LayoutType {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct LayoutConfig {
     pub layout_type: LayoutType,
     pub area: (f32, f32),
@@ -37,9 +39,11 @@ pub struct LayoutConfig {
     pub iterations_per_update: usize,
     pub temperature_decay_factor: f32,
     pub temperature_decay_factor_per_update: f32,
+    pub min_temperature_on_drag: f32,
     pub run_per_update: bool,
 
     pub(crate) partial_data: PartialLayout,
+    pub(crate) common_partial_data: CommonPartialData,
 }
 
 impl Default for LayoutConfig {
@@ -51,8 +55,10 @@ impl Default for LayoutConfig {
             iterations_per_update: 100,
             temperature_decay_factor: 0.95,
             temperature_decay_factor_per_update: 0.9999,
+            min_temperature_on_drag: 0.0003,
             run_per_update: false,
             partial_data: PartialLayout::None,
+            common_partial_data: CommonPartialData::default(),
         }
     }
 }
@@ -71,7 +77,7 @@ pub(crate) fn reapply(graph: &mut Graph) {
 
 // Algorithm from https://reingold.co/force-directed.pdf
 fn fruchterman_reingold(graph: &mut Graph) -> PartialLayout {
-    let config = graph.layout_config;
+    let config = &graph.layout_config;
     let (decay_factor, iterations) = if config.run_per_update {
         (
             config.temperature_decay_factor_per_update,
@@ -82,7 +88,7 @@ fn fruchterman_reingold(graph: &mut Graph) -> PartialLayout {
     };
 
     let area_size = config.area.0 * config.area.1;
-    let edge_length = (area_size / graph.vertices() as f32).sqrt();
+    let edge_length = (area_size / graph.base.vertex_count() as f32).sqrt();
 
     let mut temp = match config.partial_data {
         PartialLayout::FruchtermanReingold(t) => t,
@@ -101,34 +107,36 @@ fn fruchterman_reingold(graph: &mut Graph) -> PartialLayout {
     let mut vertex_displacement: HashMap<usize, Vec2> = HashMap::new();
 
     for _ in 0..iterations {
-        for (v_id, v_vertex) in &graph.vertex_list {
+        for (&v_id, v_vertex) in &graph.vertex_labels {
             let v = v_vertex.center;
 
-            for (u_id, u_vertex) in &graph.vertex_list {
+            for (&u_id, u_vertex) in &graph.vertex_labels {
                 let u = u_vertex.center;
 
                 if v_id != u_id {
-                    *vertex_displacement.entry(*v_id).or_default() += force_rep(v, u);
+                    *vertex_displacement.entry(v_id).or_default() += force_rep(v, u);
                 }
             }
         }
 
-        for (edge, _) in &graph.edge_list {
+        for ((source, target), _) in &graph.edge_labels {
             if let (Some(v_vertex), Some(u_vertex)) = (
-                graph.vertex_list.get(&edge[0]),
-                graph.vertex_list.get(&edge[1]),
+                graph.vertex_labels.get(source),
+                graph.vertex_labels.get(target),
             ) {
                 vertex_displacement
-                    .entry(edge[0])
+                    .entry(*source)
                     .and_modify(|d| *d -= force_att(v_vertex.center, u_vertex.center));
 
                 vertex_displacement
-                    .entry(edge[1])
+                    .entry(*target)
                     .and_modify(|d| *d += force_att(v_vertex.center, u_vertex.center));
             }
         }
 
-        for (id, vertex) in &mut graph.vertex_list {
+        for (id, vertex) in &mut graph.vertex_labels {
+            if graph.layout_config.common_partial_data.vertex_locks.contains(id) {continue;}
+
             let disp = vertex_displacement.get(id).unwrap_or(&Vec2::ZERO);
 
             vertex.center += disp.normalized() * f32::min(disp.length(), temp);
@@ -159,7 +167,7 @@ fn place_randomly(graph: &mut Graph) {
     let area = Vec2::from(graph.layout_config.area);
     let offset = Vec2::splat(0.5);
 
-    graph.vertex_list.values_mut().for_each(|vertex| {
+    graph.vertex_labels.values_mut().for_each(|vertex| {
         vertex.center = area * (Vec2::from(rng.random::<(f32, f32)>()) - offset)
     });
 }

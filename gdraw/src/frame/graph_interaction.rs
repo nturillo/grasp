@@ -1,15 +1,15 @@
 use eframe::egui::{Popup, Response, Ui};
+use grasp::graph::VertexID;
 
 use crate::{
     app::GraspAppHandler,
-    graph::storage::{Graph, VertexPair},
+    graph::storage::{Graph},
 };
 
 fn vertex_primary_click(
     app: &mut GraspAppHandler,
     ui: &mut Ui,
     vertex_id: usize,
-    response: &Response,
 ) {
     let is_selected = app.graph.selected_list.contains(&vertex_id);
     let single_selection = app.graph.selected_list.len() == 1;
@@ -23,9 +23,16 @@ fn vertex_primary_click(
     }
 }
 
-fn vertex_dragged(app: &mut GraspAppHandler, ui: &mut Ui, vertex_id: usize, response: &Response) {
+fn vertex_dragged(app: &mut GraspAppHandler, vertex_id: usize, response: &Response) {
+    if app.graph.layout_config.run_per_update {
+        match &mut app.graph.layout_config.partial_data {
+            crate::graph::layout::PartialLayout::None => (),
+            crate::graph::layout::PartialLayout::FruchtermanReingold(temp) => *temp = temp.max(app.graph.layout_config.min_temperature_on_drag),
+        }
+    }
+
     app.graph
-        .vertex_list
+        .vertex_labels
         .get_mut(&vertex_id)
         .expect("Unexpected error: Interacted with vertex that does not exist.")
         .center += app
@@ -33,7 +40,7 @@ fn vertex_dragged(app: &mut GraspAppHandler, ui: &mut Ui, vertex_id: usize, resp
         .screen_dist_to_sandbox_dist(response.drag_delta());
 }
 
-fn vertex_context_try_get_pair(graph: &mut Graph, vertex_id: &usize) -> Option<VertexPair> {
+fn vertex_context_try_get_pair(graph: &mut Graph, vertex_id: &usize) -> Option<(VertexID, VertexID)> {
     let selected_len = graph.selected_list.len();
 
     if (selected_len == 1 && !graph.selected_list.contains(vertex_id))
@@ -49,7 +56,7 @@ fn vertex_context_try_get_pair(graph: &mut Graph, vertex_id: &usize) -> Option<V
                 .expect("Unexpected error: Vertex selected twice")
         };
 
-        Some([start_vertex, *vertex_id])
+        Some((start_vertex, *vertex_id))
     } else {
         None
     }
@@ -71,7 +78,7 @@ fn vertex_context(app: &mut GraspAppHandler, ui: &mut Ui, vertex_id: &usize) {
     }
 
     if ui.button("Remove Vertex").clicked() {
-        app.graph.remove_vertex(vertex_id);
+        app.graph.remove_vertex(*vertex_id);
     } else if app.graph.selected_list.len() > 1
         && app.graph.selected_list.contains(vertex_id)
         && ui.button("Remove Selection").clicked()
@@ -85,17 +92,26 @@ fn vertex_context(app: &mut GraspAppHandler, ui: &mut Ui, vertex_id: &usize) {
 pub fn handle_vertex_response(
     app: &mut GraspAppHandler,
     ui: &mut Ui,
-    vertex_id: usize,
+    vertex_id: VertexID,
     response: Response,
 ) {
-    if let Some(_) = app.graph.vertex_list.get(&vertex_id) {
+    if let Some(_) = app.graph.vertex_labels.get(&vertex_id) {
         if !Popup::is_any_open(ui.ctx()) {
             if response.clicked() {
-                vertex_primary_click(app, ui, vertex_id, &response);
+                vertex_primary_click(app, ui, vertex_id);
             }
 
-            if response.dragged() && !app.graph.layout_config.run_per_update {
-                vertex_dragged(app, ui, vertex_id, &response);
+            if response.drag_started() {
+                app.graph.layout_config.common_partial_data.vertex_locks.push(vertex_id);
+            }
+
+            if response.dragged() {
+                //app.graph.reset_partial_data();
+                vertex_dragged(app, vertex_id, &response);
+            }
+
+            if response.drag_stopped() {
+                app.graph.layout_config.common_partial_data.vertex_locks.retain(|&v| v != vertex_id);
             }
         }
 
