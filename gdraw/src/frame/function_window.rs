@@ -32,7 +32,7 @@ impl FunctionWindow {
                 "VertexList" => ArgType::VertexList(vec![]),
                 "EdgeList" => ArgType::EdgeList(vec![]),
                 "String" => ArgType::String(String::new()),
-                _ => panic!("Encountered broken function"),
+                _ => panic!("{}", format!("Encountered broken function; unknown type: {}", *ty)),
             });
         }
     }

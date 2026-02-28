@@ -1,7 +1,6 @@
-use linkme::distributed_slice;
-use crate::graph::{EdgeID, UnderlyingGraph, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
+use crate::graph::{EdgeID, VertexID, prelude::{SparseDiGraph}};
 
-#[cfg_attr(feature = "meta", distributed_slice)]
+#[linkme::distributed_slice]
 pub static ALGORITHMS: [FunctionData];
 
 macro_rules! arg_types {
@@ -90,7 +89,16 @@ impl FromArgType for Vec<EdgeID> {
     }
 }
 
-safeish_supported_casts!(i8 [Integer, UnsignedInteger, Vertex], i16 [Integer, UnsignedInteger, Vertex], i32 [Integer, UnsignedInteger, Vertex], i64 [Integer, UnsignedInteger, Vertex], u8 [Integer, UnsignedInteger, Vertex], u16 [Integer, UnsignedInteger, Vertex], u32 [Integer, UnsignedInteger, Vertex], u64 [Integer, UnsignedInteger, Vertex], usize [Integer, UnsignedInteger, Vertex]);
+safeish_supported_casts!(
+    i8 [Integer, UnsignedInteger, Vertex],
+    i16 [Integer, UnsignedInteger, Vertex],
+    i32 [Integer, UnsignedInteger, Vertex],
+    i64 [Integer, UnsignedInteger, Vertex],
+    u8 [Integer, UnsignedInteger, Vertex],
+    u16 [Integer, UnsignedInteger, Vertex],
+    u32 [Integer, UnsignedInteger, Vertex],
+    u64 [Integer, UnsignedInteger, Vertex],
+    usize [Integer, UnsignedInteger, Vertex]);
 
 pub enum ReturnType {
     None(()),

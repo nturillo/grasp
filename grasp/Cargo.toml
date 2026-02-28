@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 pretty_assertions = "1.4.1"
 linkme = {version = "0.3", optional = true}
-macros = {path = "../macros", optional = true}
+macros = {path = "../macros"}
 
 [features]
-meta = ["dep:macros", "dep:linkme"]
+meta = ["macros/meta", "dep:linkme"]
