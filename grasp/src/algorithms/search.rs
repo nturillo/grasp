@@ -137,6 +137,10 @@ N: Number + PartialOrd + Default + Copy + 'a, {
     pub fn distance_to(&self, v: VertexID) -> Option<N> {
         self.dist.get(&v).cloned()
     }
+
+    pub fn predecessors(&self) -> &HashMap<VertexID, VertexID> {
+        &self.prev
+    }
 }
 
 impl<'a, G: GraphTrait, WF, N> Iterator for Dijkstra<'a, G, WF, N>
