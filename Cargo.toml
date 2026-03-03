@@ -1,8 +1,9 @@
 [workspace]
 members = [
     "grasp",
-    "python",
-    "gdraw"
+    "grasp-python",
+    "gdraw",
+    "gdraw-python"
 ]
 
 default-members = [
