@@ -5,7 +5,7 @@ use pyo3::exceptions::PyValueError;
 use grasp::graph::prelude::*;
 use grasp::algorithms::algo_traits::{AlgoTrait};
 
-#[pyclass]
+#[pyclass(name = "SparseGraph")]
 #[derive(Debug)]
 pub struct PySparseGraph {
     inner: SparseSimpleGraph,
@@ -189,7 +189,7 @@ impl PySparseGraph {
     }
 }
 
-#[pyclass]
+#[pyclass(name = "SparseDiGraph")]
 #[derive(Debug)]
 pub struct PySparseDiGraph {
     inner: SparseDiGraph,
