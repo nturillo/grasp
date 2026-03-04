@@ -9,7 +9,7 @@ use crate::{
 };
 use eframe::egui::{
     self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Sense,
-    TopBottomPanel, Vec2, Window,
+    TopBottomPanel, Vec2, Window, Rect, Stroke
 };
 use grasp::graph::{GraphTrait, Set, UnderlyingGraph, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
 
@@ -149,12 +149,30 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 {
                     self.sandbox
                         .create_vertex(coords.to_vec2(), &mut self.graph);
+                    self.graph.selected_list = vec![self.graph.vertex_id];
                 }
 
-                if response.dragged() {
+                if !ui.input(|input| input.modifiers.shift) && response.dragged() {
                     self.sandbox.center -= self
                         .sandbox
                         .screen_dist_to_sandbox_dist(response.drag_delta());
+                }
+
+                if ui.input(|input| input.modifiers.shift) && response.dragged() {
+                    let origin = response.interact_pointer_pos().unwrap();
+                    let rect = Rect::from_two_pos((origin.to_vec2() - response.total_drag_delta().unwrap()).to_pos2(), origin);
+                    ui.painter().rect(rect, 0.0, Color32::TRANSPARENT.blend(Color32::LIGHT_BLUE), Stroke::new(1.0, Color32::from_rgb(80, 150, 255)), egui::StrokeKind::Inside);
+
+                    let ex_rect = rect.expand((self.style.vertex_radius + self.style.outline_thickness) / self.sandbox.scale);
+                    for (id, data) in &self.graph.vertex_labels {
+                        let pos = self.graph.selected_list.iter().position(|v| v == id);
+                        let contained = ex_rect.contains(self.sandbox.sandbox_to_screen(data.center).to_pos2());
+                        if contained && pos.is_none() {
+                            self.graph.selected_list.push(*id);
+                        } else if !contained && pos.is_some() {
+                            self.graph.selected_list.remove(pos.unwrap());
+                        }
+                    }
                 }
 
                 self.sandbox.scale *= (1.0 + self.style.scroll_sensitivity).powf(
