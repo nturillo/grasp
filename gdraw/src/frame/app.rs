@@ -1,20 +1,16 @@
 use crate::{
     frame::{
-        graph_interaction, header,
-        sandbox::{self, Sandbox},
-        style::Style,
-        windows,
+        function_window::FunctionWindow, graph_interaction::{self, handle_vertex_response, vertex_context}, header, sandbox::{self, Sandbox}, style::Style, windows
     },
     graph::{
         layout::{self, LayoutConfig},
         storage::Graph,
     },
 };
-use eframe::egui::{
-    self, CentralPanel, Context, Id, Key, MenuBar, PointerButton, Popup, Response, Sense,
-    TopBottomPanel, Ui, Vec2, Window,
-};
-use grasp::graph::graph_ops::GraphOps;
+use eframe::{egui::{
+    self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Rect, Sense, Stroke, TopBottomPanel, Vec2, Window
+}, epaint::Vertex};
+use grasp::graph::{GraphTrait, Set, UnderlyingGraph, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
 
 pub struct GraspApp {
     pub style: Style,
@@ -58,17 +54,36 @@ impl GraspApp {
     }
 
     /// Loads a graph from anything that implements [`grasp::graph::graph_traits::GraphTrait`]
-    pub fn load<T: GraphOps>(&mut self, graph: &T) {
+    pub fn load<T: GraphTrait + Default>(&mut self, graph: &T) {
         self.graph = Graph::from(graph);
         layout::apply(&mut self.graph);
     }
 
+    /// Create a new [`crate::frame::app::GraspApp`]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the visualizer's graph layout.
+    ///
+    /// Layouts are located at [`crate::graph::layout::LayoutType`]
     pub fn set_layout_config(&mut self, config: LayoutConfig) {
         self.graph.layout_config = config;
+    }
+
+    /// Highlight a set of vertices.
+    pub fn highlight_set<S: Set<VertexID>>(&mut self, set: &S, color: Color32) {
+        self.graph.highlight_set(set, color);
+    }
+
+    /// Returns a copy of the [`grasp::graph::adjacency_list::SparseDiGraph`] underlying the visualizer.
+    pub fn as_sparse_digraph(&mut self) -> SparseDiGraph {
+        self.graph.clone().base
+    }
+
+    /// Returns a copy of the [`grasp::graph::adjacency_list::SparseSimpleGraph`] underlying the visualizer.
+    pub fn as_sparse_simplegraph(&mut self) -> SparseSimpleGraph {
+        self.graph.clone().base.underlying_graph()
     }
 }
 
@@ -78,12 +93,13 @@ pub(crate) struct GraspAppHandler<'a> {
     pub style: Style,
 
     pub show_settings: bool,
+    pub func_window: FunctionWindow,
+    pub vertex_focused: Option<VertexID>,
 }
 
 impl<'a> GraspAppHandler<'a> {
-    fn new(cc: &eframe::CreationContext<'_>, graph: &'a mut Graph, style: Style) -> Self {
-        let mut sandbox = Sandbox::default();
-        sandbox.scale(3.0);
+    fn new(_cc: &eframe::CreationContext<'_>, graph: &'a mut Graph, style: Style) -> Self {
+        let sandbox = Sandbox::default();
 
         Self {
             sandbox: sandbox,
@@ -91,12 +107,15 @@ impl<'a> GraspAppHandler<'a> {
             style: style,
 
             show_settings: false,
+            func_window: Default::default(),
+
+            vertex_focused: None,
         }
     }
 }
 
 impl<'a> eframe::App for GraspAppHandler<'a> {
-    fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         TopBottomPanel::top(Id::new("menu_header")).show(ctx, |ui| {
             MenuBar::new().ui(ui, |ui| {
                 header::file_menu(self, ui);
@@ -104,14 +123,18 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 header::view_menu(self, ui);
                 header::tool_menu(self, ui);
             });
-
-            if self.show_settings {
-                Window::new("Settings")
-                    .collapsible(false)
-                    .resizable(false)
-                    .show(ui.ctx(), |ui| windows::settings_window(self, ui));
-            }
         });
+
+        if self.show_settings {
+            Window::new("Settings")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| windows::settings_window(self, ui));
+        }
+
+        if self.func_window.visible {
+            self.func_window.show(self.graph, &self.style, ctx);
+        }
 
         CentralPanel::default().show(ctx, |ui| {
             self.sandbox.update_screen_rect(ui.max_rect());
@@ -123,38 +146,65 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
             );
 
             if !Popup::is_any_open(ui.ctx()) {
-                if response.clicked()
-                    && let Some(coords) = response.interact_pointer_pos()
-                {
+                let mapped: Vec<(usize, Vec2)> = self.graph.vertex_labels.iter().map(|(id, v)| (*id, v.center)).collect();
+                if response.dragged() && self.vertex_focused.is_some() {
+                    handle_vertex_response(self.graph, &self.sandbox, ui, self.vertex_focused.unwrap(), &response);
+                }
+                if !(response.dragged() && self.vertex_focused.is_none()) && let Some((id, _)) = mapped.iter().rev().find(|(_, data)| if let Some(pos) = ctx.input(|input| input.pointer.hover_pos()) && (pos.to_vec2() - self.sandbox.sandbox_to_screen(*data)).length() <= (self.style.vertex_radius + self.style.outline_thickness) {true} else {false}) {
+                    handle_vertex_response(self.graph, &self.sandbox, ui, *id, &response);
+                    self.vertex_focused = Some(*id);
+                } else if !(response.dragged() && self.vertex_focused.is_some()) {
+                    self.vertex_focused = None;
+
+                    if response.clicked()
+                        && let Some(coords) = response.interact_pointer_pos()
+                    {
+                        self.sandbox
+                            .create_vertex(coords.to_vec2(), &mut self.graph);
+                        self.graph.selected_list = vec![self.graph.vertex_id];
+                    }
+                    else if !ui.input(|input| input.modifiers.shift) && response.dragged() {
+                        self.sandbox.center -= self
+                            .sandbox
+                            .screen_dist_to_sandbox_dist(response.drag_delta());
+                    }
+                    else if ui.input(|input| input.modifiers.shift) && response.dragged() {
+                        let origin = response.interact_pointer_pos().unwrap();
+                        let rect = Rect::from_two_pos((origin.to_vec2() - response.total_drag_delta().unwrap()).to_pos2(), origin);
+                        ui.painter().rect(rect, 0.0, Color32::TRANSPARENT.blend(Color32::LIGHT_BLUE), Stroke::new(1.0, Color32::from_rgb(80, 150, 255)), egui::StrokeKind::Inside);
+
+                        let ex_rect = rect.expand((self.style.vertex_radius + self.style.outline_thickness) / self.sandbox.scale);
+                        for (id, data) in &self.graph.vertex_labels {
+                            let pos = self.graph.selected_list.iter().position(|v| v == id);
+                            let contained = ex_rect.contains(self.sandbox.sandbox_to_screen(data.center).to_pos2());
+                            if contained && pos.is_none() {
+                                self.graph.selected_list.push(*id);
+                            } else if !contained && pos.is_some() {
+                                self.graph.selected_list.remove(pos.unwrap());
+                            }
+                        }
+                    }
+
+                    self.sandbox.scale *= (1.0 + self.style.scroll_sensitivity).powf(
+                            ui.ctx()
+                                .input(|input| input.smooth_scroll_delta)
+                                .y
+                                .clamp(-10.0, 10.0),
+                        );
+                }
+            }
+
+            if let Some(id) = self.vertex_focused {
+                response.context_menu(|ui| vertex_context(self.graph, ui, &id));
+                response.on_hover_text_at_pointer(format!("id: {}", id));
+            } else {
+                response.context_menu(|ui| {
                     self.sandbox
-                        .create_vertex(coords.to_vec2(), &mut self.graph);
-                }
-
-                if response.dragged() {
-                    self.sandbox.center -= self
-                        .sandbox
-                        .screen_dist_to_sandbox_dist(response.drag_delta());
-                }
-
-                self.sandbox.scale(
-                    (1.0 + self.style.scroll_sensitivity).powf(
-                        -ui.ctx()
-                            .input(|input| input.smooth_scroll_delta)
-                            .y
-                            .clamp(-10.0, 10.0),
-                    ),
-                );
+                        .context_menu(ui, response.interact_pointer_pos(), &mut self.graph)
+                });
             }
 
-            response.context_menu(|ui| {
-                self.sandbox
-                    .context_menu(ui, response.interact_pointer_pos(), &mut self.graph)
-            });
-
-            let graph_list = self.sandbox.draw_graph(ui, &self.graph, &self.style);
-            for (vertex_response, vertex_id) in graph_list.0 {
-                graph_interaction::handle_vertex_response(self, ui, vertex_id, vertex_response);
-            }
+            self.sandbox.draw_graph(ui, &self.graph, &self.style);
 
             if self.graph.layout_config.run_per_update {
                 layout::reapply(&mut self.graph);

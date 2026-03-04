@@ -1,14 +1,11 @@
-use crate::graph::layout::{self, PartialLayout};
+use crate::graph::layout::{PartialLayout};
 use eframe::egui::{Color32, Vec2};
-use grasp::graph::{adjacency_list::SparseSimpleGraph, error::GraphError, graph_ops::GraphOps, GraphTrait};
+use grasp::graph::{EdgeID, GraphTrait, Set, VertexID, adjacency_list::SparseDiGraph};
 use std::{
     collections::HashMap,
-    hash::{DefaultHasher, Hash, Hasher},
 };
 
 use crate::graph::layout::LayoutConfig;
-
-pub type VertexPair = [usize; 2];
 
 #[derive(Default, Clone)]
 pub struct Vertex {
@@ -30,59 +27,91 @@ impl Vertex {
 
 #[derive(Default, Clone)]
 pub struct Edge {
-    pub vertex_pair: VertexPair,
+    pub vertex_pair: EdgeID,
+    pub color: Option<Color32>,
 }
 
-#[derive(Default, Clone)]
+impl Edge {
+    pub fn assign_color(&mut self, color: Color32) {
+        self.color = Some(color);
+    }
+
+    pub fn clear_color(&mut self) {
+        self.color = None;
+    }
+
+    pub fn new(pair: EdgeID) -> Self {
+        Self {
+            vertex_pair: pair,
+            color: None,
+        }
+    }
+}
+
 pub struct Graph {
-    pub vertex_list: HashMap<usize, Vertex>,
-    pub edge_list: HashMap<VertexPair, Edge>,
-    pub selected_list: Vec<usize>,
+    pub base: SparseDiGraph,
+    pub vertex_labels: HashMap<VertexID, Vertex>,
+    pub edge_labels: HashMap<EdgeID, Edge>,
+    pub selected_list: Vec<VertexID>,
     pub directed: bool,
     pub layout_config: LayoutConfig,
-
-    vertex_id: usize,
+    pub vertex_id: VertexID,
+}
+impl Default for Graph {
+    fn default() -> Self {
+        Self{base: SparseDiGraph::default(), vertex_labels: HashMap::default(), edge_labels: HashMap::default(), selected_list: Vec::default(), directed: false, layout_config: LayoutConfig::default(), vertex_id: 0}
+    }
+}
+impl Clone for Graph {
+    fn clone(&self) -> Self {
+        Self { base: clone_graph(&self.base), vertex_labels: self.vertex_labels.clone(), edge_labels: self.edge_labels.clone(), selected_list: self.selected_list.clone(), directed: self.directed.clone(), layout_config: self.layout_config.clone(), vertex_id: 0 }
+    }
 }
 
 impl Graph {
     pub fn create_vertex(&mut self, center: Vec2) {
         self.reset_partial_data();
-        while self.vertex_list.contains_key(&self.vertex_id) {
+        while self.base.vertices().any(|f| f == self.vertex_id) {
             self.vertex_id += 1;
         }
 
-        self.vertex_list.insert(
-            self.vertex_id,
-            Vertex {
+        self.base.add_vertex(self.vertex_id);
+        self.vertex_labels.insert(self.vertex_id, Vertex {
                 center: center,
                 id: self.vertex_id,
                 color: Default::default(),
-            },
-        );
+            });
     }
 
-    pub fn insert_vertex(&mut self, vertex: Vertex) -> Option<Vertex> {
+    pub fn insert_vertex(&mut self, vertex: Vertex) -> bool {
+        if self.vertex_labels.contains_key(&vertex.id) {
+            return false;
+        }
+        self.base.add_vertex(vertex.id);
+        self.vertex_labels.insert(vertex.id, vertex);
         self.reset_partial_data();
-        self.vertex_list.insert(vertex.id, vertex)
+
+        return true;
     }
 
-    pub fn create_edge(&mut self, pair: VertexPair) {
+    pub fn create_edge(&mut self, pair: EdgeID) {
         self.reset_partial_data();
-        self.edge_list.insert(pair, Edge { vertex_pair: pair });
+        self.base.add_edge(pair);
+        self.edge_labels.insert(pair, Edge::new(pair));
     }
 
-    pub fn has_edge(&self, pair: VertexPair) -> bool {
-        self.edge_list.contains_key(&pair)
-            || (!self.directed && self.edge_list.contains_key(&[pair[1], pair[0]]))
+    pub fn has_edge(&self, pair: EdgeID) -> bool {
+        self.base.has_edge(pair) || (!self.directed && self.base.has_edge((pair.1, pair.0)))
     }
 
-    pub fn remove_vertex(&mut self, vertex_id: &usize) -> Option<Vertex> {
+    pub fn remove_vertex(&mut self, vertex_id: VertexID) -> Option<Vertex> {
         self.reset_partial_data();
-        match self.vertex_list.remove(vertex_id) {
+        match self.vertex_labels.remove(&vertex_id) {
             None => None,
             Some(vertex) => {
-                self.edge_list.retain(|edge, _| !edge.contains(&vertex_id));
-                self.selected_list.retain(|vert| vert != vertex_id);
+                let _ = self.base.delete_vertex(vertex.id);
+                self.edge_labels.retain(|&(source, target), _| source != vertex_id && target != vertex_id);
+                self.selected_list.retain(|&v| v != vertex.id);
 
                 Some(vertex)
             }
@@ -91,36 +120,56 @@ impl Graph {
 
     pub fn remove_selected(&mut self) {
         self.reset_partial_data();
-        self.vertex_list
-            .retain(|vert, _| !self.selected_list.contains(vert));
-        self.selected_list = vec![];
+        self.selected_list.drain(..).for_each(|vert| {
+            self.edge_labels.retain(|&(source, target), _| source != vert && target != vert);
+            self.vertex_labels.remove(&vert);
+            let _ = self.base.delete_vertex(vert);} );
     }
 
-    pub fn remove_edge(&mut self, pair: VertexPair) {
+    pub fn remove_edge(&mut self, pair: EdgeID) {
         self.reset_partial_data();
-        self.edge_list
-            .retain(|edge, _| edge != &pair && (self.directed || edge != &[pair[1], pair[0]]));
+
+        self.edge_labels.remove(&pair);
+        self.base.delete_edge(pair);
+
+        if !self.directed {
+            let pair = (pair.1, pair.0);
+            self.edge_labels.remove(&pair);
+            self.base.delete_edge(pair);
+        }
     }
 
-    pub fn vertices(&self) -> usize {
-        self.vertex_list.len()
-    }
-
-    pub fn get_hash(&self) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        self.vertex_list
-            .values()
-            .for_each(|val| val.id.hash(&mut hasher));
-        self.edge_list.keys().for_each(|val| val.hash(&mut hasher));
-        hasher.finish()
-    }
-
-    fn reset_partial_data(&mut self) {
+    pub fn reset_partial_data(&mut self) {
         self.layout_config.partial_data = PartialLayout::None;
     }
+
+    pub fn highlight_set<S: Set<VertexID>>(&mut self, set: &S, color: Color32) {
+        set.iter().for_each(|&vertex| {
+            self.vertex_labels.get_mut(&vertex)
+            .map(|v| v.assign_color(color));
+        });
+    }
+
+    pub fn highlight_edges<S: Set<EdgeID>>(&mut self, set: &S, color: Color32) {
+        set.iter().for_each(|&edge| {
+            self.edge_labels.get_mut(&edge)
+            .map(|e| e.assign_color(color));
+
+            if !self.directed {
+                self.edge_labels.get_mut(&(edge.1, edge.0))
+                .map(|e| e.assign_color(color));
+            }
+        });
+    }
+
+    pub fn clear_highlights(&mut self) {
+        self.vertex_labels.iter_mut().for_each(|(_, val)| val.clear_color() );
+        self.edge_labels.iter_mut().for_each(|(_, val)| val.clear_color() );
+    }
+
 }
 
-impl<G: GraphOps> From<&G> for Graph {
+impl<G: GraphTrait + Default> From<&G> for Graph {
     fn from(provider: &G) -> Self {
         let mut graph = Graph::default();
 
@@ -133,9 +182,23 @@ impl<G: GraphOps> From<&G> for Graph {
         }
 
         for edge in provider.edges() {
-            graph.create_edge([edge.0, edge.1]);
+            graph.create_edge((edge.0, edge.1));
         }
 
         graph
     }
+}
+
+pub fn clone_graph(in_graph: &SparseDiGraph) -> SparseDiGraph {
+    let mut graph = SparseDiGraph::default();
+
+    for vertex in in_graph.vertices() {
+        graph.add_vertex(vertex);
+    }
+
+    for edge in in_graph.edges() {
+        graph.add_edge(edge);
+    }
+
+    graph
 }

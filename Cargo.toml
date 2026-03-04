@@ -2,10 +2,11 @@
 members = [
     "grasp",
     "python",
-    "gdraw"
-]
+    "gdraw",
+    "macros"]
 
 default-members = [
     "grasp",
     "gdraw",
+    "macros",
 ]
