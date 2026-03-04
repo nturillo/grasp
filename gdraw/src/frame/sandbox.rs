@@ -12,6 +12,7 @@ pub(crate) struct Sandbox {
     pub center: Vec2,
     pub size: Vec2,
     pub screen_rect: Rect,
+    pub scale: f32,
 
     last_context_location: Pos2,
 }
@@ -21,6 +22,7 @@ impl Default for Sandbox {
         Self {
             center: Vec2::new(0.0, 0.0),
             size: Vec2::new(1.0, 1.0),
+            scale: 1.0,
             screen_rect: Rect::NOTHING,
             last_context_location: Pos2::ZERO,
         }
@@ -30,21 +32,21 @@ impl Default for Sandbox {
 impl Sandbox {
     pub fn sandbox_to_screen(&self, sandbox_coord: Vec2) -> Vec2 {
         self.screen_rect.center().to_vec2()
-            + (sandbox_coord - self.center) * self.screen_rect.size() / self.size
+            + (sandbox_coord - self.center) * self.screen_rect.size() / (self.size * self.scale)
     }
 
     pub fn screen_to_sandbox(&self, screen_coord: Vec2) -> Vec2 {
         self.center
-            + (screen_coord - self.screen_rect.center().to_vec2()) * self.size
+            + (screen_coord - self.screen_rect.center().to_vec2()) * (self.size * self.scale)
                 / self.screen_rect.size()
     }
 
     pub fn sandbox_dist_to_screen_dist(&self, sandbox_dist: Vec2) -> Vec2 {
-        sandbox_dist * self.screen_rect.size() / self.size
+        sandbox_dist * self.screen_rect.size() / (self.size * self.scale)
     }
 
     pub fn screen_dist_to_sandbox_dist(&self, screen_dist: Vec2) -> Vec2 {
-        screen_dist * self.size / self.screen_rect.size()
+        screen_dist * (self.size * self.scale) / self.screen_rect.size()
     }
 
     pub fn create_vertex(&self, screen_coord: Vec2, graph: &mut Graph) {
@@ -115,7 +117,8 @@ impl Sandbox {
         self.screen_rect = rect;
     }
 
-    pub fn scale(&mut self, factor: f32) {
-        self.size *= factor;
+    pub fn reset(&mut self) {
+        self.center = Vec2::new(0.0, 0.0);
+        self.scale = 1.0;
     }
 }

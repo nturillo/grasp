@@ -99,8 +99,7 @@ pub(crate) struct GraspAppHandler<'a> {
 
 impl<'a> GraspAppHandler<'a> {
     fn new(_cc: &eframe::CreationContext<'_>, graph: &'a mut Graph, style: Style) -> Self {
-        let mut sandbox = Sandbox::default();
-        sandbox.scale(3.0);
+        let sandbox = Sandbox::default();
 
         Self {
             sandbox: sandbox,
@@ -158,14 +157,12 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                         .screen_dist_to_sandbox_dist(response.drag_delta());
                 }
 
-                self.sandbox.scale(
-                    (1.0 + self.style.scroll_sensitivity).powf(
-                        -ui.ctx()
+                self.sandbox.scale *= (1.0 + self.style.scroll_sensitivity).powf(
+                        ui.ctx()
                             .input(|input| input.smooth_scroll_delta)
                             .y
                             .clamp(-10.0, 10.0),
-                    ),
-                );
+                    );
             }
 
             response.context_menu(|ui| {

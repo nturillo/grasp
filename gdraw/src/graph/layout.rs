@@ -50,7 +50,7 @@ impl Default for LayoutConfig {
     fn default() -> Self {
         Self {
             layout_type: LayoutType::FruchtermanReingold,
-            area: (2.0, 2.0),
+            area: (0.8, 0.8),
             iterations: 3000,
             iterations_per_update: 100,
             temperature_decay_factor: 0.95,

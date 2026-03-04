@@ -79,8 +79,8 @@ pub fn edit_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
 
 pub fn view_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option<()>> {
     ui.menu_button("View", |ui| {
-        if ui.button("TODO").clicked() {
-            ui.close();
+        if ui.button("Reset View").clicked() {
+            app.sandbox.reset();
         }
     })
 }
