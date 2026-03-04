@@ -1,16 +1,15 @@
 use crate::{
     frame::{
-        function_window::FunctionWindow, graph_interaction, header, sandbox::{self, Sandbox}, style::Style, windows
+        function_window::FunctionWindow, graph_interaction::{self, handle_vertex_response, vertex_context}, header, sandbox::{self, Sandbox}, style::Style, windows
     },
     graph::{
         layout::{self, LayoutConfig},
         storage::Graph,
     },
 };
-use eframe::egui::{
-    self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Sense,
-    TopBottomPanel, Vec2, Window, Rect, Stroke
-};
+use eframe::{egui::{
+    self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Rect, Sense, Stroke, TopBottomPanel, Vec2, Window
+}, epaint::Vertex};
 use grasp::graph::{GraphTrait, Set, UnderlyingGraph, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
 
 pub struct GraspApp {
@@ -95,6 +94,7 @@ pub(crate) struct GraspAppHandler<'a> {
 
     pub show_settings: bool,
     pub func_window: FunctionWindow,
+    pub vertex_focused: Option<VertexID>,
 }
 
 impl<'a> GraspAppHandler<'a> {
@@ -108,6 +108,8 @@ impl<'a> GraspAppHandler<'a> {
 
             show_settings: false,
             func_window: Default::default(),
+
+            vertex_focused: None,
         }
     }
 }
@@ -144,54 +146,65 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
             );
 
             if !Popup::is_any_open(ui.ctx()) {
-                if response.clicked()
-                    && let Some(coords) = response.interact_pointer_pos()
-                {
-                    self.sandbox
-                        .create_vertex(coords.to_vec2(), &mut self.graph);
-                    self.graph.selected_list = vec![self.graph.vertex_id];
+                let mapped: Vec<(usize, Vec2)> = self.graph.vertex_labels.iter().map(|(id, v)| (*id, v.center)).collect();
+                if response.dragged() && self.vertex_focused.is_some() {
+                    handle_vertex_response(self.graph, &self.sandbox, ui, self.vertex_focused.unwrap(), &response);
                 }
+                if !(response.dragged() && self.vertex_focused.is_none()) && let Some((id, _)) = mapped.iter().rev().find(|(_, data)| if let Some(pos) = ctx.input(|input| input.pointer.hover_pos()) && (pos.to_vec2() - self.sandbox.sandbox_to_screen(*data)).length() <= (self.style.vertex_radius + self.style.outline_thickness) {true} else {false}) {
+                    handle_vertex_response(self.graph, &self.sandbox, ui, *id, &response);
+                    self.vertex_focused = Some(*id);
+                } else if !(response.dragged() && self.vertex_focused.is_some()) {
+                    self.vertex_focused = None;
 
-                if !ui.input(|input| input.modifiers.shift) && response.dragged() {
-                    self.sandbox.center -= self
-                        .sandbox
-                        .screen_dist_to_sandbox_dist(response.drag_delta());
-                }
+                    if response.clicked()
+                        && let Some(coords) = response.interact_pointer_pos()
+                    {
+                        self.sandbox
+                            .create_vertex(coords.to_vec2(), &mut self.graph);
+                        self.graph.selected_list = vec![self.graph.vertex_id];
+                    }
+                    else if !ui.input(|input| input.modifiers.shift) && response.dragged() {
+                        self.sandbox.center -= self
+                            .sandbox
+                            .screen_dist_to_sandbox_dist(response.drag_delta());
+                    }
+                    else if ui.input(|input| input.modifiers.shift) && response.dragged() {
+                        let origin = response.interact_pointer_pos().unwrap();
+                        let rect = Rect::from_two_pos((origin.to_vec2() - response.total_drag_delta().unwrap()).to_pos2(), origin);
+                        ui.painter().rect(rect, 0.0, Color32::TRANSPARENT.blend(Color32::LIGHT_BLUE), Stroke::new(1.0, Color32::from_rgb(80, 150, 255)), egui::StrokeKind::Inside);
 
-                if ui.input(|input| input.modifiers.shift) && response.dragged() {
-                    let origin = response.interact_pointer_pos().unwrap();
-                    let rect = Rect::from_two_pos((origin.to_vec2() - response.total_drag_delta().unwrap()).to_pos2(), origin);
-                    ui.painter().rect(rect, 0.0, Color32::TRANSPARENT.blend(Color32::LIGHT_BLUE), Stroke::new(1.0, Color32::from_rgb(80, 150, 255)), egui::StrokeKind::Inside);
-
-                    let ex_rect = rect.expand((self.style.vertex_radius + self.style.outline_thickness) / self.sandbox.scale);
-                    for (id, data) in &self.graph.vertex_labels {
-                        let pos = self.graph.selected_list.iter().position(|v| v == id);
-                        let contained = ex_rect.contains(self.sandbox.sandbox_to_screen(data.center).to_pos2());
-                        if contained && pos.is_none() {
-                            self.graph.selected_list.push(*id);
-                        } else if !contained && pos.is_some() {
-                            self.graph.selected_list.remove(pos.unwrap());
+                        let ex_rect = rect.expand((self.style.vertex_radius + self.style.outline_thickness) / self.sandbox.scale);
+                        for (id, data) in &self.graph.vertex_labels {
+                            let pos = self.graph.selected_list.iter().position(|v| v == id);
+                            let contained = ex_rect.contains(self.sandbox.sandbox_to_screen(data.center).to_pos2());
+                            if contained && pos.is_none() {
+                                self.graph.selected_list.push(*id);
+                            } else if !contained && pos.is_some() {
+                                self.graph.selected_list.remove(pos.unwrap());
+                            }
                         }
                     }
+
+                    self.sandbox.scale *= (1.0 + self.style.scroll_sensitivity).powf(
+                            ui.ctx()
+                                .input(|input| input.smooth_scroll_delta)
+                                .y
+                                .clamp(-10.0, 10.0),
+                        );
                 }
-
-                self.sandbox.scale *= (1.0 + self.style.scroll_sensitivity).powf(
-                        ui.ctx()
-                            .input(|input| input.smooth_scroll_delta)
-                            .y
-                            .clamp(-10.0, 10.0),
-                    );
             }
 
-            response.context_menu(|ui| {
-                self.sandbox
-                    .context_menu(ui, response.interact_pointer_pos(), &mut self.graph)
-            });
-
-            let graph_list = self.sandbox.draw_graph(ui, &self.graph, &self.style);
-            for (vertex_response, vertex_id) in graph_list.0 {
-                graph_interaction::handle_vertex_response(self, ui, vertex_id, vertex_response);
+            if let Some(id) = self.vertex_focused {
+                response.context_menu(|ui| vertex_context(self.graph, ui, &id));
+                response.on_hover_text_at_pointer(format!("id: {}", id));
+            } else {
+                response.context_menu(|ui| {
+                    self.sandbox
+                        .context_menu(ui, response.interact_pointer_pos(), &mut self.graph)
+                });
             }
+
+            self.sandbox.draw_graph(ui, &self.graph, &self.style);
 
             if self.graph.layout_config.run_per_update {
                 layout::reapply(&mut self.graph);
