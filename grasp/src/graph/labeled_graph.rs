@@ -1,6 +1,5 @@
-use crate::graph::{ArbitraryIDGraph, GraphMut, EdgeType, error::GraphError, set::Set};
+use crate::graph::prelude::*;
 
-use super::{GraphTrait, VertexID, VertexMap, EdgeID, graph_ops::*, DiGraph, SimpleGraph};
 use std::collections::HashMap;
 
 /// Graphs that allow setting labels to vertices and edges

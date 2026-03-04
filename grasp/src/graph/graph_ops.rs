@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use crate::graph::{ArbitraryIDGraph, EdgeID, VertexID, set::Set};
-use super::{GraphTrait, SimpleGraph, VertexMap};
+use crate::graph::prelude::*;
 
 /// Graph operations that are agnostic to simple graphs and digraphs
 /// graph_builder is a FnOnce which creates a Graph to store the result in, Default::default works for graphs that are Default.

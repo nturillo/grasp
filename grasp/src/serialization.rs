@@ -1,4 +1,4 @@
-use crate::graph::{EdgeID, SimpleGraph, VertexID};
+use crate::graph::prelude::*;
 
 pub fn to_dot<G: SimpleGraph>(g: G) -> String {
     let mut s= "graph {\n".to_string();

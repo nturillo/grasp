@@ -1,7 +1,5 @@
 //! Adjacency list implementation of graph
-use crate::graph::{DigraphProjection, EdgeID, SimpleView, UnderlyingView, VertexID, error::GraphError};
-
-use super::{GraphTrait, GraphMut, ArbitraryIDGraph, SimpleGraph, DiGraph, graph_ops::*, set::Set};
+use crate::graph::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 
