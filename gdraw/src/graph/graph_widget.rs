@@ -34,7 +34,7 @@ impl<'a> Widget for VertexWidget<'a> {
             },
         );
 
-        let response = ui.allocate_rect(screen_rect, Sense::click_and_drag());
+        let response = ui.allocate_rect(screen_rect, Sense::click_and_drag()).on_hover_text(format!("id: {}", self.vertex.id));
 
         ui.painter().circle(
             screen_rect.center(),
