@@ -74,6 +74,7 @@ impl Sandbox {
                         style: style,
                         start_vertex_center: self.sandbox_to_screen(start_vertex.center),
                         end_vertex_center: self.sandbox_to_screen(end_vertex.center),
+                        scale: self.scale,
                     }),
                     (*start_index, *end_index),
                 ));
@@ -87,6 +88,7 @@ impl Sandbox {
                     graph: graph,
                     style: style,
                     screen_center: self.sandbox_to_screen(vertex.center),
+                    scale: self.scale,
                 });
 
                 vertex_vec.push((widget, index));
