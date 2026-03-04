@@ -1,17 +1,17 @@
 use std::collections::{HashMap, HashSet, VecDeque};
-use crate::graph::set::Set;
-use super::{GraphTrait, VertexID, EdgeID, VertexMap, SimpleGraph};
+use crate::graph::{ArbitraryIDGraph, EdgeID, VertexID, set::Set};
+use super::{GraphTrait, SimpleGraph, VertexMap};
 
 /// Graph operations that are agnostic to simple graphs and digraphs
 /// graph_builder is a FnOnce which creates a Graph to store the result in, Default::default works for graphs that are Default.
-pub trait GraphOps: GraphTrait+Sized{
+pub trait GraphOps: GraphTrait+Sized+ArbitraryIDGraph{
     /// Places subgraph from a set of vertices into subgraph
     fn build_subgraph_vertex(&self, vertices: impl IntoIterator<Item=VertexID>, subgraph: &mut Self) {
         for vertex in vertices{
             subgraph.add_vertex(vertex);
         }
         for (v1, v2) in self.edges(){
-            if subgraph.contains(v1) && subgraph.contains(v2) {
+            if subgraph.has_vertex(v1) && subgraph.has_vertex(v2) {
                 subgraph.add_edge((v1, v2));
             }
         }
@@ -78,7 +78,7 @@ pub trait GraphOps: GraphTrait+Sized{
             let mut component = HashSet::default(); component.insert(root);
             // start building 
             while let Some(v) = stack.pop_front(){
-                for neighbor in self.neighbors(v).unwrap().iter(){
+                for neighbor in self.neighbors(v).iter(){
                     if unvisited.contains(neighbor) {
                         unvisited.remove(neighbor); 
                         stack.push_back(*neighbor);
@@ -183,7 +183,7 @@ pub trait SimpleGraphOps: GraphOps+SimpleGraph{
 pub mod test{
     use std::collections::HashSet;
 
-    use crate::graph::{prelude::*, set::VertexSet};
+    use crate::graph::prelude::*;
 
     /// Assures Graph Ops functionality
     pub fn graph_ops_test<G: GraphOps+Default>(){
@@ -209,12 +209,12 @@ pub mod test{
         let mut disc_graph = G::default();
         disc_graph.add_edge((0, 1)); disc_graph.add_edge((2, 3));
         let components = disc_graph.get_components();
-        let comp_1:VertexSet<_> = HashSet::from([0, 1]).into();
-        let comp_2:VertexSet<_> = HashSet::from([2, 3]).into();
+        let comp_1 = HashSet::from([0, 1]);
+        let comp_2 = HashSet::from([2, 3]);
         assert!(components.len()==2);
         assert!(
-            comp_1 == (&components[0]).into() && comp_2 == (&components[1]).into() || 
-            comp_1 == (&components[1]).into() && comp_2 == (&components[0]).into()
+            comp_1.set_eq(&components[0]) && comp_2.set_eq(&components[1]) ||
+            comp_1.set_eq(&components[1]) && comp_2.set_eq(&components[0])
         );
     }
 

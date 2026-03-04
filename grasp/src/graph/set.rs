@@ -1,61 +1,72 @@
-use std::{collections::HashSet, ops::{Deref, DerefMut}, usize};
-use crate::graph::VertexID;
+use std::{collections::HashSet, hash::Hash, marker::PhantomData};
 
 pub trait Set {
-    type Item;
+    type Item: Eq;
 
     fn contains(&self, v: &Self::Item) -> bool;
-    fn iter(&self) -> impl Iterator<Item = &Self::Item>;
+    fn iter<'a>(&'a self) -> impl Iterator<Item = &'a Self::Item>;
 
-    fn count(&self) -> usize {self.iter().count()}
+    /// Default O(n) operation using iter.count
+    fn len(&self) -> usize {self.iter().count()}
+    fn is_empty(&self) -> bool {self.iter().next().is_some()}
+    fn set_eq<S: Set<Item = Self::Item>>(&self, other: &S) -> bool {
+        self.iter().all(|v| other.contains(v)) &&
+        other.iter().all(|v| self.contains(v))
+    }
+    fn is_disjoint<S: Set<Item = Self::Item>>(&self, other: &S) -> bool{
+        self.iter().all(|v| !other.contains(v))
+    }
 
-    fn self_union(self, other: Self) -> impl Set<Item = Self::Item> 
+    fn filter(self, filter: impl Fn(&Self, &Self::Item) -> bool) -> impl Set<Item = Self::Item> 
+    where Self: Sized{
+        SetFilter::new(self, filter)
+    }
+
+    fn union_with(self, other: impl Set<Item = Self::Item>) -> impl Set<Item = Self::Item> 
     where Self: Sized{
         SetUnion::new(self, other)
     }
-    fn self_intersection(self, other: Self) -> impl Set<Item = Self::Item> 
-    where Self: Sized{
+    fn intersection_with(self, other: impl Set<Item = Self::Item>) -> impl Set<Item = Self::Item> 
+    where Self: Sized {
         SetIntersection::new(self, other)
     }
-    fn self_difference(self, other: Self) -> impl Set<Item = Self::Item> 
-    where Self: Sized{
+    fn difference_with(self, other: impl Set<Item = Self::Item>) -> impl Set<Item = Self::Item> 
+    where Self: Sized {
         SetDifference::new(self, other)
     }
 
-    fn union(self, other: impl IntoSet<Item = Self::Item>) -> impl Set<Item = Self::Item> 
-    where Self: Sized {
-        SetUnion::new(self, other.into_set())
-    }
-    fn intersection(self, other: impl IntoSet<Item = Self::Item>) -> impl Set<Item = Self::Item> 
-    where Self: Sized {
-        SetIntersection::new(self, other.into_set())
-    }
-    fn difference(self, other: impl IntoSet<Item = Self::Item>) -> impl Set<Item = Self::Item> 
-    where Self: Sized {
-        SetDifference::new(self, other.into_set())
-    }
+    fn union(self, other: Self) -> impl Set<Item = Self::Item> where Self: Sized{self.union_with(other)}
+    fn intersection(self, other: Self) -> impl Set<Item = Self::Item> where Self: Sized{self.intersection_with(other)}
+    fn difference(self, other: Self) -> impl Set<Item = Self::Item> where Self: Sized{self.difference_with(other)}
 }
 impl<'a, S: Set> Set for &'a S{
     type Item = S::Item;
     fn contains(&self, v: &Self::Item) -> bool {
-        S::contains(self, v)
+        (*self).contains(v)
     }
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> {
-        S::iter(self)
+    fn len(&self) -> usize {
+        (*self).len()
+    }
+    fn iter<'b>(&'b self) -> impl Iterator<Item = &'b Self::Item> {
+        (**self).iter()
+    }
+    fn is_empty(&self) -> bool {
+        (*self).is_empty()
+    }
+    fn set_eq<V: Set<Item = Self::Item>>(&self, other: &V) -> bool {
+        (*self).set_eq(other)
+    }
+    fn is_disjoint<V: Set<Item = Self::Item>>(&self, other: &V) -> bool {
+        (*self).is_disjoint(other)
     }
 }
-
-pub trait IntoSet{
-    type Item;
-    type IntoSetType: Set<Item = Self::Item>;
-    fn into_set(self) -> Self::IntoSetType;
-}
-impl<S: Set> IntoSet for S{
+impl<S: Set> Set for Option<S>{
     type Item = S::Item;
-    type IntoSetType = S;
-    #[inline]
-    fn into_set(self) -> Self::IntoSetType {
-        self
+    fn contains(&self, v: &Self::Item) -> bool {
+        self.as_ref().is_some_and(|s| s.contains(v))
+    }
+    fn iter<'a>(&'a self) -> impl Iterator<Item = &'a Self::Item> {
+        self.iter().map(|s| s.iter()).flatten()
     }
 }
 
@@ -110,73 +121,58 @@ impl<A, B> Set for SetDifference<A, B> where A: Set, B: Set<Item = A::Item>{
     }
 }
 
-/*
-    Helper Struct for Equality
-*/
+pub struct SetFilter<A, F>{
+    set: A,
+    filter: F
+}
+impl<A, F> SetFilter<A, F>{
+    pub fn new(set: A, filter: F) -> Self{Self{set, filter}}
+}
+impl<A, F> Set for SetFilter<A, F> where A: Set, F: Fn(&A, &A::Item) -> bool{
+    type Item = A::Item;
+    fn contains(&self, v: &Self::Item) -> bool {
+        (self.filter)(&self.set, v)
+    }
+    fn iter<'a>(&'a self) -> impl Iterator<Item = &'a Self::Item> {
+        self.set.iter().filter(|v| (self.filter)(&self.set, v))
+    }
+}
 
-pub struct VertexSet<S: Set<Item = VertexID>>{
-    set: S
-}
-impl<S: Set<Item = VertexID>> Deref for VertexSet<S>{
-    type Target = S;
-    fn deref(&self) -> &Self::Target {
-        &self.set
-    }
-}
-impl<S: Set<Item = VertexID>> DerefMut for VertexSet<S>{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.set
-    }
-}
-impl<S: Set<Item = VertexID>> From<S> for VertexSet<S>{
-    fn from(value: S) -> Self {
-        Self{set: value}
-    }
-}
-impl<S1, S2> PartialEq<VertexSet<S2>> for VertexSet<S1> where S1: Set<Item = VertexID>, S2: Set<Item = VertexID>{
-    fn eq(&self, other: &VertexSet<S2>) -> bool {
-        self.iter().all(|v| other.contains(v)) &&
-        other.iter().all(|v| self.contains(v))
-    }
-}
 
 /*
     Default Implementations
 */
 
-impl Set for HashSet<VertexID>{
-    type Item = VertexID;
+impl<V: Eq+Hash> Set for HashSet<V>{
+    type Item = V;
     fn contains(&self, v: &Self::Item) -> bool {
         HashSet::contains(self, v)
     }
     fn iter(&self) -> impl Iterator<Item = &Self::Item> {
         HashSet::iter(self)
     }
-    fn count(&self) -> usize {
+    fn len(&self) -> usize {
         HashSet::len(self)
     }
-}
-impl<'a> Set for HashSet<&'a VertexID>{
-    type Item = VertexID;
-    fn contains(&self, v: &Self::Item) -> bool {
-        HashSet::contains(self, v)
+    fn is_empty(&self) -> bool {
+        HashSet::is_empty(self)
     }
-    fn count(&self) -> usize {
-        HashSet::len(self)
-    }
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> {
-        HashSet::iter(self).map(|v| *v)
+    fn set_eq<S: Set<Item = Self::Item>>(&self, other: &S) -> bool {
+        self.len() == other.len() &&
+        self.iter().all(|v| other.contains(v))
     }
 }
-impl<V: PartialEq, const U: usize> Set for [V; U] where{
+
+impl<V: Eq, const U: usize> Set for [V; U] where{
     type Item = V;
     fn contains(&self, v: &Self::Item) -> bool {for i in self {if i==v {return true;}}return false;}
-    fn count(&self) -> usize {U}
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> {IntoIterator::into_iter([])}
+    fn iter(&self) -> impl Iterator<Item = &Self::Item> {<[V]>::iter(self)}
 }
-impl Set for (){
-    type Item = VertexID;
+
+pub struct EmptyVertexSet<V>(PhantomData<V>);
+impl<V> Default for EmptyVertexSet<V>{fn default() -> Self {Self(PhantomData::default())}}
+impl<V: Eq> Set for EmptyVertexSet<V>{
+    type Item = V;
     fn contains(&self, _: &Self::Item) -> bool {false}
-    fn count(&self) -> usize {0}
     fn iter(&self) -> impl Iterator<Item = &Self::Item> {[].iter()}
 }

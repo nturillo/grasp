@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use grasp::graph::prelude::{SparseSimpleGraph, GraphTrait, VertexID, GraphError, Set};
+use grasp::graph::prelude::*;
 use grasp::algorithms::algo_traits::AlgoTrait;
 
 #[pyclass]
@@ -32,13 +32,8 @@ impl PySparseGraph {
         self.inner.edge_count()
     }
 
-    fn neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
-        self.inner
-            .neighbors(v)
-            .map(|s| s.iter().copied().collect())
-            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("Vertex {} not in graph", v)
-            ))
+    fn neighbors(&self, v: usize) -> Vec<usize> {
+        self.inner.neighbors(v).iter().copied().collect()
     }
 
     fn bfs(&self, source: usize) -> PyResult<Vec<usize>> {

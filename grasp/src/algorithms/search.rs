@@ -58,7 +58,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
 
 impl<'a, G:SimpleGraph, F:Frontier> TraversalIter<'a, G, F> {
     pub fn from_source(source: VertexID, g: &'a G) -> Result<Self, GraphError> {
-        if !g.contains(source) {
+        if !g.has_vertex(source) {
             return Err(GraphError::VertexNotInGraph(source));
         }
 
@@ -79,9 +79,7 @@ impl<'a, G:SimpleGraph, F:Frontier> Iterator for TraversalIter<'a, G, F> {
     fn next(&mut self) -> Option<Self::Item> {
         let v = self.frontier.pop()?;
         
-        for u in self.g.neighbors(v)
-            .expect("graph should have vertex")
-            .iter()
+        for u in self.g.neighbors(v).iter()
         {
             if self.visited.contains(u) {
                 continue;
@@ -98,7 +96,7 @@ impl<'a, G: GraphTrait, WF, N> Dijkstra<'a, G, WF, N>
 where WF: Fn(&G, EdgeID) -> Option<N> + 'a,
 N: Number + PartialOrd + Default + Copy + 'a, {
     pub fn from_source(source: VertexID, g: &'a G, weight: WF) -> Result<Self, GraphError> {
-        if !g.contains(source) {
+        if !g.has_vertex(source) {
             return Err(GraphError::VertexNotInGraph(source));
         }
 
@@ -159,10 +157,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
             }
             self.finished.insert(v);
 
-            let neighbor_list = match self.g.neighbors(v) {
-                Some(n) => n,
-                None => continue,
-            };
+            let neighbor_list = self.g.neighbors(v);
 
             for u in neighbor_list.iter() {
                 let edge = (v, *u);

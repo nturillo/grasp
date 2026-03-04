@@ -1,4 +1,4 @@
-use crate::graph::set::Set;
+use crate::graph::{ArbitraryIDGraph, GraphMut, EdgeType, error::GraphError, set::Set};
 
 use super::{GraphTrait, VertexID, VertexMap, EdgeID, graph_ops::*, DiGraph, SimpleGraph};
 use std::collections::HashMap;
@@ -12,7 +12,7 @@ pub trait LabeledGraph{
     fn get_vertex_label(&self, v: VertexID) -> Option<&Self::VertexData>;
     fn get_edge_label(&self, e: EdgeID) -> Option<&Self::EdgeData>;
     fn vertex_labels(&self) -> impl Iterator<Item=(&VertexID, &Self::VertexData)>;
-    fn edge_labels(&self) -> impl Iterator<Item=(&EdgeID, &Self::EdgeData)>;
+    fn edge_labels(&self) -> impl Iterator<Item=(EdgeID, &Self::EdgeData)>;
     fn set_vertex_label(&mut self, v: VertexID, label: Self::VertexData) -> Option<Self::VertexData>;
     fn set_edge_label(&mut self, e: EdgeID, label: Self::EdgeData) -> Option<Self::EdgeData>;
     fn set_vertex_labels(&mut self, labels: impl IntoIterator<Item = (VertexID, Self::VertexData)>);
@@ -31,19 +31,29 @@ pub trait LabeledGraph{
 impl<G: LabeledGraph> GraphTrait for G{
     fn vertex_count(&self) -> usize {self.graph().vertex_count()}
     fn edge_count(&self) -> usize {self.graph().edge_count()}
+
     fn vertices(&self) -> impl Iterator<Item=VertexID> {self.graph().vertices()}
     fn edges(&self) -> impl Iterator<Item=EdgeID> {self.graph().edges()}
-    fn contains(&self, v: VertexID) -> bool {self.graph().contains(v)}
-    fn has_edge(&self, e: EdgeID) -> bool {self.graph().has_edge(e)}
-    fn neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {self.graph().neighbors(v)}
-    fn vertex_set(&self) -> impl Set<Item=VertexID> {self.graph().vertex_set()}
-    fn create_vertex(&mut self) -> VertexID {self.graph_mut().create_vertex()}
-    fn add_vertex(&mut self, v: VertexID) {self.graph_mut().add_vertex(v)}
-    fn add_edge(&mut self, e: EdgeID) {self.graph_mut().add_edge(e)}
-    fn add_neighbors(&mut self, v: VertexID, nbhrs: impl Iterator<Item=VertexID>) {self.graph_mut().add_neighbors(v, nbhrs)}
 
-    fn delete_vertex(&mut self, v: VertexID) -> impl Iterator<Item = EdgeID> {
-        let edges: Vec<EdgeID> = self.graph_mut().delete_vertex(v).collect();
+    fn has_vertex(&self, v: VertexID) -> bool {self.graph().has_vertex(v)}
+    fn has_edge(&self, e: EdgeID) -> bool {self.graph().has_edge(e)}
+
+    fn neighbors(&self, v: VertexID) -> impl Set<Item=VertexID> {self.graph().neighbors(v)}
+    fn vertex_set(&self) -> impl Set<Item=VertexID> {self.graph().vertex_set()}
+}
+impl<G: LabeledGraph> ArbitraryIDGraph for G where G::GraphType: ArbitraryIDGraph{
+    fn add_vertex(&mut self, id: VertexID) {self.graph_mut().add_vertex(id)}
+    fn add_edge(&mut self, edge: EdgeID) {self.graph_mut().add_edge(edge)}
+    fn add_neighbors(&mut self, v: VertexID, nbhrs: impl IntoIterator<Item = VertexID>) {self.graph_mut().add_neighbors(v, nbhrs)}
+}
+impl<G: LabeledGraph> GraphMut for G where G::GraphType: GraphMut{
+    fn create_vertex(&mut self) -> VertexID {self.graph_mut().create_vertex()}
+    
+    fn try_add_edge(&mut self, e: EdgeID) -> Result<(), GraphError> {self.graph_mut().try_add_edge(e)}
+    fn try_add_neighbors(&mut self, v: VertexID, nbhrs: impl IntoIterator<Item=VertexID>) -> Vec<(VertexID, GraphError)>{self.graph_mut().try_add_neighbors(v, nbhrs)}
+
+    fn remove_vertex(&mut self, v: VertexID) -> impl Iterator<Item = EdgeID> {
+        let edges: Vec<EdgeID> = self.graph_mut().remove_vertex(v).collect();
         for e in edges.iter() {
             // delete edge data
             self.remove_edge_label(*e);
@@ -51,9 +61,12 @@ impl<G: LabeledGraph> GraphTrait for G{
         self.remove_vertex_label(v);
         edges.into_iter()
     }
-    fn delete_edge(&mut self, e: EdgeID) {
-        self.graph_mut().delete_edge(e);
-        self.remove_edge_label(e);
+    fn remove_edge(&mut self, e: EdgeID) -> bool {
+        let e = e.into();
+        if self.graph_mut().remove_edge(e) {
+            self.remove_edge_label(e);
+            true
+        } else {false}
     }
 }
 impl<G: LabeledGraph> GraphOps for G where G::GraphType: GraphOps{
@@ -78,11 +91,11 @@ impl<G: LabeledGraph> GraphOps for G where G::GraphType: GraphOps{
         merged.set_vertex_labels(other.vertex_labels().filter_map(|(vertex, label)|
             Some((*other_map.get(vertex)?, label.clone()))
         ));
-        merged.set_edge_labels(self.edge_labels().filter_map(|((v1, v2), label)|
-            Some(((*self_map.get(v1)?, *self_map.get(v2)?), label.clone()))
+        merged.set_edge_labels(self.edge_labels().filter_map(|((v1, v2), label)| 
+            Some(((*self_map.get(&v1)?, *self_map.get(&v2)?).into(), label.clone()))
         ));
-        merged.set_edge_labels(other.edge_labels().filter_map(|((v1, v2), label)|
-            Some(((*other_map.get(v1)?, *other_map.get(v2)?), label.clone()))
+        merged.set_edge_labels(other.edge_labels().filter_map(|((v1, v2), label)| 
+            Some(((*other_map.get(&v1)?, *other_map.get(&v2)?).into(), label.clone()))
         ));
         (self_map, other_map)
     }
@@ -101,11 +114,11 @@ impl<G: LabeledGraph> SimpleGraphOps for G where G::GraphType: SimpleGraphOps{
         joined.set_vertex_labels(other.vertex_labels().filter_map(|(vertex, label)|
             Some((*other_map.get(vertex)?, label.clone()))
         ));
-        joined.set_edge_labels(self.edge_labels().filter_map(|((v1, v2), label)|
-            Some(((*self_map.get(v1)?, *self_map.get(v2)?), label.clone()))
+        joined.set_edge_labels(self.edge_labels().filter_map(|((v1, v2), label)| 
+            Some(((*self_map.get(&v1)?, *self_map.get(&v2)?).into(), label.clone()))
         ));
-        joined.set_edge_labels(other.edge_labels().filter_map(|((v1, v2), label)|
-            Some(((*other_map.get(v1)?, *other_map.get(v2)?), label.clone()))
+        joined.set_edge_labels(other.edge_labels().filter_map(|((v1, v2), label)| 
+            Some(((*other_map.get(&v1)?, *other_map.get(&v2)?).into(), label.clone()))
         ));
         (self_map, other_map)
     }
@@ -130,10 +143,10 @@ impl<G: LabeledGraph> SimpleGraphOps for G where G::GraphType: SimpleGraphOps{
 }
 impl<G: LabeledGraph> SimpleGraph for G where G::GraphType: SimpleGraph{}
 impl<G: LabeledGraph> DiGraph for G where G::GraphType: DiGraph{
-    fn in_neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {
+    fn in_neighbors(&self, v: VertexID) -> impl Set<Item=VertexID> {
         self.graph().in_neighbors(v)
     }
-    fn out_neighbors(&self, v: VertexID) -> Option<impl Set<Item=VertexID>> {
+    fn out_neighbors(&self, v: VertexID) -> impl Set<Item=VertexID> {
         self.graph().in_neighbors(v)
     }
 }
@@ -160,7 +173,7 @@ impl<G: SimpleGraph, V, E> AsMut<G> for HashMapLabeledGraph<G, V, E>{
         &mut self.graph
     }
 }
-impl<G: SimpleGraph, V: Clone, E: Clone> LabeledGraph for HashMapLabeledGraph<G, V, E>{
+impl<G: SimpleGraph+ArbitraryIDGraph, V: Clone, E: Clone> LabeledGraph for HashMapLabeledGraph<G, V, E> {
     type VertexData = V;
     type EdgeData = E;
     type GraphType = G;
@@ -179,32 +192,33 @@ impl<G: SimpleGraph, V: Clone, E: Clone> LabeledGraph for HashMapLabeledGraph<G,
     }
 
     fn get_vertex_label(&self, vertex: VertexID) -> Option<&Self::VertexData> {
-        if self.graph.contains(vertex) {
+        if self.graph.has_vertex(vertex) {
             Some(self.vertex_labels.get(&vertex)?)
         }else {None}
     }
     fn get_edge_label(&self, edge: EdgeID) -> Option<&Self::EdgeData> {
         if self.graph.has_edge(edge) {
-            Some(self.edge_labels.get(&edge).or(self.edge_labels.get(&(edge.1, edge.0)))?)
+            Some(self.edge_labels.get(&edge).or(self.edge_labels.get(&edge.inv()))?)
         }else {None}
     }
     fn vertex_labels(&self) -> impl Iterator<Item=(&VertexID, &Self::VertexData)> {
         self.vertex_labels.iter()
     }
-    fn edge_labels(&self) -> impl Iterator<Item=(&EdgeID, &Self::EdgeData)> {
-        self.edge_labels.iter()
+    fn edge_labels(&self) -> impl Iterator<Item=(EdgeID, &Self::EdgeData)> {
+        self.edge_labels.iter().map(|(e, l)| ((*e).into(), l))
     }
     fn set_vertex_label(&mut self, vertex: VertexID, label: Self::VertexData) -> Option<Self::VertexData> {
-        if !self.graph.contains(vertex) {self.graph.add_vertex(vertex);}
+        if !self.graph.has_vertex(vertex) {self.graph.add_vertex(vertex);}
         self.vertex_labels.insert(vertex, label)
     }
     fn set_edge_label(&mut self, edge: EdgeID, label: Self::EdgeData) -> Option<Self::EdgeData> {
+        let edge = edge.into();
         if !self.graph.has_edge(edge) {self.graph.add_edge(edge);}
         self.edge_labels.insert(edge, label)
     }
     fn set_vertex_labels(&mut self, labels: impl IntoIterator<Item = (VertexID, Self::VertexData)>) {
         for (v, l) in labels{
-            if !self.contains(v) {self.add_vertex(v);}
+            if !self.has_vertex(v) {self.add_vertex(v);}
             self.set_vertex_label(v, l);
         }
     }
@@ -231,7 +245,7 @@ impl<G: SimpleGraph, V: Clone, E: Clone> LabeledGraph for HashMapLabeledGraph<G,
         self.vertex_labels.remove(&v)
     }
     fn remove_edge_label(&mut self, e: EdgeID) -> Option<Self::EdgeData> {
-        self.edge_labels.remove(&e)
+        self.edge_labels.remove(&e.into())
     }
 }
 
@@ -252,7 +266,7 @@ mod test{
         assert_eq!(graph.get_vertex_label(2), None);
         assert_eq!(graph.get_vertex_label(1), Some(&3_u8));
         assert_eq!(graph.get_edge_label((1, 2)), Some(&3.14));
-        let edges: HashSet<EdgeID> = graph.delete_vertex(1).collect();
+        let edges: HashSet<_> = graph.remove_vertex(1).collect();
         assert!(edges.len()==2);
         assert_eq!(graph.get_vertex_label(1), None);
         assert_eq!(graph.get_edge_label((1, 2)), None);
