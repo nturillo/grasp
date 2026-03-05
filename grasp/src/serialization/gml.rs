@@ -1,3 +1,5 @@
+use std::result::Result;
+
 #[cfg(feature = "serde")]
 use {
     crate::graph::labeled_graph::LabeledGraph,
@@ -9,7 +11,7 @@ use {
     std::slice::from_ref,
 };
 
-use crate::graph::{EdgeID, GraphTrait, VertexID};
+use crate::{graph::{EdgeID, GraphTrait, VertexID}, serialization::error::FormattingError};
 use std::ops::Add;
 
 struct Parse<'a> {
@@ -110,9 +112,9 @@ pub fn to_gml<G: GraphTrait>(g: G) -> String {
 /// Create a [crate::graph::GraphTrait] from a GML string.
 ///
 /// Note: This function does not support labeled data. To include labeled data, use [crate::serialization::gml::labeled_from_gml].
-pub fn from_gml<G: GraphTrait + Default>(string: String) -> Result<G, String> {
+pub fn from_gml<G: GraphTrait + Default>(string: String) -> Result<G, FormattingError> {
     let mut graph = G::default();
-    let err = Err("Invalid GML format.".to_string());
+    let err = Err(FormattingError { message: "Invalid GML format.".to_string()});
     let mut history = Vec::new();
     let mut edge_builder = (None, None);
 
@@ -291,13 +293,13 @@ where
 /// Create a [crate::graph::labeled_graph::LabeledGraph] from a GML string.
 ///
 /// Chosen data types must be deserializable.
-pub fn labeled_from_gml<G: LabeledGraph + Default>(string: String) -> Result<G, String>
+pub fn labeled_from_gml<G: LabeledGraph + Default>(string: String) -> Result<G, SerializationError>
 where
     G::VertexData: DeserializeOwned,
     G::EdgeData: DeserializeOwned,
 {
     let mut graph = G::default();
-    let err = Err("Invalid GML format.".to_string());
+    let err = Err(SerializationError { message: "Invalid GML format.".to_string()});
 
     fn parse_map(parser: &mut Parse) -> Result<Value, SerializationError> {
         let mut map = BTreeMap::<String, Value>::new();
@@ -327,7 +329,7 @@ where
             }
         }
 
-        Err(SerializationError::Message("Invalid GML format".to_string()))
+        Err(SerializationError { message: "Invalid GML format".to_string() })
     }
 
     fn parse_val(parser: &mut Parse) -> Result<Value, SerializationError> {
@@ -341,7 +343,7 @@ where
             if ch == '\"' {
                 parser.next();
                 parser.mark();
-                while parser.peek().ok_or(SerializationError::Message("String not closed".to_string()))? != '\"' {
+                while parser.peek().ok_or(SerializationError { message: "String not closed".to_string() })? != '\"' {
                     parser.next();
                 }
                 let ret = parser.read_from_mark().to_string();
@@ -349,7 +351,7 @@ where
                 return Ok(Value::String(ret));
             }
 
-            let word = parser.next_word().ok_or(SerializationError::Message("Expected value, found none".to_string()))?;
+            let word = parser.next_word().ok_or(SerializationError { message: "Expected value, found none".to_string() })?;
 
             if word == "true" { return Ok(Value::Bool(true)); }
             if word == "false" { return Ok(Value::Bool(false)); }
@@ -358,14 +360,14 @@ where
             if let Ok(num) = word.parse::<i64>() { return Ok(Value::Int(num)); }
             if let Ok(num) = word.parse::<f64>() { return Ok(Value::Float(num)); }
 
-            return Err(SerializationError::Message("Unknown value type: ".to_string().add(word)));
+            return Err(SerializationError { message: "Unknown value type: ".to_string().add(word)});
         }
 
-        Err(SerializationError::Message("Missing value after key".to_string()))
+        Err(SerializationError { message: "Missing value after key".to_string() })
     }
 
     let parser = &mut Parse::new(string.as_str());
-    if parser.next_word() == Some("graph") && parser.next_word() == Some("[") && let Value::Object(map) = parse_map(parser).map_err(|er| er.to_string())? {
+    if parser.next_word() == Some("graph") && parser.next_word() == Some("[") && let Value::Object(map) = parse_map(parser).map_err(|er| SerializationError { message: er.to_string()})? {
         if let Some(val) = map.get("node") {
             let mut nodes: &[Value] = &[];
 
@@ -379,13 +381,13 @@ where
                 if let Value::Object(node_map) = node {
                     let id = match node_map.get("id") {
                         Some(Value::Unsigned(num)) => Ok(*num),
-                        _ => Err("Missing or invalid ID".to_string()),
+                        _ => Err(SerializationError { message: "Missing or invalid ID".to_string()}),
                     }? as usize;
 
                     graph.add_vertex(id);
 
                     if let Some(data) = node_map.get("data").or(node_map.get("label")) {
-                        graph.set_vertex_label(id, from_value::<G::VertexData>(data.clone()).map_err(|er| er.to_string())?);
+                        graph.set_vertex_label(id, from_value::<G::VertexData>(data.clone()).map_err(|er| SerializationError { message: er.to_string()})?);
                     }
                 } else {
                     return err;
@@ -406,19 +408,19 @@ where
                 if let Value::Object(edge_map) = edge {
                     let source = match edge_map.get("source") {
                         Some(Value::Unsigned(num)) => Ok(*num),
-                        _ => Err("Missing or invalid source".to_string()),
+                        _ => Err(SerializationError { message: "Missing or invalid source".to_string()}),
                     }? as usize;
 
                     let target = match edge_map.get("target") {
                         Some(Value::Unsigned(num)) => Ok(*num),
-                        _ => Err("Missing or invalid target".to_string()),
+                        _ => Err(SerializationError { message: "Missing or invalid target".to_string()}),
                     }? as usize;
 
                     let edge_id = (source, target);
                     graph.add_edge(edge_id);
 
                     if let Some(data) = edge_map.get("data").or(edge_map.get("label")) {
-                        graph.set_edge_label(edge_id, from_value::<G::EdgeData>(data.clone()).map_err(|er| er.to_string())?);
+                        graph.set_edge_label(edge_id, from_value::<G::EdgeData>(data.clone()).map_err(|er| SerializationError { message: er.to_string()})?);
                     }
                 } else {
                     return err;

@@ -1,4 +1,4 @@
-use crate::graph::{EdgeID, GraphTrait, VertexID};
+use crate::{graph::{EdgeID, GraphTrait, VertexID}, serialization::error::FormattingError};
 
 pub fn to_tgf<G: GraphTrait>(g: G) -> String {
     let mut s = String::new();
@@ -17,7 +17,7 @@ pub fn to_tgf<G: GraphTrait>(g: G) -> String {
     s
 }
 
-pub fn from_tgf<G: GraphTrait + Default>(string: String) -> Result<G, String> {
+pub fn from_tgf<G: GraphTrait + Default>(string: String) -> Result<G, FormattingError> {
     let mut lines = string.lines().map(|line| line.trim());
     let mut graph = G::default();
 
@@ -29,7 +29,7 @@ pub fn from_tgf<G: GraphTrait + Default>(string: String) -> Result<G, String> {
         {
             graph.add_edge((n1, n2));
         } else if line != "#" {
-            return Err("Invalid TGF format.".to_string());
+            return Err(FormattingError { message: "Invalid TGF format.".to_string()});
         }
     }
 

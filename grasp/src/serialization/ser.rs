@@ -3,10 +3,12 @@
 use std::collections::BTreeMap;
 use std::ops::Add;
 
-use crate::serialization::error::{SerializationError, Result};
+use crate::serialization::error::{SerializationError};
 use serde::{
     Deserialize, Deserializer, Serialize, de::{DeserializeOwned, EnumAccess, IntoDeserializer, VariantAccess, value::{MapDeserializer, SeqDeserializer}}, ser
 };
+
+pub type Result<T> = std::result::Result<T, SerializationError>;
 
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub enum Value {
@@ -76,11 +78,11 @@ impl<'a> EnumAccess<'a> for Value {
         V: serde::de::DeserializeSeed<'a> {
         match self {
             Value::Object(map) => {
-                let (key, value) = map.into_iter().next().ok_or(SerializationError::Message("Invalid enum".to_string()))?;
+                let (key, value) = map.into_iter().next().ok_or(SerializationError { message: "Invalid enum".to_string() })?;
                 Ok((seed.deserialize(Value::String(key).into_deserializer())?, value))
             },
             Value::String(s) => Ok((seed.deserialize(Value::String(s).into_deserializer())?, Value::Null)),
-            _ => Err(SerializationError::Message("Invalid enum".to_string()))
+            _ => Err(SerializationError { message: "Invalid enum".to_string() })
         }
     }
 }
@@ -114,7 +116,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Bool(b) => visitor.visit_bool(b),
-            _ => Err(SerializationError::Message("Not bool type".to_string())),
+            _ => Err(SerializationError { message: "Not bool type".to_string() }),
         }
     }
 
@@ -125,13 +127,13 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Int(i) => visitor.visit_i8(
                 i.try_into()
-                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError { message: "Int too large".to_string() })?,
             ),
             Value::Unsigned(i) => visitor.visit_i8(
                 i.try_into()
-                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError { message: "Int too large".to_string() })?,
             ),
-            _ => Err(SerializationError::Message("Not int type".to_string())),
+            _ => Err(SerializationError { message: "Not int type".to_string() }),
         }
     }
 
@@ -142,13 +144,13 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Int(i) => visitor.visit_i16(
                 i.try_into()
-                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError { message: "Int too large".to_string() })?,
             ),
             Value::Unsigned(i) => visitor.visit_i16(
                 i.try_into()
-                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError { message: "Int too large".to_string() })?,
             ),
-            _ => Err(SerializationError::Message("Not int type".to_string())),
+            _ => Err(SerializationError { message: "Not int type".to_string() }),
         }
     }
 
@@ -159,13 +161,13 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Int(i) => visitor.visit_i32(
                 i.try_into()
-                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError { message: "Int too large".to_string() })?,
             ),
             Value::Unsigned(i) => visitor.visit_i32(
                 i.try_into()
-                    .map_err(|_| SerializationError::Message("Int too large".to_string()))?,
+                    .map_err(|_| SerializationError { message: "Int too large".to_string() })?,
             ),
-            _ => Err(SerializationError::Message("Not int type".to_string())),
+            _ => Err(SerializationError { message: "Not int type".to_string() }),
         }
     }
 
@@ -176,7 +178,7 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Int(i) => visitor.visit_i64(i),
             Value::Unsigned(i) => visitor.visit_i64(i as i64),
-            _ => Err(SerializationError::Message("Not int type".to_string())),
+            _ => Err(SerializationError { message: "Not int type".to_string() }),
         }
     }
 
@@ -187,9 +189,9 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Unsigned(u) => visitor.visit_u8(
                 u.try_into()
-                    .map_err(|_| SerializationError::Message("Unsigned int too large".to_string()))?,
+                    .map_err(|_| SerializationError { message: "Unsigned int too large".to_string() })?,
             ),
-            _ => Err(SerializationError::Message("Not unsigned int type".to_string())),
+            _ => Err(SerializationError { message: "Not unsigned int type".to_string() }),
         }
     }
 
@@ -200,9 +202,9 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Unsigned(u) => visitor.visit_u16(
                 u.try_into()
-                    .map_err(|_| SerializationError::Message("Unsigned int too large".to_string()))?,
+                    .map_err(|_| SerializationError { message: "Unsigned int too large".to_string() })?,
             ),
-            _ => Err(SerializationError::Message("Not unsigned int type".to_string())),
+            _ => Err(SerializationError { message: "Not unsigned int type".to_string() }),
         }
     }
 
@@ -213,9 +215,9 @@ impl<'a> serde::Deserializer<'a> for Value {
         match self {
             Value::Unsigned(u) => visitor.visit_u32(
                 u.try_into()
-                    .map_err(|_| SerializationError::Message("Unsigned int too large".to_string()))?,
+                    .map_err(|_| SerializationError { message: "Unsigned int too large".to_string() })?,
             ),
-            _ => Err(SerializationError::Message("Not unsigned int type".to_string())),
+            _ => Err(SerializationError { message: "Not unsigned int type".to_string() }),
         }
     }
 
@@ -225,7 +227,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Unsigned(u) => visitor.visit_u64(u),
-            _ => Err(SerializationError::Message("Not unsigned int type".to_string())),
+            _ => Err(SerializationError { message: "Not unsigned int type".to_string() }),
         }
     }
 
@@ -235,7 +237,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Float(f) => visitor.visit_f32(f as f32),
-            _ => Err(SerializationError::Message("Not float type".to_string())),
+            _ => Err(SerializationError { message: "Not float type".to_string() }),
         }
     }
 
@@ -245,7 +247,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Float(f) => visitor.visit_f64(f),
-            _ => Err(SerializationError::Message("Not float type".to_string())),
+            _ => Err(SerializationError { message: "Not float type".to_string() }),
         }
     }
 
@@ -255,9 +257,9 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::String(s) => visitor.visit_char(s.parse::<char>().map_err(|_| {
-                SerializationError::Message("Cannot convert multi-char string into char".to_string())
+                SerializationError { message: "Cannot convert multi-char string into char".to_string() }
             })?),
-            _ => Err(SerializationError::Message("Not char type".to_string())),
+            _ => Err(SerializationError { message: "Not char type".to_string() }),
         }
     }
 
@@ -267,7 +269,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::String(s) => visitor.visit_str(s.as_str()),
-            _ => Err(SerializationError::Message("Not str type".to_string())),
+            _ => Err(SerializationError { message: "Not str type".to_string() }),
         }
     }
 
@@ -277,7 +279,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::String(s) => visitor.visit_string(s),
-            _ => Err(SerializationError::Message("Not string type".to_string())),
+            _ => Err(SerializationError { message: "Not string type".to_string() }),
         }
     }
 
@@ -292,7 +294,7 @@ impl<'a> serde::Deserializer<'a> for Value {
                     .collect::<Result<Vec<u8>>>()?
                     .as_slice(),
             ),
-            _ => Err(SerializationError::Message("Not byte list type".to_string())),
+            _ => Err(SerializationError { message: "Not byte list type".to_string() }),
         }
     }
 
@@ -307,7 +309,7 @@ impl<'a> serde::Deserializer<'a> for Value {
                     .collect::<Result<Vec<u8>>>()?
                     .as_slice(),
             ),
-            _ => Err(SerializationError::Message("Not byte list type".to_string())),
+            _ => Err(SerializationError { message: "Not byte list type".to_string() }),
         }
     }
 
@@ -327,7 +329,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Null => visitor.visit_unit(),
-            _ => Err(SerializationError::Message("Not unit/null type".to_string())),
+            _ => Err(SerializationError { message: "Not unit/null type".to_string() }),
         }
     }
 
@@ -351,7 +353,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Array(a) => visitor.visit_seq(SeqDeserializer::new(a.into_iter())),
-            _ => Err(SerializationError::Message("Not list type".to_string())),
+            _ => Err(SerializationError { message: "Not list type".to_string() }),
         }
     }
 
@@ -380,7 +382,7 @@ impl<'a> serde::Deserializer<'a> for Value {
     {
         match self {
             Value::Object(map) => visitor.visit_map(MapDeserializer::new(map.into_iter())),
-            _ => Err(SerializationError::Message("Not map type".to_string())),
+            _ => Err(SerializationError { message: "Not map type".to_string() }),
         }
     }
 
@@ -722,7 +724,7 @@ impl<'a> ser::SerializeMap for Map {
             self.key = Some(s);
             Ok(())
         } else {
-            Err(SerializationError::Message("Expected string type for keys".to_string()))
+            Err(SerializationError { message: "Expected string type for keys".to_string() })
         }
     }
 

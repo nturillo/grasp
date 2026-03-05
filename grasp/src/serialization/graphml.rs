@@ -1,6 +1,8 @@
 use crate::graph::GraphTrait;
 use crate::graph::{DiGraph, SimpleGraph};
 use crate::graph::{EdgeID, VertexID};
+use crate::serialization::error::*;
+use std::result::Result;
 
 #[cfg(feature = "xml")]
 use {
@@ -67,7 +69,7 @@ pub fn to_graphml_digraph<G: DiGraph>(graph: G) -> String {
 /// Create a [crate::graph::GraphTrait] from a GraphML string.
 ///
 /// Note: This format does not support labeled data. To include labeled data, use [crate::serialization::graphml::labeled_from_graphml].
-pub fn from_graphml<G: GraphTrait + Default>(string: String) -> Result<G, String> {
+pub fn from_graphml<G: GraphTrait + Default>(string: String) -> Result<G, FormattingError> {
     let mut buf = Vec::new();
     let mut reader = Reader::from_str(string.as_str());
     reader.config_mut().trim_text(true);
@@ -76,25 +78,25 @@ pub fn from_graphml<G: GraphTrait + Default>(string: String) -> Result<G, String
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Err(e) => return Err(e.to_string()),
+            Err(e) => return Err(FormattingError { message: e.to_string() } ),
             Ok(Event::Eof) => break,
             Ok(Event::Start(e)) | Ok(Event::Empty(e)) => {
                 match e.name().as_ref() {
                     b"node" => {
-                        if let Some(id) = e.try_get_attribute("id").map_err(|e| e.to_string())? {
-                            graph.add_vertex(id.unescape_value().unwrap().to_owned().parse::<usize>().map_err(|_| "Expected ID to be unsigned int".to_string())?);
+                        if let Some(id) = e.try_get_attribute("id").map_err(|e| FormattingError { message: e.to_string() } )? {
+                            graph.add_vertex(id.unescape_value().unwrap().to_owned().parse::<usize>().map_err(|_| FormattingError { message: "Expected ID to be unsigned int".to_string() } )?);
                         } else {
-                            return Err("Node missing id attribute".to_string());
+                            return Err(FormattingError { message: "Node missing id attribute".to_string() });
                         }
                     },
                     b"edge" => {
-                        let source = e.try_get_attribute("source").map_err(|e| e.to_string())?.and_then(|a| Some(a.unescape_value().unwrap().into_owned()));
-                        let target = e.try_get_attribute("target").map_err(|e| e.to_string())?.and_then(|a| Some(a.unescape_value().unwrap().into_owned()));
+                        let source = e.try_get_attribute("source").map_err(|e| FormattingError { message: e.to_string()})?.and_then(|a| Some(a.unescape_value().unwrap().into_owned()));
+                        let target = e.try_get_attribute("target").map_err(|e| FormattingError { message: e.to_string()})?.and_then(|a| Some(a.unescape_value().unwrap().into_owned()));
 
                         if let (Some(source), Some(target)) = (source, target) {
-                            graph.add_edge((source.parse::<usize>().map_err(|_| "Expected source to be unsigned int".to_string())?, target.parse::<usize>().map_err(|_| "Expected target to be unsigned int".to_string())?));
+                            graph.add_edge((source.parse::<usize>().map_err(|_| FormattingError { message: "Expected source to be unsigned int".to_string()})?, target.parse::<usize>().map_err(|_| FormattingError { message: "Expected target to be unsigned int".to_string()})?));
                         } else {
-                            return Err("Edge missing source/target attributes".to_string());
+                            return Err(FormattingError { message: "Edge missing source/target attributes".to_string() } );
                         }
                     },
                     _ => (),
@@ -216,7 +218,7 @@ where G::GraphType: DiGraph,
 /// Create a [crate::graph::labeled_graph::LabeledGraph] from a GraphML string.
 ///
 /// Chosen data types must be deserializable.
-pub fn labeled_from_graphml<G: LabeledGraph + Default>(string: String) -> Result<G, String>
+pub fn labeled_from_graphml<G: LabeledGraph + Default>(string: String) -> Result<G, SerializationError>
 where
     G::VertexData: DeserializeOwned,
     G::EdgeData: DeserializeOwned,
@@ -252,38 +254,38 @@ where
         }
     }
 
-    fn get_value<'a>(root: &'a mut BTreeMap<String, Value>, full_key: String) -> Result<&'a mut Value, String> {
+    fn get_value<'a>(root: &'a mut BTreeMap<String, Value>, full_key: String) -> Result<&'a mut Value, SerializationError> {
         let mut nests = full_key.split(".");
-        let mut value = root.get_mut(nests.next().ok_or("Key is empty".to_string())?).ok_or("Could not find key".to_string())?;
+        let mut value = root.get_mut(nests.next().ok_or(SerializationError { message: "Key is empty".to_string()})?).ok_or(SerializationError { message: "Could not find key".to_string()})?;
 
         for nest in nests {
             if let Ok(num) = nest.to_string().parse::<usize>() {
                 if let Value::Array(arr) = value {
-                    value = arr.get_mut(num).ok_or("Could not find index".to_string())?;
+                    value = arr.get_mut(num).ok_or(SerializationError { message: "Could not find index".to_string()})?;
                 } else {
-                    return Err("Cannot parse map object with an index".to_string());
+                    return Err(SerializationError { message: "Cannot parse map object with an index".to_string()});
                 }
             } else if let Value::Object(obj) = value {
-                value = obj.get_mut(nest).ok_or("Could not find key".to_string())?;
+                value = obj.get_mut(nest).ok_or(SerializationError { message: "Could not find key".to_string()})?;
             } else {
-                return Err("Cannot parse primitive types as a map".to_string());
+                return Err(SerializationError { message: "Cannot parse primitive types as a map".to_string()});
             }
         }
 
         Ok(value)
     }
 
-    fn get_attr(e: &BytesStart, attr: &str) -> Result<String, String> {
-        e.try_get_attribute(attr).map_err(|e| e.to_string())?.ok_or_else(|| format!("Missing attribute {}", attr))?.unescape_value().map(|a| a.into_owned()).map_err(|e| e.to_string())
+    fn get_attr(e: &BytesStart, attr: &str) -> Result<String, SerializationError> {
+        e.try_get_attribute(attr).map_err(|e| SerializationError { message: e.to_string()})?.ok_or_else(|| SerializationError { message: format!("Missing attribute {}", attr)})?.unescape_value().map(|a| a.into_owned()).map_err(|e| SerializationError { message: e.to_string()})
     }
 
-    fn get_attr_as_usize(e: &BytesStart, attr: &str) -> Result<usize, String> {
-        get_attr(e, attr)?.parse::<usize>().map_err(|_| format!("Expected {} to be unsigned int", attr))
+    fn get_attr_as_usize(e: &BytesStart, attr: &str) -> Result<usize, SerializationError> {
+        get_attr(e, attr)?.parse::<usize>().map_err(|_| SerializationError { message: format!("Expected {} to be unsigned int", attr)})
     }
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Err(e) => return Err(e.to_string()),
+            Err(e) => return Err(SerializationError { message: e.to_string()}),
             Ok(Event::Eof) => break,
             Ok(Event::Start(e)) => {
                 match e.name().as_ref() {
@@ -310,14 +312,14 @@ where
                         let val = get_value(&mut data_map, key)?;
 
                         if let Value::String(data_type) = val {
-                            let data = reader.read_text(e.name()).map_err(|e| e.to_string())?.to_owned().to_string();
+                            let data = reader.read_text(e.name()).map_err(|e| SerializationError { message: e.to_string()})?.to_owned().to_string();
 
                             *val = match data_type.as_str() {
-                                "boolean" => Value::Bool(data.parse::<bool>().map_err(|e| e.to_string())?),
+                                "boolean" => Value::Bool(data.parse::<bool>().map_err(|e| SerializationError { message: e.to_string()})?),
                                 "string" => Value::String(data),
-                                "long" => Value::Int(data.parse::<i64>().map_err(|e| e.to_string())?),
-                                "double" => Value::Float(data.parse::<f64>().map_err(|e| e.to_string())?),
-                                _ => Err("Unknown type")?,
+                                "long" => Value::Int(data.parse::<i64>().map_err(|e| SerializationError { message: e.to_string()})?),
+                                "double" => Value::Float(data.parse::<f64>().map_err(|e| SerializationError { message: e.to_string()})?),
+                                _ => Err(SerializationError { message: "Unknown type".to_string()})?,
                             };
                         }
                     }
@@ -360,13 +362,13 @@ where
                         let mut done = std::mem::take(&mut data_map);
                         let val = if done.contains_key("0N") { done.remove("0N").unwrap_or(Value::Null) } else { Value::Object(done) };
 
-                        graph.set_vertex_label(parent_id.0, from_value::<G::VertexData>(val).map_err(|e| e.to_string())?);
+                        graph.set_vertex_label(parent_id.0, from_value::<G::VertexData>(val).map_err(|e| SerializationError { message: e.to_string()})?);
                     },
                     b"edge" => {
                         let mut done = std::mem::take(&mut data_map);
                         let val = if done.contains_key("0E") { done.remove("0E").unwrap_or(Value::Null) } else { Value::Object(done) };
 
-                        graph.set_edge_label(parent_id, from_value::<G::EdgeData>(val).map_err(|e| e.to_string())?);
+                        graph.set_edge_label(parent_id, from_value::<G::EdgeData>(val).map_err(|e| SerializationError { message: e.to_string()})?);
                     }
                     _ => (),
                 }

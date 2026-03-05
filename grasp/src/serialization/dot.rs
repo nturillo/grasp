@@ -1,4 +1,4 @@
-use crate::graph::{EdgeID, GraphTrait, VertexID};
+use crate::{graph::{EdgeID, GraphTrait, VertexID}, serialization::error::FormattingError};
 
 /// Format any [crate::graph::GraphTrait] into the DOT format.
 ///
@@ -23,9 +23,9 @@ pub fn to_dot<G: GraphTrait>(g: G) -> String {
 /// Create a [crate::graph::GraphTrait] from a DOT string.
 ///
 /// Note: This format does not support labeled data.
-pub fn from_dot<G: GraphTrait + Default>(string: String) -> Result<G, String> {
+pub fn from_dot<G: GraphTrait + Default>(string: String) -> Result<G, FormattingError> {
     let mut graph = G::default();
-    let err = Err("Invalid DOT format.".to_string());
+    let err = Err(FormattingError { message: "Invalid DOT format.".to_string()});
 
     let mut lines = string
         .lines()
