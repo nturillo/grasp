@@ -3,116 +3,136 @@ pub mod labeled_graph;
 pub mod adjacency_list;
 pub mod graph_ops;
 pub mod util;
+pub mod set;
+pub mod directed;
 
 pub mod prelude{
     pub use super::{
-        Set, VertexID, EdgeID, VertexMap, GraphTrait, SimpleGraph, DiGraph, UnderlyingGraph,
-        labeled_graph::{LabeledGraph, HashMapLabeledGraph}, 
+        GraphTrait, VertexMap, EdgeID, EdgeType, VertexID, GraphMut, AnyVertexGraph, BuildableGraph,
+        directed::{SimpleGraph, DiGraph, DigraphProjection, SimpleView, UnderlyingView},
+        labeled_graph::*, 
         adjacency_list::{SparseSimpleGraph, SparseDiGraph}, 
         error::GraphError,
-        graph_ops::*,
-        util::*
+        util::*, set::{Set, EmptySet},
+        graph_ops::{GraphOps, SimpleGraphOps},
     };
+    pub use graph_ops_macros::{GraphOps, SimpleGraphOps};
 }
 
-use std::{borrow::Cow, collections::{HashMap, HashSet}};
+use std::collections::HashMap;
 
-/// Trait for types that can act as a set of 'V'.
-pub trait Set<V>: Clone+FromIterator<V>+PartialEq+IntoIterator<Item = V>{
-    fn contains(&self, v: V) -> bool;
-    fn count(&self) -> usize;
-    fn union(&self, other: &Self) -> Self;
-    fn intersection(&self, other: &Self) -> Self;
-    fn difference(&self, other: &Self) -> Self;
-    fn iter<'a>(&'a self) -> impl Iterator<Item=&'a V> where V: 'a;
-}
-impl<V: Clone+Eq+std::hash::Hash> Set<V> for HashSet<V>{
-    fn contains(&self, v: V) -> bool {
-        HashSet::contains(self, &v)
-    }
-    fn count(&self) -> usize {
-        self.len()
-    }
-    fn union(&self, other: &Self) -> Self {
-        self | other
-    }
-    fn intersection(&self, other: &Self) -> Self {
-        self & other
-    }
-    fn difference(&self, other: &Self) -> Self {
-        HashSet::difference(self, other).cloned().collect()
-    }
-    fn iter<'a>(&'a self) -> impl Iterator<Item=&'a V> where V: 'a {
-        HashSet::iter(&self)
-    }
-}
+use set::Set;
+use crate::graph::error::GraphError;
 
+pub type VertexMap = HashMap<VertexID, VertexID>;
 pub type VertexID = usize;
 pub type EdgeID = (VertexID, VertexID);
-pub type VertexMap = HashMap<VertexID, VertexID>;
 
-/// Core Graph functionality. Enables edge and vertex manipulation
+pub trait EdgeType{
+    /// Converts to a simple EdgeID
+    fn to_simple(self) -> Self;
+    /// Turns edge ab into ba
+    fn inv(self) -> Self;
+}
+impl EdgeType for EdgeID{
+    fn to_simple(self) -> Self {
+        if self.0 <= self.1 {(self.0, self.1)} else {(self.1, self.0)}
+    }
+    fn inv(self) -> Self {
+        (self.1, self.0)
+    }
+}
+
+/// Immutable Graph Functionality.
 pub trait GraphTrait{
-    type VertexSet: Set<VertexID>;
-    
     /// Number of vertices
     fn vertex_count(&self) -> usize;
     /// Number of edges
     fn edge_count(&self) -> usize;
+    /// Whether the graph is empty
+    fn is_empty(&self) -> bool {self.vertex_count() == 0}
+
+    /// Whether the graph contains the vertex
+    fn has_vertex(&self, v: VertexID) -> bool;
+    /// Whether the graph contains the edge
+    fn has_edge(&self, e: EdgeID) -> bool;
+
     /// Iterator over vertices
     fn vertices(&self) -> impl Iterator<Item=VertexID>;
     /// Iterator over edges
     fn edges(&self) -> impl Iterator<Item=EdgeID>;
-    /// Whether the graph contains the vertex
-    fn contains(&self, v: VertexID) -> bool;
-    /// Whether the graph contains the edge
-    fn has_edge(&self, e: EdgeID) -> bool;
-    /// Returns a set of vertices adjacent to given vertex. Returns None if the vertex is not in the graph
-    fn neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
-    /// Returns a set of all vertices in the graph
-    fn vertex_set(&self) -> Self::VertexSet;
 
+    /// Returns a set of vertices adjacent to given vertex. Returns empty set if the vertex is not in the graph. \
+    /// In the case of a digraph, should only be out connected vtcs.
+    fn neighbors(&self, v: VertexID) -> impl Set<Item = VertexID>;
+    /// Returns a set of all vertices in the graph
+    fn vertex_set(&self) -> impl Set<Item = VertexID>;    
+}
+/// Graph Mutation for adding and removing vtcs/edges
+pub trait GraphMut: GraphTrait{
     /// Creates a new vertex in the graph and returns its ID
     fn create_vertex(&mut self) -> VertexID;
-    /// Adds a vertex to the graph by ID if it is not already in it.
-    fn add_vertex(&mut self, v: VertexID);
-    /// Adds an edge to the graph \
-    /// adds v1 and v2 if they don't exist \
-    /// SimpleGraphs should also add edge (v2, v1)
-    fn add_edge(&mut self, e: EdgeID);
-    /// Creates edges from v1 to the neighbors. \
-    /// adds v and nbhrs if they don't exist
-    fn add_neighbors(&mut self, v: VertexID, nbhrs: impl Iterator<Item=VertexID>);
-    /// Removes a vertex from the graph \
-    /// Returns a list of edges it removed as a consequence
-    fn delete_vertex(&mut self, v: VertexID) -> impl Iterator<Item=EdgeID>;
-    /// Removes an edge from the graph, does not remove the vertices.
-    fn delete_edge(&mut self, e: EdgeID);
-}
+    /// Removes a vertex from the graph, returns a list of edges it removed as a consequence
+    fn remove_vertex(&mut self, v: VertexID) -> impl Iterator<Item = EdgeID>;
 
-/// Tag Trait Used to represent the promise that edge ab=ba
-pub trait SimpleGraph: GraphTrait{}
-/// Trait Used to represent the promise that edge ab!=ba
-pub trait DiGraph: GraphTrait{
-    /// Set of vertices that have arcs going to the specified vertex.
-    fn in_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
-    /// Set of vertices that have arcs coming from the specified vertex.
-    fn out_neighbors(&self, v: VertexID) -> Option<Cow<'_, Self::VertexSet>>;
+    /// Adds an edge to the graph. 
+    fn try_add_edge(&mut self, edge: EdgeID) -> Result<(), GraphError>;
+
+    /// Removes an edge from the graph, does not remove the vertices. Returns whether the edge was in the graph
+    fn remove_edge(&mut self, e: EdgeID) -> bool;
+
+    /// Creates edges from v1 to the neighbors, returns a list of vtcs which failed to add their edges, and the error.
+    fn try_add_neighbors(&mut self, v: VertexID, nbhrs: impl IntoIterator<Item=VertexID>) -> Vec<(VertexID, GraphError)>{
+        let mut errors = Vec::new();
+        for v2 in nbhrs {
+            if let Err(e) = self.try_add_edge((v, v2)) {
+                errors.push((v2, e));
+            }
+        }
+        errors
+    }
 }
-/// Trait that allows DiGraphs to be converted into SimpleGraphs
-pub trait UnderlyingGraph: DiGraph{
-    /// SimpleGraph type that this graph can be converted into
-    type UnderlyingGraph: GraphTrait+SimpleGraph;
-    fn underlying_graph(&self) -> Self::UnderlyingGraph;
+/// Methods for graphs with arbitrary VertexID functionality
+pub trait AnyVertexGraph: GraphMut{
+    /// Adds a vertex with the specified id into the graph
+    fn add_vertex(&mut self, id: VertexID);
+    /// Adds an edge and makes sure the two vertices are added as well.
+    fn add_edge(&mut self, edge: EdgeID) {
+        let (v1, v2) = edge;
+        self.add_vertex(v1); self.add_vertex(v2);
+        let _ = self.try_add_edge(edge);
+    }
+    /// Adds edges from v to the vertices in nbhrs, adding missing vtcs as needed.
+    fn add_neighbors(&mut self, v: VertexID, nbhrs: impl IntoIterator<Item = VertexID>){
+        self.add_vertex(v);
+        for v2 in nbhrs.into_iter(){
+            self.add_vertex(v2);
+            let _ = self.try_add_edge((v, v2));
+        }
+    }
+}
+/// Graph types that can be build from scratch
+pub trait BuildableGraph: GraphTrait {
+    fn empty() -> Self;
+    fn with_capacity(_v: usize, _e: usize) -> Self where Self: Sized{
+        Self::empty()
+    }
+}
+impl<G: Default+GraphTrait> BuildableGraph for G{
+    fn empty() -> Self {
+        Self::default()
+    }
 }
 
 /// Contains test templates for GraphOps and SimpleGraphOps, should be used as a seperate test for each graph implementation
 #[cfg(test)]
 mod test{
-    use crate::graph::{UnderlyingGraph, prelude::*};
+    use std::collections::HashSet;
+
+    use crate::graph::prelude::*;
 
     /// Assures SimpleGraph and DiGraph traits work as intended.
-    pub fn graph_vs_digraph_test<S: SimpleGraph+Default, D: DiGraph+Default>(){
+    pub fn graph_vs_digraph_test<S: SimpleGraph+Default+AnyVertexGraph, D: DiGraph+Default+AnyVertexGraph>(){
         let mut simple_graph = S::default();
         let mut digraph = D::default();
         simple_graph.add_edge((0, 1));
@@ -124,26 +144,32 @@ mod test{
     }
 
     /// Assures Digraph functionality.
-    pub fn digraph_fn_test<G: DiGraph+Default>(){
+    pub fn digraph_fn_test<G: DiGraph+Default+AnyVertexGraph>(){
         let mut digraph = G::default();
-        digraph.add_edge((0, 1)); digraph.add_edge((2, 0));
+        digraph.add_edge((0, 1).into()); digraph.add_edge((2, 0).into());
         // neighborhoods
-        let neighbors = G::VertexSet::from_iter([1, 2]);
-        let out_neighbors = G::VertexSet::from_iter([1]);
-        let in_neighbors = G::VertexSet::from_iter([2]);
-        assert!(digraph.neighbors(0).is_some_and(|s| *s==neighbors));
-        assert!(digraph.out_neighbors(0).is_some_and(|s| *s==out_neighbors));
-        assert!(digraph.in_neighbors(0).is_some_and(|s| *s==in_neighbors));
+        let neighbors = HashSet::from_iter([1, 2]);
+        let out_neighbors = HashSet::from_iter([1]);
+        let in_neighbors = HashSet::from_iter([2]);
+        assert!(digraph.neighbors(0).set_eq(&neighbors));
+        assert!(digraph.out_neighbors(0).set_eq(&out_neighbors));
+        assert!(digraph.in_neighbors(0).set_eq(&in_neighbors));
     }
 
     /// Assures Underlying Graphs are correctly calculated
-    pub fn underlying_graph_test<G: UnderlyingGraph+Default>(){
+    pub fn digraph_projection_test<G: DigraphProjection+Default+AnyVertexGraph>(){
         // underlying graph
         let mut digraph = G::default();
         digraph.add_edge((0, 1)); digraph.add_edge((2, 0));
-        let und_graph = digraph.underlying_graph();
-        assert!(und_graph.has_edge((0, 1)));
-        assert!(und_graph.has_edge((0, 2)));
-        assert_eq!(und_graph.edge_count(), 2);
+        digraph.add_edge((0, 3)); digraph.add_edge((3, 0));
+        let simple_graph = digraph.as_simple();
+        let und_graph = digraph.as_underlying();
+
+        assert!(simple_graph.has_edge((1, 0)));
+        assert!(simple_graph.has_edge((0, 2)));
+        assert!(simple_graph.has_edge((0, 3)));
+        assert_eq!(simple_graph.edge_count(), 3);
+        assert!(und_graph.has_edge((0, 3)));
+        assert_eq!(und_graph.edge_count(), 1);
     }
 }
