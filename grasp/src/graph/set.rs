@@ -9,9 +9,9 @@ pub trait Set {
     /// Default O(n) operation using iter.count
     fn len(&self) -> usize {self.iter().count()}
     fn is_empty(&self) -> bool {self.iter().next().is_some()}
-    fn set_eq<S: Set<Item = Self::Item>>(&self, other: &S) -> bool {
-        self.iter().all(|v| other.contains(v)) &&
-        other.iter().all(|v| self.contains(v))
+    fn set_eq<S: Set<Item = Self::Item>>(&self, other: &S) -> bool where Self: Sized{
+        let len = self.len();
+        len == other.len() && self.union_with(other).len() == len
     }
     fn is_disjoint<S: Set<Item = Self::Item>>(&self, other: &S) -> bool{
         self.iter().all(|v| !other.contains(v))
