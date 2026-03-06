@@ -10,12 +10,13 @@ pub mod prelude{
     pub use super::{
         GraphTrait, VertexMap, EdgeID, EdgeType, VertexID, GraphMut, ArbitraryIDGraph, BuildableGraph,
         directed::{SimpleGraph, DiGraph, DigraphProjection, SimpleView, UnderlyingView},
-        labeled_graph::{LabeledGraph, HashMapLabeledGraph}, 
+        labeled_graph::*, 
         adjacency_list::{SparseSimpleGraph, SparseDiGraph}, 
         error::GraphError,
-        graph_ops::*,
-        util::*, set::{Set, EmptyVertexSet}
+        util::*, set::{Set, EmptySet},
+        graph_ops::{GraphOps, SimpleGraphOps},
     };
+    pub use graph_ops_macros::{GraphOps, SimpleGraphOps};
 }
 
 use std::collections::HashMap;
@@ -65,12 +66,7 @@ pub trait GraphTrait{
     /// In the case of a digraph, should only be out connected vtcs.
     fn neighbors(&self, v: VertexID) -> impl Set<Item = VertexID>;
     /// Returns a set of all vertices in the graph
-    fn vertex_set(&self) -> impl Set<Item = VertexID>;
-
-    /// Gets the degree of a vertex, 0 if not in the graph
-    fn degree(&self, v: VertexID) -> usize{
-        self.neighbors(v).len()
-    }
+    fn vertex_set(&self) -> impl Set<Item = VertexID>;    
 }
 /// Graph Mutation for adding and removing vtcs/edges
 pub trait GraphMut: GraphTrait{
@@ -81,7 +77,8 @@ pub trait GraphMut: GraphTrait{
 
     /// Adds an edge to the graph. 
     fn try_add_edge(&mut self, edge: EdgeID) -> Result<(), GraphError>;
-    /// Removes an edge from the graph, does not remove the vertices.
+
+    /// Removes an edge from the graph, does not remove the vertices. Returns whether the edge was in the graph
     fn remove_edge(&mut self, e: EdgeID) -> bool;
 
     /// Creates edges from v1 to the neighbors, returns a list of vtcs which failed to add their edges, and the error.
@@ -115,13 +112,13 @@ pub trait ArbitraryIDGraph: GraphMut{
     }
 }
 /// Graph types that can be build from scratch
-pub trait BuildableGraph: GraphMut+Sized {
+pub trait BuildableGraph: GraphTrait {
     fn empty() -> Self;
-    fn with_capacity(_v: usize, _e: usize) -> Self {
+    fn with_capacity(_v: usize, _e: usize) -> Self where Self: Sized{
         Self::empty()
     }
 }
-impl<G: Default+GraphMut> BuildableGraph for G{
+impl<G: Default+GraphTrait> BuildableGraph for G{
     fn empty() -> Self {
         Self::default()
     }

@@ -169,9 +169,9 @@ impl<V: Eq, const U: usize> Set for [V; U] where{
     fn iter(&self) -> impl Iterator<Item = &Self::Item> {<[V]>::iter(self)}
 }
 
-pub struct EmptyVertexSet<V>(PhantomData<V>);
-impl<V> Default for EmptyVertexSet<V>{fn default() -> Self {Self(PhantomData::default())}}
-impl<V: Eq> Set for EmptyVertexSet<V>{
+pub struct EmptySet<V>(PhantomData<V>);
+impl<V> Default for EmptySet<V>{fn default() -> Self {Self(PhantomData::default())}}
+impl<V: Eq> Set for EmptySet<V>{
     type Item = V;
     fn contains(&self, _: &Self::Item) -> bool {false}
     fn iter(&self) -> impl Iterator<Item = &Self::Item> {[].iter()}

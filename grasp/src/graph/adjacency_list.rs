@@ -3,7 +3,7 @@ use crate::graph::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, GraphOps, SimpleGraphOps)]
 pub struct SparseSimpleGraph {
     adjacency_list: HashMap<usize, HashSet<usize>>
 }
@@ -90,12 +90,9 @@ impl GraphMut for SparseSimpleGraph{
         false
     }
 }
-
 impl SimpleGraph for SparseSimpleGraph{}
-impl GraphOps for SparseSimpleGraph{}
-impl SimpleGraphOps for SparseSimpleGraph{}
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, GraphOps)]
 pub struct SparseDiGraph {
     /// Arcs out from key
     out_adjacency: HashMap<usize, HashSet<usize>>,
@@ -206,7 +203,7 @@ impl DigraphProjection for SparseDiGraph{
         UnderlyingView::from(self)
     }
 }
-impl GraphOps for SparseDiGraph{}
+
 
 /// Placed here instead of in set.rs since it is not standard behaviour
 impl<'a, K> Set for &'a HashMap<VertexID, K>{
