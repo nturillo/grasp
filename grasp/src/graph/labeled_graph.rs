@@ -82,7 +82,7 @@ impl<G: GraphMut, V, E> GraphMut for HashMapLabeledGraph<G, V, E>{
         }else {false}
     }
 }
-impl<G: ArbitraryIDGraph, V, E> ArbitraryIDGraph for HashMapLabeledGraph<G, V, E>{
+impl<G: AnyVertexGraph, V, E> AnyVertexGraph for HashMapLabeledGraph<G, V, E>{
     fn add_vertex(&mut self, id: VertexID) {self.graph.add_vertex(id);}
 }
 

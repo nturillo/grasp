@@ -8,7 +8,7 @@ pub mod directed;
 
 pub mod prelude{
     pub use super::{
-        GraphTrait, VertexMap, EdgeID, EdgeType, VertexID, GraphMut, ArbitraryIDGraph, BuildableGraph,
+        GraphTrait, VertexMap, EdgeID, EdgeType, VertexID, GraphMut, AnyVertexGraph, BuildableGraph,
         directed::{SimpleGraph, DiGraph, DigraphProjection, SimpleView, UnderlyingView},
         labeled_graph::*, 
         adjacency_list::{SparseSimpleGraph, SparseDiGraph}, 
@@ -93,7 +93,7 @@ pub trait GraphMut: GraphTrait{
     }
 }
 /// Methods for graphs with arbitrary VertexID functionality
-pub trait ArbitraryIDGraph: GraphMut{
+pub trait AnyVertexGraph: GraphMut{
     /// Adds a vertex with the specified id into the graph
     fn add_vertex(&mut self, id: VertexID);
     /// Adds an edge and makes sure the two vertices are added as well.
@@ -132,7 +132,7 @@ mod test{
     use crate::graph::prelude::*;
 
     /// Assures SimpleGraph and DiGraph traits work as intended.
-    pub fn graph_vs_digraph_test<S: SimpleGraph+Default+ArbitraryIDGraph, D: DiGraph+Default+ArbitraryIDGraph>(){
+    pub fn graph_vs_digraph_test<S: SimpleGraph+Default+AnyVertexGraph, D: DiGraph+Default+AnyVertexGraph>(){
         let mut simple_graph = S::default();
         let mut digraph = D::default();
         simple_graph.add_edge((0, 1));
@@ -144,7 +144,7 @@ mod test{
     }
 
     /// Assures Digraph functionality.
-    pub fn digraph_fn_test<G: DiGraph+Default+ArbitraryIDGraph>(){
+    pub fn digraph_fn_test<G: DiGraph+Default+AnyVertexGraph>(){
         let mut digraph = G::default();
         digraph.add_edge((0, 1).into()); digraph.add_edge((2, 0).into());
         // neighborhoods
@@ -157,7 +157,7 @@ mod test{
     }
 
     /// Assures Underlying Graphs are correctly calculated
-    pub fn digraph_projection_test<G: DigraphProjection+Default+ArbitraryIDGraph>(){
+    pub fn digraph_projection_test<G: DigraphProjection+Default+AnyVertexGraph>(){
         // underlying graph
         let mut digraph = G::default();
         digraph.add_edge((0, 1)); digraph.add_edge((2, 0));

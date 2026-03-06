@@ -51,7 +51,7 @@ impl GraphTrait for SparseSimpleGraph {
         &self.adjacency_list
     }
 }
-impl ArbitraryIDGraph for SparseSimpleGraph{
+impl AnyVertexGraph for SparseSimpleGraph{
     fn add_vertex(&mut self, id: usize) {
         self.adjacency_list.entry(id).or_default();
     }
@@ -132,7 +132,7 @@ impl GraphTrait for SparseDiGraph {
         &self.out_adjacency
     }
 }
-impl ArbitraryIDGraph for SparseDiGraph{
+impl AnyVertexGraph for SparseDiGraph{
     fn add_vertex(&mut self, id: VertexID) {
         self.out_adjacency.entry(id).or_default();
         self.in_adjacency.entry(id).or_default();

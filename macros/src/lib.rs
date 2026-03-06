@@ -20,12 +20,12 @@ pub fn derive_graph_ops(input: TokenStream) -> TokenStream {
     
     let self_bound = if labeled {
         quote!{
-            Self: ArbitraryIDGraph+BuildableGraph+Sized+LabeledGraphMut, 
+            Self: AnyVertexGraph+BuildableGraph+Sized+LabeledGraphMut, 
             <Self as LabeledGraph>::EdgeData: Clone, 
             <Self as LabeledGraph>::VertexData: Clone
         }
     } else {
-        quote!{Self: ArbitraryIDGraph+BuildableGraph+Sized}
+        quote!{Self: AnyVertexGraph+BuildableGraph+Sized}
     };
 
     let where_clause = match where_clause{
@@ -100,12 +100,12 @@ pub fn derive_simple_graph_ops(input: TokenStream) -> TokenStream {
 
     let self_bound = if labeled {
         quote!{
-            Self: GraphOps+SimpleGraph+LabeledGraphMut+ArbitraryIDGraph+BuildableGraph,
+            Self: GraphOps+SimpleGraph+LabeledGraphMut+AnyVertexGraph+BuildableGraph,
             <Self as LabeledGraph>::EdgeData: Clone, 
             <Self as LabeledGraph>::VertexData: Clone
         }
     } else {
-        quote!{Self: GraphOps+SimpleGraph+ArbitraryIDGraph+BuildableGraph}
+        quote!{Self: GraphOps+SimpleGraph+AnyVertexGraph+BuildableGraph}
     };
 
     let where_clause = match where_clause{

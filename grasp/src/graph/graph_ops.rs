@@ -32,7 +32,7 @@ pub trait SimpleGraphOps: GraphOps+SimpleGraph{
 }
 
 /// Places subgraph from a set of vertices into subgraph
-pub fn build_subgraph_vertex<G: ArbitraryIDGraph>(graph: &G, vertices: impl IntoIterator<Item=VertexID>, subgraph: &mut G) {
+pub fn build_subgraph_vertex<G: AnyVertexGraph>(graph: &G, vertices: impl IntoIterator<Item=VertexID>, subgraph: &mut G) {
     for vertex in vertices{
         subgraph.add_vertex(vertex);
     }
@@ -42,7 +42,7 @@ pub fn build_subgraph_vertex<G: ArbitraryIDGraph>(graph: &G, vertices: impl Into
         }
     }
 }
-pub fn build_subgraph_vertex_labeled<G: LabeledGraphMut+ArbitraryIDGraph>(graph: &G, vertices: impl IntoIterator<Item=VertexID>, subgraph: &mut G)
+pub fn build_subgraph_vertex_labeled<G: LabeledGraphMut+AnyVertexGraph>(graph: &G, vertices: impl IntoIterator<Item=VertexID>, subgraph: &mut G)
 where G::EdgeData: Clone, G::VertexData: Clone{
     for vertex in vertices{
         subgraph.add_vertex(vertex);
@@ -61,13 +61,13 @@ where G::EdgeData: Clone, G::VertexData: Clone{
 }
 
 /// Places subgraph from a set of edges into subgraph
-pub fn build_subgraph_edges<G: ArbitraryIDGraph>(graph: &G, edges: impl IntoIterator<Item=EdgeID>, subgraph: &mut G) {
+pub fn build_subgraph_edges<G: AnyVertexGraph>(graph: &G, edges: impl IntoIterator<Item=EdgeID>, subgraph: &mut G) {
     for edge in edges{
         if !graph.has_edge(edge) {continue;}
         subgraph.add_edge(edge);
     }
 }
-pub fn build_subgraph_edges_labeled<G: LabeledGraphMut+ArbitraryIDGraph>(graph: &G, edges: impl IntoIterator<Item=EdgeID>, subgraph: &mut G)
+pub fn build_subgraph_edges_labeled<G: LabeledGraphMut+AnyVertexGraph>(graph: &G, edges: impl IntoIterator<Item=EdgeID>, subgraph: &mut G)
 where G::EdgeData: Clone, G::VertexData: Clone{
     for edge in edges{
         if !graph.has_edge(edge) {continue;}
@@ -80,7 +80,7 @@ where G::EdgeData: Clone, G::VertexData: Clone{
 }
 
 /// Places the combination of self and other into merged. Also returns two maps (self vertex) -> new vertex, and (other vertex) -> new vertex
-pub fn build_merge<G: ArbitraryIDGraph>(graph: &G, other: &G, merged: &mut G) -> (VertexMap, VertexMap) {
+pub fn build_merge<G: AnyVertexGraph>(graph: &G, other: &G, merged: &mut G) -> (VertexMap, VertexMap) {
     let mut self_map = HashMap::default();
     let mut other_map = HashMap::default();
     // vertices
@@ -105,7 +105,7 @@ pub fn build_merge<G: ArbitraryIDGraph>(graph: &G, other: &G, merged: &mut G) ->
     }
     (self_map, other_map)
 }
-pub fn build_merge_labeled<G: LabeledGraphMut+ArbitraryIDGraph>(graph: &G, other: &G, merged: &mut G) -> (VertexMap, VertexMap)
+pub fn build_merge_labeled<G: LabeledGraphMut+AnyVertexGraph>(graph: &G, other: &G, merged: &mut G) -> (VertexMap, VertexMap)
 where G::EdgeData: Clone, G::VertexData: Clone{
     let mut self_map = HashMap::default();
     let mut other_map = HashMap::default();
@@ -145,7 +145,7 @@ where G::EdgeData: Clone, G::VertexData: Clone{
 }
 
 /// Places the complement of self into complement
-pub fn build_complement<G: ArbitraryIDGraph>(graph: &G, complement: &mut G) {
+pub fn build_complement<G: AnyVertexGraph>(graph: &G, complement: &mut G) {
     for v1 in graph.vertices(){
         complement.add_vertex(v1);
         for v2 in graph.vertices(){
@@ -155,7 +155,7 @@ pub fn build_complement<G: ArbitraryIDGraph>(graph: &G, complement: &mut G) {
         }
     }
 }
-pub fn build_complement_labeled<G: LabeledGraphMut+ArbitraryIDGraph>(graph: &G, complement: &mut G)
+pub fn build_complement_labeled<G: LabeledGraphMut+AnyVertexGraph>(graph: &G, complement: &mut G)
 where G::EdgeData: Clone, G::VertexData: Clone{
     for v1 in graph.vertices(){
         complement.add_vertex(v1);
@@ -174,7 +174,7 @@ where G::EdgeData: Clone, G::VertexData: Clone{
 }
 
 /// Places the join of two graphs into joined. Also returns two maps (self vertex) -> new vertex and (other vertex) -> new vertex
-pub fn build_join<G: ArbitraryIDGraph+SimpleGraph>(graph: &G, other: &G, joined: &mut G) -> (VertexMap, VertexMap) {
+pub fn build_join<G: AnyVertexGraph+SimpleGraph>(graph: &G, other: &G, joined: &mut G) -> (VertexMap, VertexMap) {
     let (self_map, other_map) = build_merge(graph, other, joined);
     for v1 in graph.vertices(){
         let Some(v1) = self_map.get(&v1) else {continue;};
@@ -185,7 +185,7 @@ pub fn build_join<G: ArbitraryIDGraph+SimpleGraph>(graph: &G, other: &G, joined:
     }
     (self_map, other_map)
 }
-pub fn build_join_labeled<G: LabeledGraphMut+ArbitraryIDGraph+SimpleGraph>(graph: &G, other: &G, joined: &mut G) -> (VertexMap, VertexMap)
+pub fn build_join_labeled<G: LabeledGraphMut+AnyVertexGraph+SimpleGraph>(graph: &G, other: &G, joined: &mut G) -> (VertexMap, VertexMap)
 where G::EdgeData: Clone, G::VertexData: Clone{
     let (self_map, other_map) = build_merge_labeled(graph, other, joined);
     for v1 in graph.vertices(){
@@ -199,7 +199,7 @@ where G::EdgeData: Clone, G::VertexData: Clone{
 }
 
 /// Places the cartesian product of two graphs into product. Also returns a map from (self vertex, other vertex) -> new vertex
-pub fn build_product<G: ArbitraryIDGraph+SimpleGraph>(graph: &G, other: &G, product: &mut G) -> HashMap<(VertexID, VertexID), VertexID> {
+pub fn build_product<G: AnyVertexGraph+SimpleGraph>(graph: &G, other: &G, product: &mut G) -> HashMap<(VertexID, VertexID), VertexID> {
     let mut map = HashMap::default();
     // Vertices and map
     for v1 in graph.vertices(){
@@ -226,7 +226,7 @@ pub fn build_product<G: ArbitraryIDGraph+SimpleGraph>(graph: &G, other: &G, prod
     }
     map
 }
-pub fn build_product_labeled<G: LabeledGraphMut+ArbitraryIDGraph+SimpleGraph>(graph: &G, other: &G, product: &mut G) -> HashMap<(VertexID, VertexID), VertexID>
+pub fn build_product_labeled<G: LabeledGraphMut+AnyVertexGraph+SimpleGraph>(graph: &G, other: &G, product: &mut G) -> HashMap<(VertexID, VertexID), VertexID>
 where G::EdgeData: Clone, G::VertexData: Clone{
     let mut map = HashMap::default();
     // Vertices and map
@@ -268,7 +268,7 @@ pub mod test{
     use crate::graph::prelude::*;
 
     /// Assures Graph Ops functionality
-    pub fn graph_ops_test<G: GraphOps+Default+ArbitraryIDGraph>(){
+    pub fn graph_ops_test<G: GraphOps+Default+AnyVertexGraph>(){
         let mut graph_a =  G::default();
         graph_a.add_edge((0, 1)); graph_a.add_edge((1, 2)); graph_a.add_edge((2, 0));
         // ensure subgraphs work
@@ -300,7 +300,7 @@ pub mod test{
         );
     }
 
-    pub fn simple_graph_complement_test<G: GraphOps+Default+ArbitraryIDGraph>(){
+    pub fn simple_graph_complement_test<G: GraphOps+Default+AnyVertexGraph>(){
         // Complement
         let mut graph = G::default();
         graph.add_edge((0, 1)); graph.add_edge((1, 2));
@@ -310,7 +310,7 @@ pub mod test{
         assert!(graphs_eq(&complement, &test_complement));
     }
 
-    pub fn digraph_complement_test<G: GraphOps+Default+ArbitraryIDGraph>(){
+    pub fn digraph_complement_test<G: GraphOps+Default+AnyVertexGraph>(){
         // Complement
         let mut graph = G::default();
         graph.add_edge((0, 1)); graph.add_edge((1, 2));
@@ -322,7 +322,7 @@ pub mod test{
     }
 
     /// Assures SimpleGraphs Ops (Join, Product, Complement) work
-    pub fn simple_graph_ops_test<G: SimpleGraphOps+Default+ArbitraryIDGraph>(){
+    pub fn simple_graph_ops_test<G: SimpleGraphOps+Default+AnyVertexGraph>(){
         let mut line = G::default();
         line.add_vertex(0); line.add_vertex(1);
         // Join

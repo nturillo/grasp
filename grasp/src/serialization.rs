@@ -19,7 +19,7 @@ pub fn to_dot<G: SimpleGraph>(g: G) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph::ArbitraryIDGraph;
+    use crate::graph::AnyVertexGraph;
 
     #[test]
     fn butterfly_dot() {
