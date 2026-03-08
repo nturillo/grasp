@@ -78,7 +78,7 @@ pub fn simple_graph_is_complete<G: SimpleGraph>(g: &G) -> bool {
     g.vertices().all(|vertex| g.neighbors(vertex).unwrap().count() == g.vertex_count() - 1)
 }
 
-/// Returns if a digraph is complete/
+/// Returns if a digraph is complete.
 pub fn digraph_is_complete<G: DiGraph>(g: &G) -> bool {
     g.vertices().all(|vertex| g.in_neighbors(vertex).unwrap().count() == g.vertex_count() - 1 && g.out_neighbors(vertex).unwrap().count() == g.vertex_count() - 1)
 }
