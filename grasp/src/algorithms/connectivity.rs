@@ -19,7 +19,6 @@ pub fn is_strongly_connected<G: DiGraph>(g: &G) -> bool {
 
 /// Return the strongly connected components of a digraph.
 pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<G::VertexSet> {
-    #[derive(Clone, Copy)]
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -32,26 +31,23 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<G::VertexSet> {
     let mut comps: Vec<G::VertexSet> = Vec::new();
 
     fn visit<G: DiGraph>(index: &mut u32, vertex_id: VertexID, g: &G, vertex_map: &mut HashMap<VertexID, VertexWrapper>, stack: &mut Vec<VertexID>, comps: &mut Vec<G::VertexSet>) {
-        vertex_map.insert(vertex_id, VertexWrapper { disc: *index, low: *index, on_stack: true });
+        let mut low = *index;
+        let disc = *index;
+        vertex_map.insert(vertex_id, VertexWrapper { disc: disc, low: low, on_stack: true });
         *index += 1;
         stack.push(vertex_id);
 
-        for target_id in g.out_neighbors(vertex_id).unwrap().into_owned().into_iter() {
-            if let Some(target) = vertex_map.get(&target_id).copied() {
-                if target.on_stack {
-                    let vertex = vertex_map.get_mut(&vertex_id).unwrap();
-                    vertex.low = vertex.low.min(target.disc);
-                }
+        for &target_id in g.out_neighbors(vertex_id).unwrap().as_ref().iter() {
+            if let Some(target) = vertex_map.get(&target_id) {
+                if target.on_stack { low = low.min(target.disc); }
             } else {
                 visit(index, target_id, g, vertex_map, stack, comps);
-                let target = vertex_map.get(&target_id).copied().unwrap();
-                let vertex = vertex_map.get_mut(&vertex_id).unwrap();
-                vertex.low = vertex.low.min(target.low);
+                low = low.min(vertex_map.get(&target_id).unwrap().low);
             }
         }
 
-        let vertex = vertex_map.get_mut(&vertex_id).unwrap();
-        if vertex.low == vertex.disc {
+        vertex_map.get_mut(&vertex_id).unwrap().low = low;
+        if low == disc {
             let mut scc = HashSet::new();
 
             loop {
