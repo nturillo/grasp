@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
-use crate::{algorithms::algo_traits::AlgoTrait, graph::{DiGraph, Set, SimpleGraph, UnderlyingGraph, VertexID}};
+use crate::{algorithms::algo_traits::AlgoTrait, graph::{DiGraph, EdgeID, Set, SimpleGraph, UnderlyingGraph, VertexID}};
 
 /// Determine if a simple graph is connected.
 pub fn is_connected<G: SimpleGraph>(g: &G) -> bool {
@@ -71,6 +71,95 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<G::VertexSet> {
     }
 
     comps
+}
+
+/// Returns a simple graph's articulation points.
+pub fn articulation_points<G: SimpleGraph>(g: &G) -> G::VertexSet {
+    struct VertexWrapper {
+        pub disc: u32,
+        pub low: u32,
+    }
+
+    let mut index = 0;
+    let mut vertex_map: HashMap<VertexID, VertexWrapper> = HashMap::new();
+    let mut points: HashSet<VertexID> = HashSet::new();
+
+    fn visit<G: SimpleGraph>(index: &mut u32, vertex_id: VertexID, g: &G, parent: Option<VertexID>, vertex_map: &mut HashMap<VertexID, VertexWrapper>, points: &mut HashSet<VertexID>) {
+        let mut low = *index;
+        let mut children: u32 = 0;
+        let disc = *index;
+        vertex_map.insert(vertex_id, VertexWrapper { disc: disc, low: low });
+        *index += 1;
+
+        for &target_id in g.neighbors(vertex_id).unwrap().as_ref().iter() {
+            if let Some(target) = vertex_map.get(&target_id) {
+                if Some(target_id) != parent { low = low.min(target.disc); }
+            } else {
+                children += 1;
+                visit(index, target_id, g, Some(vertex_id), vertex_map, points);
+
+                let target_low = vertex_map.get(&target_id).unwrap().low;
+                low = low.min(target_low);
+
+                if parent.is_some() && target_low >= disc { points.insert(vertex_id); }
+            }
+        }
+
+        vertex_map.get_mut(&vertex_id).unwrap().low = low;
+        if parent.is_none() && children > 1 {
+            points.insert(vertex_id);
+        }
+    }
+
+    for vertex in g.vertices() {
+        if !vertex_map.contains_key(&vertex) {
+            visit(&mut index, vertex, g, None, &mut vertex_map, &mut points);
+        }
+    }
+
+    points.iter().copied().collect()
+}
+
+/// Returns a simple graph's bridges.
+pub fn bridges<G: SimpleGraph>(g: &G) -> HashSet<EdgeID> {
+    struct VertexWrapper {
+        pub disc: u32,
+        pub low: u32,
+    }
+
+    let mut index = 0;
+    let mut vertex_map: HashMap<VertexID, VertexWrapper> = HashMap::new();
+    let mut points: HashSet<EdgeID> = HashSet::new();
+
+    fn visit<G: SimpleGraph>(index: &mut u32, vertex_id: VertexID, g: &G, parent: Option<VertexID>, vertex_map: &mut HashMap<VertexID, VertexWrapper>, points: &mut HashSet<EdgeID>) {
+        let mut low = *index;
+        let disc = *index;
+        vertex_map.insert(vertex_id, VertexWrapper { disc: disc, low: low });
+        *index += 1;
+
+        for &target_id in g.neighbors(vertex_id).unwrap().as_ref().iter() {
+            if let Some(target) = vertex_map.get(&target_id) {
+                if Some(target_id) != parent { low = low.min(target.disc); }
+            } else {
+                visit(index, target_id, g, Some(vertex_id), vertex_map, points);
+
+                let target_low = vertex_map.get(&target_id).unwrap().low;
+                low = low.min(target_low);
+
+                if target_low > disc { points.insert((vertex_id.min(target_id), target_id.max(vertex_id))); }
+            }
+        }
+
+        vertex_map.get_mut(&vertex_id).unwrap().low = low;
+    }
+
+    for vertex in g.vertices() {
+        if !vertex_map.contains_key(&vertex) {
+            visit(&mut index, vertex, g, None, &mut vertex_map, &mut points);
+        }
+    }
+
+    points.iter().copied().collect()
 }
 
 /// Returns if a simple graph is complete.
@@ -198,5 +287,29 @@ mod test {
         graph.add_edge((2, 3));
         graph.add_edge((3, 1));
         pretty_assertions::assert_eq!(false, digraph_is_complete(&graph));
+    }
+
+    #[test]
+    pub fn check_articulation_points() {
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 1));
+        graph.add_edge((3, 4));
+        graph.add_edge((4, 5));
+        graph.add_edge((6, 1));
+        pretty_assertions::assert_eq!(HashSet::from([1, 3, 4]), articulation_points(&graph));
+    }
+
+    #[test]
+    pub fn check_bridges() {
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 1));
+        graph.add_edge((3, 4));
+        graph.add_edge((4, 5));
+        graph.add_edge((6, 1));
+        pretty_assertions::assert_eq!(HashSet::from([(1, 6), (3, 4), (4, 5)]), bridges(&graph));
     }
 }
