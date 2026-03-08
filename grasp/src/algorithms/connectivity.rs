@@ -75,12 +75,14 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<G::VertexSet> {
 
 /// Returns if a simple graph is complete.
 pub fn simple_graph_is_complete<G: SimpleGraph>(g: &G) -> bool {
-    g.vertices().all(|vertex| g.neighbors(vertex).unwrap().count() == g.vertex_count() - 1)
+    let n = g.vertex_count();
+    g.edge_count() == n * (n - 1) / 2
 }
 
 /// Returns if a digraph is complete.
 pub fn digraph_is_complete<G: DiGraph>(g: &G) -> bool {
-    g.vertices().all(|vertex| g.in_neighbors(vertex).unwrap().count() == g.vertex_count() - 1 && g.out_neighbors(vertex).unwrap().count() == g.vertex_count() - 1)
+    let n = g.vertex_count();
+    g.edge_count() == n * (n - 1)
 }
 
 #[cfg(test)]
