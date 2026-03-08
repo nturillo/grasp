@@ -73,6 +73,16 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<G::VertexSet> {
     comps
 }
 
+/// Returns if a simple graph is complete.
+pub fn simple_graph_is_complete<G: SimpleGraph>(g: &G) -> bool {
+    g.vertices().all(|vertex| g.neighbors(vertex).unwrap().count() == g.vertex_count() - 1)
+}
+
+/// Returns if a digraph is complete/
+pub fn digraph_is_complete<G: DiGraph>(g: &G) -> bool {
+    g.vertices().all(|vertex| g.in_neighbors(vertex).unwrap().count() == g.vertex_count() - 1 && g.out_neighbors(vertex).unwrap().count() == g.vertex_count() - 1)
+}
+
 #[cfg(test)]
 mod test {
     use crate::{algorithms::connectivity::*, graph::{GraphTrait, prelude::{SparseDiGraph, SparseSimpleGraph}}};
@@ -146,5 +156,45 @@ mod test {
         pretty_assertions::assert_eq!(true, sscs.contains(&v1));
         pretty_assertions::assert_eq!(true, sscs.contains(&v2));
         pretty_assertions::assert_eq!(true, sscs.contains(&v3));
+    }
+
+    #[test]
+    pub fn complete_simple() {
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 1));
+        pretty_assertions::assert_eq!(true, simple_graph_is_complete(&graph));
+    }
+
+    #[test]
+    pub fn not_complete_simple() {
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 1));
+        graph.add_edge((3, 4));
+        pretty_assertions::assert_eq!(false, simple_graph_is_complete(&graph));
+    }
+
+    #[test]
+    pub fn complete_digraph() {
+        let mut graph = SparseDiGraph::default();
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 1));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 2));
+        graph.add_edge((3, 1));
+        graph.add_edge((1, 3));
+        pretty_assertions::assert_eq!(true, digraph_is_complete(&graph));
+    }
+
+    #[test]
+    pub fn not_complete_digraph() {
+        let mut graph = SparseDiGraph::default();
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 1));
+        pretty_assertions::assert_eq!(false, digraph_is_complete(&graph));
     }
 }
