@@ -32,6 +32,9 @@ impl Matching {
         }
     }
     pub fn add_edge(&mut self, edge: EdgeID) -> Result<(), crate::graph::prelude::GraphError> {
+        if self.has_edge(edge) {
+            return Ok(());
+        }
         if self.has_vertex(edge.0) || self.has_vertex(edge.1) {
             Err(crate::graph::prelude::GraphError::EdgeNotAddable(edge, "One or both vertices are already matched".to_string()))
         } else {
