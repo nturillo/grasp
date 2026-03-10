@@ -3,7 +3,7 @@ use crate::graph::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 
-#[derive(Default, Debug, GraphOps, SimpleGraphOps)]
+#[derive(Default, Debug, GraphOps, SimpleGraphOps, Clone)]
 pub struct SparseSimpleGraph {
     adjacency_list: HashMap<usize, HashSet<usize>>
 }
@@ -14,7 +14,6 @@ impl GraphTrait for SparseSimpleGraph {
     fn edge_count(&self) -> usize {
         self.adjacency_list.values().map(|s| s.len()).sum::<usize>()/2
     }
-    
     fn vertices(&self) -> impl Iterator<Item=usize> {
         self.adjacency_list.keys().cloned()
     }
@@ -30,7 +29,6 @@ impl GraphTrait for SparseSimpleGraph {
         }
         edges.into_iter()
     }
-    
     fn has_vertex(&self, v: usize) -> bool {
         self.adjacency_list.contains_key(&v)
     }
@@ -43,7 +41,6 @@ impl GraphTrait for SparseSimpleGraph {
         }
         self.adjacency_list[&v1].contains(&v2)
     }
-    
     fn neighbors(&self, v: usize) -> impl Set<Item=usize> {
         self.adjacency_list.get(&v)
     }
