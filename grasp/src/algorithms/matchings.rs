@@ -1,7 +1,21 @@
-use std::{collections::{HashMap, HashSet, VecDeque}, vec};
-
+use std::collections::{HashMap, HashSet, VecDeque};
 use crate::{algorithms::distance::{graph_distance, shortest_path}, graph::prelude::*};
 
+pub fn maximum_matching<G: SimpleGraph>(graph: &G) -> Matching {
+    let mut blossom_graph = BlossomGraph::new(graph);
+    let mut matching = Matching::new();
+    while let Some(augmenting_path) = find_augmenting_path(&mut blossom_graph, &matching) {
+        for edge in augmenting_path.windows(2).skip(1).step_by(2) {
+            let edge = (edge[0], edge[1]);
+            matching.remove_edge(edge);
+        }
+        for edge in augmenting_path.windows(2).step_by(2) {
+            let edge = (edge[0], edge[1]);
+            matching.add_edge(edge).unwrap();
+        }
+    }
+    matching
+}
 
 /// Special graph type which represents a matching.
 /// Each vertex can have degree at most one.
@@ -27,6 +41,14 @@ impl Matching {
         self.edges.insert(edge.1, edge.0);
         Ok(())
         }
+    }
+    pub fn remove_edge(&mut self, edge: EdgeID) {
+        if self.has_edge(edge) {
+            self.vertices.remove(&edge.0);
+            self.vertices.remove(&edge.1);
+            self.edges.remove(&edge.0);
+            self.edges.remove(&edge.1);
+        } 
     }
     pub fn neighbor(&self, v: VertexID) -> Option<VertexID> {
         self.edges.get(&v).cloned()
@@ -64,115 +86,118 @@ impl GraphTrait for Matching {
     }
 }
 
-/// Niche graph type for the blossom algorithm, which supports contracting and expanding blossoms.
-struct BlossomGraph<'a, G: SimpleGraph> {
-    graph: &'a G,
-    new_vertex: VertexID,
-    blossom: SparseSimpleGraph, 
-    blossom_neighbors: HashSet<VertexID>,
+/// Bespoke graph type for the blossom algorithm, which supports contracting and expanding blossoms.
+struct BlossomGraph {
+    contractions: Vec<(VertexID, SparseSimpleGraph, Vec<EdgeID>)>,
+    current_graph: SparseSimpleGraph,
 }
 
-impl<'a, G: SimpleGraph> BlossomGraph<'a, G> {
-    pub fn new(graph: &'a G, blossom: SparseSimpleGraph) -> Self {
-        let new_vertex = graph.vertices().max().map(|max| max + 1).unwrap_or(0);
-        let blossom_neighbors = blossom.vertices().flat_map(|v| graph.neighbors(v).iter().cloned().collect::<Vec<_>>()).filter(|n| !blossom.has_vertex(*n)).collect();
+impl BlossomGraph {
+    pub fn new<G: SimpleGraph>(graph: &G) -> Self {
+        let mut current_graph = SparseSimpleGraph::with_capacity(graph.vertex_count(), graph.edge_count());
+        for v in graph.vertices() {
+            current_graph.add_vertex(v);
+        }
+        for e in graph.edges() {
+            current_graph.add_edge(e);
+        }
         BlossomGraph {
-            graph,
-            new_vertex,
-            blossom,
-            blossom_neighbors,
+            contractions: Vec::new(),
+            current_graph,
         }
     }
-    pub fn get_new_vertex(&self) -> VertexID {
-        self.new_vertex
+    pub fn contract(&mut self, blossom: SparseSimpleGraph) -> VertexID {
+        let new_vertex = self.current_graph.vertices().max().unwrap() + 1;
+        let removed_edges = self.current_graph.edges().filter(|(u,v)| blossom.has_vertex(*u) || blossom.has_vertex(*v)).collect::<Vec<_>>();
+        self.current_graph.add_vertex(new_vertex);
+        for v in blossom.vertices() {
+            let neighbors = self.current_graph.neighbors(v).iter().cloned().collect::<Vec<_>>();
+            for u in neighbors {
+                self.current_graph.add_edge((new_vertex, u));
+            }
+        }
+        for v in blossom.vertices() {
+            let _ = self.current_graph.remove_vertex(v);
+        }
+        self.contractions.push((new_vertex, blossom, removed_edges));
+        new_vertex
+    }
+    pub fn expand(&mut self) -> Option<(usize, SparseSimpleGraph, Vec<EdgeID>)> {
+        if let Some((new_vertex, blossom, removed_edges)) = self.contractions.last() {
+            self.current_graph.remove_vertex(*new_vertex);
+            for e in removed_edges {
+                self.current_graph.add_edge(*e);
+            }
+        }
+        self.contractions.pop()
     }
     pub fn lift_path(&mut self, contracted_path: Vec<VertexID>, matching: &Matching) -> Vec<VertexID> {
-        let mut path = Vec::with_capacity(contracted_path.len() + self.blossom.vertex_count() - 1);
-        let exposed_vertex = self.blossom.vertices().find(|&v| {
-            !matching.has_vertex(v) || !self.blossom.has_vertex(matching.neighbor(v).unwrap())
+        if self.contractions.is_empty() {
+            return contracted_path;
+        }
+        let (new_vertex, mut blossom, _) = self.expand().unwrap();
+        let mut path = Vec::with_capacity(contracted_path.len() + blossom.vertex_count() - 1);
+        let exposed_vertex = blossom.vertices().find(|&v| {
+            !matching.has_vertex(v) || !blossom.has_vertex(matching.neighbor(v).unwrap())
         }).unwrap();
-        let mut new_index = contracted_path.iter().position(|&v| v == self.new_vertex).unwrap();
+        let mut new_index = contracted_path.iter().position(|&v| v == new_vertex).unwrap();
         let mut contracted_path = contracted_path;
-        if !(new_index == 0 || self.graph.has_edge((contracted_path[new_index-1], exposed_vertex))) {
+        if contracted_path.last() == Some(&new_vertex) {
             contracted_path = contracted_path.into_iter().rev().collect();
             new_index = contracted_path.len() - 1 - new_index;
         }
         path.extend_from_slice(&contracted_path[0..new_index]);
-        let next_vertex = contracted_path[new_index+1];
-        let u = *self.graph.neighbors(next_vertex).iter().find(|&&n| self.blossom.has_vertex(n)).unwrap();
-        let sp= shortest_path(&self.blossom, exposed_vertex, u).unwrap();
+        let mut left: VertexID;
+        let mut right: VertexID;
+        if contracted_path.first() == Some(&new_vertex) || self.current_graph.has_edge((contracted_path[new_index-1], exposed_vertex)) {
+            left = exposed_vertex;
+            right = blossom.vertices().find(|&v| self.current_graph.has_edge((contracted_path[new_index+1], v))).unwrap();
+        } else {
+            left = blossom.vertices().find(|&v| self.current_graph.has_edge((contracted_path[new_index-1], v))).unwrap();
+            right = exposed_vertex;
+        }
+        let sp= shortest_path(&blossom, left, right).unwrap();
         if sp.len() % 2 == 1 {
             path.extend(sp);
         } else {
-            let _ = self.blossom.remove_edge((exposed_vertex, sp[1]));
-            path.extend(shortest_path(&self.blossom, exposed_vertex, u).unwrap());
+            let _ = blossom.remove_edge((left, sp[1]));
+            path.extend(shortest_path(&blossom, left, right).unwrap());
         }
         path.extend_from_slice(&contracted_path[new_index+1..]);
         path
-   }
+    }
 }
 
-impl<G: SimpleGraph> GraphTrait for BlossomGraph<'_, G> {
+impl GraphTrait for BlossomGraph {
     fn vertex_count(&self) -> usize {
-        self.graph.vertex_count() - self.blossom.vertex_count() + 1
+        self.current_graph.vertex_count()
     }
     fn edge_count(&self) -> usize {
-        self.edges().collect::<Vec<_>>().len()
+        self.current_graph.edge_count()
     }
     fn has_vertex(&self, v: VertexID) -> bool {
-        if v == self.new_vertex {
-            true
-        } else if self.blossom.has_vertex(v) {
-            false
-        } else {
-            self.graph.has_vertex(v)
-        }
+        self.current_graph.has_vertex(v)
     }
     fn has_edge(&self, e: EdgeID) -> bool {
-        if self.blossom.has_vertex(e.0) || self.blossom.has_vertex(e.1) {
-            return false;
-        }
-        if e.0 == self.new_vertex {
-            self.blossom.vertices().any(|v| self.graph.has_edge((v, e.1)))
-        } else if e.1 == self.new_vertex {
-            self.blossom.vertices().any(|v| self.graph.has_edge((e.0, v)))
-        } else {
-            self.graph.has_edge(e)
-        }
+        self.current_graph.has_edge(e)
     }
     fn vertices(&self) -> impl Iterator<Item=VertexID> {
-        self.graph.vertices().filter(|v| !self.blossom.has_vertex(*v)).chain(std::iter::once(self.new_vertex))
+        self.current_graph.vertices()
     }
     fn edges(&self) -> impl Iterator<Item=EdgeID> {
-        self.graph.edges().filter_map(|(u,v)| {
-            if self.blossom.has_vertex(u) || self.blossom.has_vertex(v) {
-                None
-            } else {
-                Some((u,v))
-            }
-        }).chain(self.blossom_neighbors.iter().map(move |&v| (self.new_vertex, v)))
+        self.current_graph.edges()
     }
     fn neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {
-        if self.blossom.has_vertex(v) {
-            HashSet::new()
-        } else if v == self.new_vertex {
-            self.blossom_neighbors.clone()
-        } else {
-            let mut neighbors = self.graph.neighbors(v).iter().filter(|&&n| !self.blossom.has_vertex(n)).cloned().collect::<HashSet<_>>();
-            if self.blossom.vertices().any(|b| self.graph.has_edge((v, b))) {
-                neighbors.insert(self.new_vertex);
-            }
-            neighbors
-        }
+        self.current_graph.neighbors(v)
     }
     fn vertex_set(&self) -> impl Set<Item = VertexID> {
-        self.graph.vertices().filter(|v| !self.blossom.has_vertex(*v)).chain(std::iter::once(self.new_vertex)).collect::<HashSet<_>>()
+        self.current_graph.vertex_set()
     }
 }
 
-impl<'a, G: SimpleGraph> SimpleGraph for BlossomGraph<'a, G> {}
+impl SimpleGraph for BlossomGraph {}
 
-fn find_augmenting_path<G: SimpleGraph>(graph: &G, matching: &Matching) -> Option<Vec<VertexID>> {
+fn find_augmenting_path(graph: &mut BlossomGraph, matching: &Matching) -> Option<Vec<VertexID>> {
     let mut forest = SparseSimpleGraph::empty();
     let mut roots: HashMap<VertexID, VertexID> = HashMap::new();
     let mut edges_visited: HashSet<EdgeID> = HashSet::new();
@@ -190,7 +215,8 @@ fn find_augmenting_path<G: SimpleGraph>(graph: &G, matching: &Matching) -> Optio
         if graph_distance(&forest, v, roots[&v]).unwrap() % 2 == 1 {
             continue;
         }
-        for &w in graph.neighbors(v).iter() {
+        let neighbors = graph.neighbors(v).iter().cloned().collect::<Vec<_>>();
+        for w in neighbors {
             let edge = (v, w);
             if edges_visited.contains(&edge) || edges_visited.contains(&(w, v)) {
                 continue;
@@ -220,8 +246,7 @@ fn find_augmenting_path<G: SimpleGraph>(graph: &G, matching: &Matching) -> Optio
                     for edge in blossom_vertices.windows(2) {
                         blossom.add_edge((edge[0], edge[1]));
                     }
-                    let mut contracted_graph = BlossomGraph::new(graph, blossom.clone());
-                    let new_vertex = contracted_graph.get_new_vertex();
+                    let new_vertex = graph.contract(blossom.clone());
                     let mut contracted_matching = Matching::new();
                     for e in matching.edges() {
                         match (blossom.has_vertex(e.0), blossom.has_vertex(e.1)) {
@@ -231,14 +256,14 @@ fn find_augmenting_path<G: SimpleGraph>(graph: &G, matching: &Matching) -> Optio
                             (false, false) => contracted_matching.add_edge(e).unwrap(),
                         }
                     }
-                    if let Some(contracted_path) = find_augmenting_path(&contracted_graph, &contracted_matching) {
-                        return Some(contracted_graph.lift_path(contracted_path, &contracted_matching));
+                    if let Some(contracted_path) = find_augmenting_path(graph, &contracted_matching) {
+                        return Some(graph.lift_path(contracted_path, &matching));
                     } else {
                         return None;
                     }
                 }
             }
-        } 
+        }
     }
 
     None
@@ -261,12 +286,13 @@ mod tests {
         graph.add_edge((3,5));
 
         let blossom = graph.subgraph_vertex([1,2,3]);
-        let blossom_graph = BlossomGraph::new(&graph, blossom);
+        let mut blossom_graph = BlossomGraph::new(&graph);
+        let new_vertex = blossom_graph.contract(blossom.clone());
 
         let mut expected_graph = SparseSimpleGraph::with_capacity(4, 0);
-        expected_graph.add_edge((0, blossom_graph.get_new_vertex()));
-        expected_graph.add_edge((4, blossom_graph.get_new_vertex()));
-        expected_graph.add_edge((5, blossom_graph.get_new_vertex()));
+        expected_graph.add_edge((0, new_vertex));
+        expected_graph.add_edge((4, new_vertex));
+        expected_graph.add_edge((5, new_vertex));
 
         assert_graphs_eq!(blossom_graph, expected_graph);        
     }
@@ -280,31 +306,23 @@ mod tests {
         graph.add_edge((2,3));
         graph.add_edge((3,4));
         graph.add_edge((3,5));
+        graph.add_edge((4,6));
 
         let blossom = graph.subgraph_vertex([1,2,3]);
-        let mut blossom_graph = BlossomGraph::new(&graph, blossom.clone());
+        let mut blossom_graph = BlossomGraph::new(&graph);
+        let new_vertex = blossom_graph.contract(blossom.clone());
 
         let mut matching = Matching::new();
         matching.add_edge((1,2)).unwrap();
         matching.add_edge((3,4)).unwrap();
 
-        let contracted_path = vec![0, blossom_graph.get_new_vertex(), 5];
+        let contracted_path = vec![0, new_vertex, 4, 6];
         let lifted_path = blossom_graph.lift_path(contracted_path, &matching);
-        pretty_assertions::assert_eq!(lifted_path, vec![5, 3, 2, 1, 0]);
-
-        graph.add_edge((6,0));
-        let mut matching = Matching::new();
-        matching.add_edge((0,1)).unwrap();
-        matching.add_edge((2,3)).unwrap();
-
-        let mut blossom_graph = BlossomGraph::new(&graph, blossom.clone());
-        let contracted_path = vec![6, 0, blossom_graph.get_new_vertex(), 4];
-        let lifted_path = blossom_graph.lift_path(contracted_path, &matching);
-        pretty_assertions::assert_eq!(lifted_path, vec![6, 0, 1, 2, 3, 4]);
+        assert!(lifted_path == vec![6,4,3,2,1,0] || lifted_path == vec![0,1,2,3,4,6]);
     }
 
     #[test]
-    fn fing_augmenting_test() {
+    fn augmenting_test() {
         let mut graph = SparseSimpleGraph::with_capacity(7, 8);
         for e in [(0,1), (1,2), (2,3), (3,4), (4,5), (5,6), (6,7), (6,2)] {
             graph.add_edge(e);
@@ -313,7 +331,63 @@ mod tests {
         for e in [(1,2), (3,4), (5,6)] {
             matching.add_edge(e).unwrap();
         }
-        let path = find_augmenting_path(&graph, &matching).unwrap();
-        pretty_assertions::assert_eq!(path, vec![0, 1, 2, 3, 4, 5, 6, 7]);
+        let mut blossom_graph = BlossomGraph::new(&graph);
+        let path = find_augmenting_path(&mut blossom_graph, &matching).unwrap();
+        assert!((path == (0..=7).collect::<Vec<_>>() || path == (0..=7).rev().collect::<Vec<_>>()));
+    }
+
+    #[test]
+    fn single_edge() {
+        let mut graph = SparseSimpleGraph::with_capacity(2, 1);
+        graph.add_edge((0,1));
+
+        let mut expected_matching = Matching::new();
+        expected_matching.add_edge((0,1)).unwrap();
+
+        let matching = maximum_matching(&graph);
+        assert_graphs_eq!(matching, expected_matching);
+    }
+
+    #[test]
+    fn two_disjoint_edges() {
+        let mut graph = SparseSimpleGraph::with_capacity(4, 2);
+        graph.add_edge((0,1));
+        graph.add_edge((2,3));
+
+        let mut expected_matching = Matching::new();
+        expected_matching.add_edge((0,1)).unwrap();
+        expected_matching.add_edge((2,3)).unwrap();
+
+        let matching = maximum_matching(&graph);
+        assert_graphs_eq!(matching, expected_matching);
+    }
+
+    #[test]
+    fn teardrop() {
+        let mut graph = SparseSimpleGraph::with_capacity(4,4);
+        graph.add_edge((0,1));
+        graph.add_edge((1,2));
+        graph.add_edge((2,3));
+        graph.add_edge((3,1));
+
+        let mut expected_matching = Matching::new();
+        expected_matching.add_edge((0,1)).unwrap();
+        expected_matching.add_edge((2,3)).unwrap();
+
+        let matching = maximum_matching(&graph);
+        assert_graphs_eq!(matching, expected_matching);
+    }
+
+    #[test]
+    fn cycle_with_chord() {
+        let mut graph = SparseSimpleGraph::empty();
+        for e in (0..=5).collect::<Vec<usize>>().windows(2) {
+            graph.add_edge((e[0], e[1]));
+        }
+        graph.add_edge((0,5));
+        graph.add_edge((1,5));
+
+        let matching = maximum_matching(&graph);
+        assert!(matching.edge_count() == 3);
     }
 }

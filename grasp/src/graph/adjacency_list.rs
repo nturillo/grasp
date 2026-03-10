@@ -60,6 +60,9 @@ impl GraphMut for SparseSimpleGraph{
         key
     }
     fn try_add_edge(&mut self, (u, v): EdgeID) -> Result<(), GraphError> {
+        if u == v {
+            return Err(GraphError::EdgeNotAddable((u,v), "No loops allowed in simple graph".to_string()));
+        }
         let (has_u, has_v) = (self.has_vertex(u), self.has_vertex(v));
         if !has_u && !has_v {return Err(GraphError::NeitherVertexInGraph(u, v));}
         else if !has_u {return Err(GraphError::VertexNotInGraph(u));}
