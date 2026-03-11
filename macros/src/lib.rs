@@ -123,7 +123,6 @@ pub fn register(attr: TokenStream, item: TokenStream) -> TokenStream {
     let out = quote! {
         #input
 
-        #[cfg(feature = "meta")]
         fn #wrapped_name(graph: &crate::graph::adjacency_list::SparseDiGraph, args: &[crate::algorithms::registry::ArgType]) -> crate::algorithms::registry::ReturnType {
             std::hint::black_box(&#unique_id);
 
