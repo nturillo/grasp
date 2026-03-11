@@ -1,4 +1,5 @@
 use std::result::Result;
+use crate::graph::prelude::*;
 
 #[cfg(feature = "serde")]
 use {
@@ -112,8 +113,8 @@ pub fn to_gml<G: GraphTrait>(g: G) -> String {
 /// Create a [crate::graph::GraphTrait] from a GML string.
 ///
 /// Note: This function does not support labeled data. To include labeled data, use [crate::serialization::gml::labeled_from_gml].
-pub fn from_gml<G: GraphTrait + Default>(string: String) -> Result<G, FormattingError> {
-    let mut graph = G::default();
+pub fn from_gml<G: GraphTrait + BuildableGraph + AnyVertexGraph>(string: String) -> Result<G, FormattingError> {
+    let mut graph = G::empty();
     let err = Err(FormattingError { message: "Invalid GML format.".to_string()});
     let mut history = Vec::new();
     let mut edge_builder = (None, None);
@@ -436,13 +437,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     #[cfg(feature = "serde")]
     use serde::{Deserialize, Serialize};
     #[cfg(feature = "serde")]
     use crate::serialization::gml::{labeled_from_gml, labeled_to_gml};
-
-    use crate::serialization::gml::{from_gml, to_gml};
-    use crate::{graph::{GraphTrait, prelude::{HashMapLabeledGraph, SparseSimpleGraph}}};
 
     #[test]
     fn butterfly_gml() {

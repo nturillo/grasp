@@ -1,8 +1,7 @@
-use crate::graph::GraphTrait;
-use crate::graph::{DiGraph, SimpleGraph};
-use crate::graph::{EdgeID, VertexID};
 use crate::serialization::error::*;
 use std::result::Result;
+use crate::graph::prelude::*;
+
 
 #[cfg(feature = "xml")]
 use {

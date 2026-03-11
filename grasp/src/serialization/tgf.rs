@@ -1,4 +1,5 @@
-use crate::{graph::{EdgeID, GraphTrait, VertexID}, serialization::error::FormattingError};
+use crate::graph::prelude::*;
+use crate::serialization::error::*;
 
 pub fn to_tgf<G: GraphTrait>(g: G) -> String {
     let mut s = String::new();
@@ -17,9 +18,9 @@ pub fn to_tgf<G: GraphTrait>(g: G) -> String {
     s
 }
 
-pub fn from_tgf<G: GraphTrait + Default>(string: String) -> Result<G, FormattingError> {
+pub fn from_tgf<G: GraphTrait + BuildableGraph + AnyVertexGraph>(string: String) -> Result<G, FormattingError> {
     let mut lines = string.lines().map(|line| line.trim());
-    let mut graph = G::default();
+    let mut graph = G::empty();
 
     while let Some(line) = lines.next() {
         if let Ok(n) = line.parse() {
