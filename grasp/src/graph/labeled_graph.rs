@@ -42,11 +42,15 @@ pub trait LabeledGraphMut: LabeledGraph{
 pub struct HashMapLabeledGraph<G, V=(), E=()> where G: GraphTrait {
     pub graph: G,
     pub vertex_labels: HashMap<VertexID, V>,
-    pub edge_labels: HashMap<EdgeID, E>
+    pub edge_labels: HashMap<EdgeID, E>,
 }
 impl<G: GraphTrait+Default, V, E> Default for HashMapLabeledGraph<G, V, E>{
     fn default() -> Self {
-        Self{graph: G::default(), vertex_labels: HashMap::default(), edge_labels: HashMap::default()}
+        Self {
+            graph: G::default(),
+            vertex_labels: HashMap::default(),
+            edge_labels: HashMap::default(),
+        }
     }
 }
 impl<G: GraphTrait+SimpleGraph, V, E> SimpleGraph for HashMapLabeledGraph<G, V, E>{}
@@ -125,9 +129,14 @@ impl<G: GraphTrait, V, E> LabeledGraphMut for HashMapLabeledGraph<G, V, E>{
             self.set_edge_label(e.to_simple(), l);
         }
     }
-    fn fill_vertex_labels(&mut self, mut labeler: impl FnMut(VertexID) -> Option<Self::VertexData>) {
+    fn fill_vertex_labels(
+        &mut self,
+        mut labeler: impl FnMut(VertexID) -> Option<Self::VertexData>,
+    ) {
         for vertex in self.graph.vertices() {
-            let Some(label) = labeler(vertex) else {continue;};
+            let Some(label) = labeler(vertex) else {
+                continue;
+            };
             self.vertex_labels.insert(vertex, label);
         }
     }
@@ -146,15 +155,16 @@ impl<G: GraphTrait, V, E> LabeledGraphMut for HashMapLabeledGraph<G, V, E>{
 }
 
 #[cfg(test)]
-mod test{
-    use std::collections::HashSet;
+mod test {
     use crate::graph::prelude::*;
+    use std::collections::HashSet;
 
     /// ensures basic labeled graph functionality works
     #[test]
-    fn hashmap_labeled_graph_test(){
+    fn hashmap_labeled_graph_test() {
         let mut graph = HashMapLabeledGraph::<SparseSimpleGraph, u8, f32>::default();
-        graph.add_edge((0, 1)); graph.add_edge((1, 2));
+        graph.add_edge((0, 1));
+        graph.add_edge((1, 2));
         graph.set_vertex_label(1, 3_u8);
         graph.set_edge_label((1, 2), 3.14);
         assert_eq!(graph.get_edge_label((0, 1)), None);
@@ -170,7 +180,7 @@ mod test{
 
     /// Ensures graphops work with labels being repositioned after operations
     #[test]
-    fn hashmap_labeled_graphops_test(){
+    fn hashmap_labeled_graphops_test() {
         type TestGraph = HashMapLabeledGraph<SparseSimpleGraph, u8, f32>;
         let mut dot = TestGraph::default();
         let mut line = TestGraph::default();
@@ -185,7 +195,10 @@ mod test{
         test_merged.add_edge((*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()));
         test_merged.add_vertex(*map_dot.get(&0).unwrap());
         test_merged.set_vertex_label(*map_dot.get(&0).unwrap(), 1_u8);
-        test_merged.set_edge_label((*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()), 5.0);
+        test_merged.set_edge_label(
+            (*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()),
+            5.0,
+        );
         test_merged.set_vertex_label(*map_line.get(&1).unwrap(), 8_u8);
         assert!(labeled_graphs_eq(&merged, &test_merged));
         // Subgraph
@@ -208,7 +221,10 @@ mod test{
         test_join.add_vertex(*map_dot.get(&0).unwrap());
         test_join.set_vertex_label(*map_dot.get(&0).unwrap(), 1_u8);
         test_join.set_vertex_label(*map_line.get(&1).unwrap(), 8_u8);
-        test_join.set_edge_label((*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()), 5.0);
+        test_join.set_edge_label(
+            (*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()),
+            5.0,
+        );
         test_join.add_edge((*map_dot.get(&0).unwrap(), *map_line.get(&0).unwrap()));
         test_join.add_edge((*map_dot.get(&0).unwrap(), *map_line.get(&1).unwrap()));
         assert!(labeled_graphs_eq(&join, &test_join));
