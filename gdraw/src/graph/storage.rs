@@ -1,6 +1,6 @@
 use crate::graph::layout::{PartialLayout};
 use eframe::egui::{Color32, Vec2};
-use grasp::graph::{EdgeID, GraphTrait, Set, VertexID, adjacency_list::SparseDiGraph};
+use grasp::graph::{AnyVertexGraph, EdgeID, GraphMut, GraphTrait, VertexID, adjacency_list::SparseDiGraph, set::Set};
 use std::{
     collections::HashMap,
 };
@@ -109,7 +109,7 @@ impl Graph {
         match self.vertex_labels.remove(&vertex_id) {
             None => None,
             Some(vertex) => {
-                let _ = self.base.delete_vertex(vertex.id);
+                let _ = self.base.remove_vertex(vertex.id);
                 self.edge_labels.retain(|&(source, target), _| source != vertex_id && target != vertex_id);
                 self.selected_list.retain(|&v| v != vertex.id);
 
@@ -123,19 +123,19 @@ impl Graph {
         self.selected_list.drain(..).for_each(|vert| {
             self.edge_labels.retain(|&(source, target), _| source != vert && target != vert);
             self.vertex_labels.remove(&vert);
-            let _ = self.base.delete_vertex(vert);} );
+            let _ = self.base.remove_vertex(vert);} );
     }
 
     pub fn remove_edge(&mut self, pair: EdgeID) {
         self.reset_partial_data();
 
         self.edge_labels.remove(&pair);
-        self.base.delete_edge(pair);
+        self.base.remove_edge(pair);
 
         if !self.directed {
             let pair = (pair.1, pair.0);
             self.edge_labels.remove(&pair);
-            self.base.delete_edge(pair);
+            self.base.remove_edge(pair);
         }
     }
 
@@ -143,14 +143,14 @@ impl Graph {
         self.layout_config.partial_data = PartialLayout::None;
     }
 
-    pub fn highlight_set<S: Set<VertexID>>(&mut self, set: &S, color: Color32) {
+    pub fn highlight_set<S: Set<Item = VertexID>>(&mut self, set: &S, color: Color32) {
         set.iter().for_each(|&vertex| {
             self.vertex_labels.get_mut(&vertex)
             .map(|v| v.assign_color(color));
         });
     }
 
-    pub fn highlight_edges<S: Set<EdgeID>>(&mut self, set: &S, color: Color32) {
+    pub fn highlight_edges<S: Set<Item = EdgeID>>(&mut self, set: &S, color: Color32) {
         set.iter().for_each(|&edge| {
             self.edge_labels.get_mut(&edge)
             .map(|e| e.assign_color(color));

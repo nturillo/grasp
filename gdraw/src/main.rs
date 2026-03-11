@@ -24,7 +24,9 @@ fn main() {
     let mut app = GraspApp::new();
 
     app.load(&butterfly);
-    app.highlight_set(butterfly.neighbors(1).expect("").as_ref(), Color32::RED);
+
+    let rr = butterfly.neighbors(1);
+    app.highlight_set(&rr, Color32::RED);
 
     let _ = app.start();
 

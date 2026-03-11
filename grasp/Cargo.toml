@@ -7,4 +7,3 @@ edition = "2024"
 pretty_assertions = "1.4.1"
 graph_ops_macros = {path = "../macros"}
 linkme = "0.3"
-macros = {path = "../macros"}

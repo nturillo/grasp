@@ -10,7 +10,7 @@ use crate::{
 use eframe::{egui::{
     self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Rect, Sense, Stroke, TopBottomPanel, Vec2, Window
 }, epaint::Vertex};
-use grasp::graph::{GraphTrait, Set, UnderlyingGraph, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
+use grasp::graph::{GraphTrait, VertexID, prelude::{DigraphProjection, SparseDiGraph, SparseSimpleGraph}, set::Set};
 
 pub struct GraspApp {
     pub style: Style,
@@ -72,18 +72,13 @@ impl GraspApp {
     }
 
     /// Highlight a set of vertices.
-    pub fn highlight_set<S: Set<VertexID>>(&mut self, set: &S, color: Color32) {
+    pub fn highlight_set<S: Set<Item = VertexID>>(&mut self, set: &S, color: Color32) {
         self.graph.highlight_set(set, color);
     }
 
     /// Returns a copy of the [`grasp::graph::adjacency_list::SparseDiGraph`] underlying the visualizer.
     pub fn as_sparse_digraph(&mut self) -> SparseDiGraph {
         self.graph.clone().base
-    }
-
-    /// Returns a copy of the [`grasp::graph::adjacency_list::SparseSimpleGraph`] underlying the visualizer.
-    pub fn as_sparse_simplegraph(&mut self) -> SparseSimpleGraph {
-        self.graph.clone().base.underlying_graph()
     }
 }
 
