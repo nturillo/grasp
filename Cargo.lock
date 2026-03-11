@@ -1347,11 +1347,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "graph_ops_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "grasp"
 version = "0.1.0"
 dependencies = [
- "linkme",
- "macros",
+ "graph_ops_macros",
  "pretty_assertions",
 ]
 

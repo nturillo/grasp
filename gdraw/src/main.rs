@@ -1,6 +1,6 @@
 use eframe::egui::Color32;
 use gdraw::app::GraspApp;
-use grasp::graph::{adjacency_list::SparseSimpleGraph, GraphTrait};
+use grasp::graph::prelude::*;
 
 #[allow(unused)]
 fn main() {
