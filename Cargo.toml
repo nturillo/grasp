@@ -1,8 +1,10 @@
 [workspace]
+resolver = "3"
 members = [
     "grasp",
     "python",
-    "gdraw"
+    "gdraw",
+    "macros"
 ]
 
 default-members = [

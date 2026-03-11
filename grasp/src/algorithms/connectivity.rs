@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{algorithms::algo_traits::AlgoTrait, graph::{DiGraph, EdgeID, Set, SimpleGraph, UnderlyingGraph, VertexID}};
+use crate::{algorithms::algo_traits::AlgoTrait, graph::{EdgeID, VertexID, prelude::{DiGraph, DigraphProjection, SimpleGraph}, set::Set}};
 
 /// Determine if a simple graph is connected.
 pub fn is_connected<G: SimpleGraph>(g: &G) -> bool {
@@ -8,8 +8,8 @@ pub fn is_connected<G: SimpleGraph>(g: &G) -> bool {
 }
 
 /// Determine if a digraph is weakly connected.
-pub fn is_weakly_connected<G: UnderlyingGraph>(g: &G) -> bool {
-    is_connected(&g.underlying_graph())
+pub fn is_weakly_connected<G: DigraphProjection>(g: &G) -> bool {
+    is_connected(&g.as_simple())
 }
 
 /// Determine if a digraph is strongly connected.
@@ -18,7 +18,7 @@ pub fn is_strongly_connected<G: DiGraph>(g: &G) -> bool {
 }
 
 /// Return the strongly connected components of a digraph.
-pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<G::VertexSet> {
+pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<HashSet<VertexID>> {
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -28,16 +28,16 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<G::VertexSet> {
     let mut stack = vec![];
     let mut index = 0;
     let mut vertex_map: HashMap<VertexID, VertexWrapper> = HashMap::new();
-    let mut comps: Vec<G::VertexSet> = Vec::new();
+    let mut comps: Vec<HashSet<VertexID>> = Vec::new();
 
-    fn visit<G: DiGraph>(index: &mut u32, vertex_id: VertexID, g: &G, vertex_map: &mut HashMap<VertexID, VertexWrapper>, stack: &mut Vec<VertexID>, comps: &mut Vec<G::VertexSet>) {
+    fn visit<G: DiGraph>(index: &mut u32, vertex_id: VertexID, g: &G, vertex_map: &mut HashMap<VertexID, VertexWrapper>, stack: &mut Vec<VertexID>, comps: &mut Vec<HashSet<VertexID>>) {
         let mut low = *index;
         let disc = *index;
         vertex_map.insert(vertex_id, VertexWrapper { disc: disc, low: low, on_stack: true });
         *index += 1;
         stack.push(vertex_id);
 
-        for &target_id in g.out_neighbors(vertex_id).unwrap().as_ref().iter() {
+        for &target_id in g.out_neighbors(vertex_id).iter() {
             if let Some(target) = vertex_map.get(&target_id) {
                 if target.on_stack { low = low.min(target.disc); }
             } else {
@@ -74,7 +74,7 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<G::VertexSet> {
 }
 
 /// Returns a simple graph's articulation points.
-pub fn articulation_points<G: SimpleGraph>(g: &G) -> G::VertexSet {
+pub fn articulation_points<G: SimpleGraph>(g: &G) -> HashSet<VertexID> {
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -91,7 +91,7 @@ pub fn articulation_points<G: SimpleGraph>(g: &G) -> G::VertexSet {
         vertex_map.insert(vertex_id, VertexWrapper { disc: disc, low: low });
         *index += 1;
 
-        for &target_id in g.neighbors(vertex_id).unwrap().as_ref().iter() {
+        for &target_id in g.neighbors(vertex_id).iter() {
             if let Some(target) = vertex_map.get(&target_id) {
                 if Some(target_id) != parent { low = low.min(target.disc); }
             } else {
@@ -137,7 +137,7 @@ pub fn bridges<G: SimpleGraph>(g: &G) -> HashSet<EdgeID> {
         vertex_map.insert(vertex_id, VertexWrapper { disc: disc, low: low });
         *index += 1;
 
-        for &target_id in g.neighbors(vertex_id).unwrap().as_ref().iter() {
+        for &target_id in g.neighbors(vertex_id).iter() {
             if let Some(target) = vertex_map.get(&target_id) {
                 if Some(target_id) != parent { low = low.min(target.disc); }
             } else {
@@ -176,7 +176,7 @@ pub fn digraph_is_complete<G: DiGraph>(g: &G) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::{algorithms::connectivity::*, graph::{GraphTrait, prelude::{SparseDiGraph, SparseSimpleGraph}}};
+    use crate::{algorithms::connectivity::*, graph::{AnyVertexGraph, prelude::{SparseDiGraph, SparseSimpleGraph}}};
 
     #[test]
     pub fn empty_simple_connected() {
