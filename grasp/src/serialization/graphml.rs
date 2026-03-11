@@ -68,12 +68,12 @@ pub fn to_graphml_digraph<G: DiGraph>(graph: G) -> String {
 /// Create a [crate::graph::GraphTrait] from a GraphML string.
 ///
 /// Note: This format does not support labeled data. To include labeled data, use [crate::serialization::graphml::labeled_from_graphml].
-pub fn from_graphml<G: GraphTrait + Default>(string: String) -> Result<G, FormattingError> {
+pub fn from_graphml<G: BuildableGraph + AnyVertexGraph>(string: String) -> Result<G, FormattingError> {
     let mut buf = Vec::new();
     let mut reader = Reader::from_str(string.as_str());
     reader.config_mut().trim_text(true);
 
-    let mut graph = G::default();
+    let mut graph = G::empty();
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -193,8 +193,8 @@ where
 /// Format any undirected [crate::graph::labeled_graph::LabeledGraph] into the GraphML format.
 ///
 /// Attached data types must be serializable.
-pub fn labeled_to_graphml_simple<G: LabeledGraph>(graph: G) -> String
-where G::GraphType: SimpleGraph,
+pub fn labeled_to_graphml_simple<G: LabeledGraph + SimpleGraph>(graph: G) -> String
+where
     G::VertexData: Serialize,
     G::EdgeData: Serialize,
 {
@@ -205,8 +205,8 @@ where G::GraphType: SimpleGraph,
 /// Format any directed [crate::graph::labeled_graph::LabeledGraph] into the GraphML format.
 ///
 /// Attached data types must be serializable.
-pub fn labeled_to_graphml_digraph<G: LabeledGraph>(graph: G) -> String
-where G::GraphType: DiGraph,
+pub fn labeled_to_graphml_digraph<G: LabeledGraph + DiGraph>(graph: G) -> String
+where
     G::VertexData: Serialize,
     G::EdgeData: Serialize,
 {
@@ -217,7 +217,7 @@ where G::GraphType: DiGraph,
 /// Create a [crate::graph::labeled_graph::LabeledGraph] from a GraphML string.
 ///
 /// Chosen data types must be deserializable.
-pub fn labeled_from_graphml<G: LabeledGraph + Default>(string: String) -> Result<G, SerializationError>
+pub fn labeled_from_graphml<G: LabeledGraphMut + BuildableGraph + AnyVertexGraph>(string: String) -> Result<G, SerializationError>
 where
     G::VertexData: DeserializeOwned,
     G::EdgeData: DeserializeOwned,
@@ -226,7 +226,7 @@ where
     let mut reader = Reader::from_str(string.as_str());
     reader.config_mut().trim_text(true);
 
-    let mut graph = G::default();
+    let mut graph = G::empty();
 
     let mut node_map = BTreeMap::new();
     let mut edge_map = BTreeMap::new();

@@ -294,12 +294,12 @@ where
 /// Create a [crate::graph::labeled_graph::LabeledGraph] from a GML string.
 ///
 /// Chosen data types must be deserializable.
-pub fn labeled_from_gml<G: LabeledGraph + Default>(string: String) -> Result<G, SerializationError>
+pub fn labeled_from_gml<G: LabeledGraphMut + BuildableGraph + AnyVertexGraph>(string: String) -> Result<G, SerializationError>
 where
     G::VertexData: DeserializeOwned,
     G::EdgeData: DeserializeOwned,
 {
-    let mut graph = G::default();
+    let mut graph = G::empty();
     let err = Err(SerializationError { message: "Invalid GML format.".to_string()});
 
     fn parse_map(parser: &mut Parse) -> Result<Value, SerializationError> {
