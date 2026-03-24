@@ -8,6 +8,7 @@ pretty_assertions = "1.4.1"
 serde = { version = "1.0", features = ["derive"], optional = true}
 quick-xml = { version = "0.39.2", features = ["serialize"], optional = true}
 graph_ops_macros = {path = "../macros"}
+linkme = "0.3"
 
 [features]
 serde = ["dep:serde"]

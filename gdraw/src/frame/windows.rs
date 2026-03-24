@@ -60,22 +60,39 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
                 });
 
                 ui.horizontal(|ui| {
-                    ui.label("Highlight Color");
-                    ui.color_edit_button_srgba(&mut app.style.highlight_color);
+                    ui.label("Selection Color");
+                    ui.color_edit_button_srgba(&mut app.style.select_color);
                 });
 
                 ui.horizontal(|ui| {
-                    ui.label("Highlight Strength");
+                    ui.label("Selection Color Strength");
                     ui.add(
                         widgets::Slider::new(
-                            &mut app.style.highlight_strength,
+                            &mut app.style.select_color_strength,
                             RangeInclusive::new(0.0, 1.0),
                         )
                         .clamping(widgets::SliderClamping::Always),
                     )
                 });
+
+                ui.horizontal(|ui| {
+                    ui.label("Highlight Color");
+                    ui.color_edit_button_srgba(&mut app.style.highlight_color);
+                });
             });
         }
+
+        ui.collapsing("Edge Colors", |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Edge Color");
+                    ui.color_edit_button_srgba(&mut app.style.edge_color);
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Edge Highlight Color");
+                    ui.color_edit_button_srgba(&mut app.style.edge_highlight_color);
+                });
+            });
 
         ui.horizontal(|ui| {
             ui.label("Edge Thickness");
@@ -95,6 +112,11 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
                     .clamping(widgets::SliderClamping::Always),
             )
         });
+
+        ui.horizontal(|ui| {
+                    ui.label("Edge Color");
+                    ui.color_edit_button_srgba(&mut app.style.highlight_color);
+                });
     });
 
     ui.collapsing("Layout", |ui| {
@@ -155,6 +177,18 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
                     )
                     .clamping(widgets::SliderClamping::Always)
                     .fixed_decimals(4),
+                )
+            });
+
+            ui.horizontal(|ui| {
+                ui.label("Minimum Temperature on Drag");
+                ui.add(
+                    widgets::Slider::new(
+                        &mut app.graph.layout_config.min_temperature_on_drag,
+                        RangeInclusive::new(0.0001, 0.001),
+                    )
+                    .clamping(widgets::SliderClamping::Always)
+                    .fixed_decimals(5),
                 )
             });
         });

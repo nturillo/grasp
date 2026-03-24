@@ -1,3 +1,4 @@
+use eframe::egui::Color32;
 use gdraw::app::GraspApp;
 use grasp::graph::prelude::*;
 
@@ -20,10 +21,9 @@ fn main() {
     butterfly.add_edge((9, 1));
     butterfly.add_edge((9, 10));
 
-    let mut app = GraspApp::default();
+    let mut app = GraspApp::new();
 
     app.load(&butterfly);
-
     let _ = app.start();
 
     println!("App closed, now main continues");
