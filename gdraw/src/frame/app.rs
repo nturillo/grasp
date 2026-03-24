@@ -140,6 +140,8 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 Sense::click_and_drag(),
             );
 
+            self.sandbox.draw_graph(ui, &self.graph, &self.style);
+
             if !Popup::is_any_open(ui.ctx()) {
                 let mapped: Vec<(usize, Vec2)> = self.graph.vertex_labels.iter().map(|(id, v)| (*id, v.center)).collect();
                 if response.dragged() && self.vertex_focused.is_some() {
@@ -166,7 +168,7 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                     else if ui.input(|input| input.modifiers.shift) && response.dragged() {
                         let origin = response.interact_pointer_pos().unwrap();
                         let rect = Rect::from_two_pos((origin.to_vec2() - response.total_drag_delta().unwrap()).to_pos2(), origin);
-                        ui.painter().rect(rect, 0.0, Color32::TRANSPARENT.blend(Color32::LIGHT_BLUE), Stroke::new(1.0, Color32::from_rgb(80, 150, 255)), egui::StrokeKind::Inside);
+                        ui.painter().rect(rect, 0.0, Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 110), Stroke::new(1.0, Color32::from_rgb(80, 150, 255)), egui::StrokeKind::Inside);
 
                         let ex_rect = rect.expand((self.style.vertex_radius + self.style.outline_thickness) / self.sandbox.scale);
                         for (id, data) in &self.graph.vertex_labels {
@@ -198,8 +200,6 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                         .context_menu(ui, response.interact_pointer_pos(), &mut self.graph)
                 });
             }
-
-            self.sandbox.draw_graph(ui, &self.graph, &self.style);
 
             if self.graph.layout_config.run_per_update {
                 layout::reapply(&mut self.graph);

@@ -82,8 +82,8 @@ pub fn register(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     match return_type.as_str() {
-        "String" | "Vertex" | "VertexList" | "Edge" | "EdgeList" | "None" => (),
-        _ => { return new_error(format!("Expected one of [String, Vertex, VertexList, Edge, EdgeList, None], found {}", return_type)); }
+        "String" | "Vertex" | "VertexList" | "Edge" | "EdgeList" | "Graph" | "None" => (),
+        _ => { return new_error(format!("Expected one of [String, Vertex, VertexList, Edge, EdgeList, Graph, None], found {}", return_type)); }
     }
 
     let return_type_ident = format_ident!("{}", return_type);
@@ -116,7 +116,7 @@ pub fn register(attr: TokenStream, item: TokenStream) -> TokenStream {
         _ => false
     };
 
-    let graph = if simple { quote! { &graph.underlying_graph() }} else { quote! {graph} };
+    let graph = if simple { quote! { &graph.as_simple() }} else { quote! {graph} };
     let call = if is_self { quote! {#graph.#fn_name(#(#arg_names),*)} } else { quote! {#fn_name(#graph, #(#arg_names),*)} };
     let ptr = if is_self { quote! {Self::#wrapped_name} } else { quote! {#wrapped_name} };
 

@@ -107,6 +107,7 @@ pub enum ReturnType {
     Edge(EdgeID),
     VertexList(Vec<VertexID>),
     EdgeList(Vec<EdgeID>),
+    Graph(SparseDiGraph),
 }
 
 pub struct FunctionData {

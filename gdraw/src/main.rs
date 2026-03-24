@@ -24,10 +24,6 @@ fn main() {
     let mut app = GraspApp::new();
 
     app.load(&butterfly);
-
-    let rr = butterfly.neighbors(1);
-    app.highlight_set(&rr, Color32::RED);
-
     let _ = app.start();
 
     println!("App closed, now main continues");
