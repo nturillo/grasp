@@ -4,6 +4,7 @@ use pyo3::exceptions::PyValueError;
 
 use grasp::graph::prelude::*;
 use grasp::algorithms::algo_traits::{AlgoTrait};
+use grasp::algorithms::search::{Dijkstra, ShortestPath};
 
 #[pyclass(name = "SparseGraph")]
 #[derive(Debug)]
