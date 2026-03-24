@@ -104,7 +104,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
 
 impl<'a, G:SimpleGraph, F:Frontier> TraversalIter<'a, G, F> {
     pub fn from_source(source: VertexID, g: &'a G) -> Result<Self, GraphError> {
-        if !g.contains(source) {
+        if !g.has_vertex(source) {
             return Err(GraphError::VertexNotInGraph(source));
         }
 
@@ -125,9 +125,7 @@ impl<'a, G:SimpleGraph, F:Frontier> Iterator for TraversalIter<'a, G, F> {
     fn next(&mut self) -> Option<Self::Item> {
         let v = self.frontier.pop()?;
         
-        for u in self.g.neighbors(v)
-            .expect("graph should have vertex")
-            .iter()
+        for u in self.g.neighbors(v).iter()
         {
             if self.visited.contains(u) {
                 continue;
@@ -144,7 +142,7 @@ impl<'a, G: GraphTrait, WF, N> Dijkstra<'a, G, WF, N>
 where WF: Fn(&G, EdgeID) -> Option<N> + 'a,
 N: Number + PartialOrd + Default + Copy + 'a, {
     pub fn from_source(source: VertexID, g: &'a G, weight: WF) -> Result<Self, GraphError> {
-        if !g.contains(source) {
+        if !g.has_vertex(source) {
             return Err(GraphError::VertexNotInGraph(source));
         }
 
@@ -186,10 +184,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
             }
             self.finished.insert(v);
 
-            let neighbor_list = match self.g.neighbors(v) {
-                Some(n) => n,
-                None => continue,
-            };
+            let neighbor_list = self.g.neighbors(v);
 
             for u in neighbor_list.iter() {
                 let edge = (v, *u);
@@ -225,7 +220,7 @@ where WF: Fn(&G, EdgeID) -> Option<N> + 'a,
 HF: Fn(VertexID) -> N + 'a,
 N: Number + PartialOrd + Default + Copy + 'a, {
     pub fn from_source(source: VertexID, target: VertexID, g: &'a G, weight: WF, heuristic: HF) -> Result<Self, GraphError> {
-        if !g.contains(source) {
+        if !g.has_vertex(source) {
             return Err(GraphError::VertexNotInGraph(source));
         }
 
@@ -260,10 +255,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
                 return Some(Ok((v, g_v)));
             }
 
-            let neighbors = match self.g.neighbors(v) {
-                Some(n) => n,
-                None => continue,
-            };
+            let neighbors = self.g.neighbors(v);
 
             for u in neighbors.iter() {
                 let edge = (v, *u);
@@ -341,7 +333,7 @@ mod tests {
         
         // Weight function: (0,1)=1, (1,2)=2, (0,2)=5, (2,3)=1
         let weight = |_g: &SparseSimpleGraph, (v1, v2): EdgeID| -> Option<i32> {
-            match ((v1.min(v2), v1.max(v2))) {
+            match (v1.min(v2), v1.max(v2)) {
                 (0, 1) => Some(1),
                 (1, 2) => Some(2),
                 (0, 2) => Some(5),

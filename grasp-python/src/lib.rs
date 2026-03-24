@@ -37,16 +37,16 @@ impl PySparseGraph {
         self.inner.add_neighbors(v, neighbors.into_iter());
     }
 
-    fn delete_vertex(&mut self, v: usize) -> Vec<(usize, usize)> {
-        self.inner.delete_vertex(v).collect()
+    fn remove_vertex(&mut self, v: usize) -> Vec<(usize, usize)> {
+        self.inner.remove_vertex(v).collect()
     }
 
-    fn delete_edge(&mut self, v1: usize, v2: usize) {
-        self.inner.delete_edge((v1, v2));
+    fn remove_edge(&mut self, v1: usize, v2: usize) {
+        self.inner.remove_edge((v1, v2));
     }
 
-    fn contains(&self, v: usize) -> bool {
-        self.inner.contains(v)
+    fn has_vertex(&self, v: usize) -> bool {
+        self.inner.has_vertex(v)
     }
 
     fn has_edge(&self, v1: usize, v2: usize) -> bool {
@@ -70,14 +70,15 @@ impl PySparseGraph {
     }
 
     fn vertex_set(&self) -> Vec<usize> {
-        self.inner.vertex_set().into_iter().collect()
+        self.inner.vertex_set().iter().cloned().collect()
     }
 
     fn neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
-        match self.inner.neighbors(v) {
-            Some(s) => Ok(s.into_owned().into_iter().collect()),
-            None => Err(PyValueError::new_err(format!("Vertex {} not in graph", v))),
+        if !self.inner.has_vertex(v) {
+            return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
+
+        Ok(self.inner.neighbors(v).iter().cloned().collect())
     }
 
     fn bfs(&self, source: usize) -> PyResult<Vec<usize>> {
@@ -124,13 +125,13 @@ impl PySparseGraph {
     }
 
     fn subgraph_vertex(&self, vertices: Vec<usize>, py: Python) -> PyResult<PyObject> {
-        let sub = self.inner.subgraph_vertex(vertices.into_iter(), SparseSimpleGraph::default);
+        let sub = self.inner.subgraph_vertex(vertices.into_iter());
         let obj = Py::new(py, PySparseGraph { inner: sub })?;
         Ok(obj.into_py(py))
     }
 
     fn subgraph_edges(&self, edges: Vec<(usize, usize)>, py: Python) -> PyResult<PyObject> {
-        let sub = self.inner.subgraph_edges(edges.into_iter(), SparseSimpleGraph::default);
+        let sub = self.inner.subgraph_edges(edges.into_iter());
         let obj = Py::new(py, PySparseGraph { inner: sub })?;
         Ok(obj.into_py(py))
     }
@@ -138,7 +139,7 @@ impl PySparseGraph {
     fn merge(&self, other: &PySparseGraph, py: Python) -> PyResult<(PyObject, PyObject, PyObject)> {
         let (merged, self_map, other_map) = self
             .inner
-            .merge(&other.inner, SparseSimpleGraph::default);
+            .merge(&other.inner);
 
         let merged_obj = Py::new(py, PySparseGraph { inner: merged })?.into_py(py);
 
@@ -156,13 +157,13 @@ impl PySparseGraph {
     }
 
     fn complement(&self, py: Python) -> PyResult<PyObject> {
-        let comp = self.inner.complement(SparseSimpleGraph::default);
+        let comp = self.inner.complement();
         let obj = Py::new(py, PySparseGraph { inner: comp })?;
         Ok(obj.into_py(py))
     }
 
     fn join(&self, other: &PySparseGraph, py: Python) -> PyResult<(PyObject, PyObject, PyObject)> {
-        let (joined, self_map, other_map) = self.inner.join(&other.inner, || SparseSimpleGraph::default());
+        let (joined, self_map, other_map) = self.inner.join(&other.inner);
         let joined_obj = Py::new(py, PySparseGraph { inner: joined })?.into_py(py);
         let dict_self = PyDict::new_bound(py);
         for (k, v) in self_map {
@@ -176,7 +177,7 @@ impl PySparseGraph {
     }
 
     fn product(&self, other: &PySparseGraph, py: Python) -> PyResult<(PyObject, PyObject)> {
-        let (product, map) = self.inner.product(&other.inner, || SparseSimpleGraph::default());
+        let (product, map) = self.inner.product(&other.inner);
         let product_obj = Py::new(py, PySparseGraph { inner: product })?.into_py(py);
         let dict_map = PyDict::new_bound(py);
         for ((a,b), v) in map {
@@ -232,28 +233,40 @@ impl PySparseDiGraph {
     }
 
     fn neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
-        match self.inner.neighbors(v) {
-            Some(s) => Ok(s.into_owned().into_iter().collect()),
-            None => Err(PyValueError::new_err(format!("Vertex {} not in graph", v))),
+        if !self.inner.has_vertex(v) {
+            return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
+
+        Ok(self.inner.neighbors(v).iter().cloned().collect())
     }
 
     fn out_neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
-        match self.inner.out_neighbors(v) {
-            Some(s) => Ok(s.into_owned().into_iter().collect()),
-            None => Err(PyValueError::new_err(format!("Vertex {} not in graph", v))),
+        if !self.inner.has_vertex(v) {
+            return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
+
+        Ok(self.inner.out_neighbors(v).iter().cloned().collect())
     }
 
     fn in_neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
-        match self.inner.in_neighbors(v) {
-            Some(s) => Ok(s.into_owned().into_iter().collect()),
-            None => Err(PyValueError::new_err(format!("Vertex {} not in graph", v))),
+        if !self.inner.has_vertex(v) {
+            return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
+
+        Ok(self.inner.in_neighbors(v).iter().cloned().collect())
     }
 
     fn to_simple(&self, py: Python) -> PyResult<PyObject> {
-        let simple = self.inner.underlying_graph();
+        let view = self.inner.as_underlying();
+
+        let mut simple = SparseSimpleGraph::default();
+        for v in view.vertices() {
+            simple.add_vertex(v);
+        }
+        for (u, v) in view.edges() {
+            simple.add_edge((u, v));
+        }
+
         let obj = Py::new(py, PySparseGraph { inner: simple })?;
         Ok(obj.into_py(py))
     }

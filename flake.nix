@@ -2,7 +2,7 @@
   description = "Grasp Development";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
     fenix = {
       url = "github:nix-community/fenix/monthly";
@@ -12,7 +12,7 @@
 
   outputs = inputs: with inputs;
     flake-utils.lib.eachDefaultSystem (system: let
-      rt = fenix.packages.${system}.latest.withComponents [
+      rt = fenix.packages.${system}.stable.withComponents [
         "cargo"
         "clippy"
         "rust-src"
@@ -37,6 +37,7 @@
         ];
         buildInputs = with pkgs; [
           xorg.libX11 xorg.libXcursor xorg.libXi xorg.libXrandr # To use the x11 feature
+          rt
           wayland
           python312
         ];
