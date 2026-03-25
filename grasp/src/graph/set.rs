@@ -1,5 +1,7 @@
 use std::{collections::HashSet, hash::Hash, marker::PhantomData};
 
+use bimap::BiHashMap;
+
 pub trait Set {
     type Item: Eq;
 
@@ -20,6 +22,10 @@ pub trait Set {
     fn filter(self, filter: impl Fn(&Self, &Self::Item) -> bool) -> impl Set<Item = Self::Item> 
     where Self: Sized{
         SetFilter::new(self, filter)
+    }
+    fn with_bimap(self, map: &BiHashMap<Self::Item, Self::Item>) -> BiMappedSet<Self>
+    where Self: Sized, Self::Item: Hash{
+        BiMappedSet::new(self, map)
     }
 
     fn union_with(self, other: impl Set<Item = Self::Item>) -> impl Set<Item = Self::Item> 
@@ -138,6 +144,26 @@ impl<A, F> Set for SetFilter<A, F> where A: Set, F: Fn(&A, &A::Item) -> bool{
     }
 }
 
+pub struct BiMappedSet<'a, S: Set>{
+    set: S,
+    /// Map from set item to mapped item
+    map: &'a BiHashMap<S::Item, S::Item>,
+}
+impl<'a, S: Set> BiMappedSet<'a, S>{
+    pub fn new(set: S, map: &'a BiHashMap<S::Item, S::Item>) -> Self{Self{set, map}}
+}
+impl<'m, S: Set> Set for BiMappedSet<'m, S>
+where S::Item: Hash,
+{
+    type Item = S::Item;
+    fn contains(&self, v: &Self::Item) -> bool {
+        let Some(item) = self.map.get_by_right(v) else {return false;};
+        self.set.contains(item)
+    }
+    fn iter<'a>(&'a self) -> impl Iterator<Item = &'a Self::Item> {
+        self.set.iter().filter_map(|v| self.map.get_by_left(v))
+    }
+}
 
 /*
     Default Implementations

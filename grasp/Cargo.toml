@@ -7,6 +7,7 @@ edition = "2024"
 pretty_assertions = "1.4.1"
 serde = { version = "1.0", features = ["derive"], optional = true}
 quick-xml = { version = "0.39.2", features = ["serialize"], optional = true}
+bimap = "0.6.3"
 graph_ops_macros = {path = "../macros"}
 
 [features]
