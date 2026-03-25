@@ -28,7 +28,7 @@ pub trait Set {
     {
         SetBijection::new(self, map_to, map_from)
     }
-    fn with_bimap(self, map: &BiHashMap<Self::Item, Self::Item>) -> BiMappedSet<Self> where 
+    fn with_bimap(self, map: &'_ BiHashMap<Self::Item, Self::Item>) -> BiMappedSet<'_, Self> where 
         Self: Sized, Self::Item: Hash
     {
         BiMappedSet::new(self, map)
