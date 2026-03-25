@@ -23,7 +23,7 @@ pub trait Set {
     where Self: Sized{
         SetFilter::new(self, filter)
     }
-    fn with_bimap(self, map: &BiHashMap<Self::Item, Self::Item>) -> BiMappedSet<Self>
+    fn with_bimap(self, map: &'_ BiHashMap<Self::Item, Self::Item>) -> BiMappedSet<'_, Self>
     where Self: Sized, Self::Item: Hash{
         BiMappedSet::new(self, map)
     }

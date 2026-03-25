@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, VecDeque}, fmt::Debug, mem::swap, usize};
+use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Debug, mem::swap, usize};
 use bimap::BiHashMap;
 
 use crate::graph::prelude::*;
@@ -138,11 +138,11 @@ struct GraphEmbedding{
     edge_data: Vec<HalfEdge>,
     /// Counter used during dfs to get dfs_index
     dfs_index: usize,
-    /// Length of vtx_data
-    vtx_count: usize
+    /// Number of vtcs
+    vtx_count: usize,
 }
 impl GraphEmbedding{
-    fn new<G: GraphTrait>(graph: &G) -> Self{
+    pub fn new<G: GraphTrait>(graph: &G) -> Self{
         let vertex_count = graph.vertex_count();
         let edge_count = graph.edge_count();
         Self{
@@ -154,9 +154,10 @@ impl GraphEmbedding{
             ids: vec![VertexID::default(); vertex_count],
             edge_data: Vec::with_capacity(2*edge_count),
             dfs_index: 0,
-            vtx_count: vertex_count
+            vtx_count: graph.vertex_count()
         }
     }
+
     /// in O(n) time, makes the seperated_dfs_children list be a list of dfs_children sorted by lowpoint
     fn create_seperated_dfs_children(&mut self) {
         let mut lowpoint_counts = vec![0; self.vtx_count];
@@ -206,6 +207,7 @@ impl GraphEmbedding{
             self.seperated_dfs_children[parent].end = prev;
         }
     }
+   
     /// Marks pertinent vertices for backedge parent->descendent
     fn walkup(&mut self, reference: usize) {
         for descendent in self.dfs_data[reference].back_edges_to_descendents.iter().copied() {
@@ -240,6 +242,7 @@ impl GraphEmbedding{
             }
         }
     }
+    
     /// Consume pertinence to merge back edges from reference to descendants, merging bicomps and flipping bicomps as needed.
     /// Returns false if failure occurs
     fn walkdown(&mut self, reference: usize) {
@@ -295,7 +298,6 @@ impl GraphEmbedding{
                     stack.push((new_canon, in_on_first, true));
                     vertex = y; in_on_first = y_on_first;
                 }
-                let top = stack.last().unwrap();
             } else if !self.is_pertinent(vertex, reference) && !self.is_externally_active(vertex, reference) {
                 // vertex is inactive, move forward
                 (vertex, in_on_first) = self.get_next_external_vertex(vertex, in_on_first);
@@ -310,6 +312,7 @@ impl GraphEmbedding{
             }
         }
     }
+    
     /// embed vertex -> reference into bicomp rooted at reference with canon. \
     /// Keeps first canonical edge on the inside if dir is true. \
     /// Needs to know if vertex was reached with its first external edge.
@@ -380,8 +383,10 @@ impl GraphEmbedding{
         
         // Swap external edge pointers
         std::mem::swap(start, end);
-        // TODO: set sign of root edge to -1
+        // set sign of canon vtx to -1
+        self.embedding[canon].flipped = true;
     }
+    
     /// Same as get_next_external_vertex, but explicitly for root vtcs, described by their canonical child
     fn get_next_external_vertex_root(&self, canon: usize, in_on_first: bool) -> (usize, bool){
         // Get the edge we didn't come in on
@@ -403,6 +408,7 @@ impl GraphEmbedding{
         let on_first = self.edge_data[self.embedding[next_vertex].external_edges.0].twin == out_edge;
         (next_vertex, on_first)
     }
+    
     /// Finds the first active (pertinent or externally active) vertex on the external face of a bicomp
     fn find_active_successor(&self, reference: usize, canon: usize, dir: bool) -> (usize, bool){
         let (mut vertex, mut in_on_first) = self.get_next_external_vertex_root(canon, dir);
@@ -411,6 +417,7 @@ impl GraphEmbedding{
         }
         (vertex, in_on_first)
     }
+    
     /// Whether the vertex is pertinent relative to reference
     fn is_pertinent(&self, vertex: usize, reference: usize) -> bool{
         self.pertinence[vertex].pertinence == reference || 
@@ -426,6 +433,58 @@ impl GraphEmbedding{
         self.dfs_data[vertex].least_ancestor < reference || 
         // First seperated dfs child has lowpoint < reference
         self.seperated_dfs_children[vertex].start.is_some_and(|sdfs| self.dfs_data[sdfs].lowpoint < reference) 
+    }
+    
+    /// Gets the circular adjacency list for a vertex. flip changes the orientation
+    fn get_adjacency_list(&self, start_edge: usize, flipped: bool) -> VecDeque<usize>{
+        let mut list = VecDeque::new();
+        if !self.edge_data[start_edge].short_circuit{
+            if flipped {list.push_front(self.edge_data[start_edge].neighbor);}
+            else {list.push_back(self.edge_data[start_edge].neighbor);}
+        }
+        let mut current = self.edge_data[start_edge].next;
+        while current != start_edge{
+            if !self.edge_data[current].short_circuit {
+                if flipped {list.push_front(self.edge_data[current].neighbor);}
+                else {list.push_back(self.edge_data[current].neighbor);}
+            }
+            current = self.edge_data[current].next;
+        }
+        list
+    }
+    /// Builds the planar embedding. Should only be run after a successful run of the core algorithm
+    fn recover_planar_embedding(&self) -> PlanarEmbedding{
+        // Starting at top vtx, create clockwise adjacency lists. Keep a stack of booleans for flipping
+        let mut flip_stack = vec![];
+        let mut adjacency_list = HashMap::with_capacity(self.vtx_count);
+        for vertex in 0..self.vtx_count{
+            // pop the flip stack to get the current flip value
+            let flip_value = flip_stack.pop().unwrap_or(false);
+            let flip = flip_value ^ self.embedding[vertex].flipped;
+            // push stack once for each dfs child (thus each child knows its parents flip state)
+            for _ in 0..self.dfs_data[vertex].dfs_children.len() {flip_stack.push(flip);}
+            // If vertex is a root vertex, we need to merge all of its bicomps together.
+            if self.dfs_data[vertex].parent.is_none() {
+                // Luckily, root vtcs are never flipped and the flip stack should always be empty at a dfs root
+                let mut list = Vec::new();
+                for child in self.dfs_data[vertex].dfs_children.iter(){
+                    let start = self.embedding[*child].canonical_edges.0;
+                    list.extend(self.get_adjacency_list(start, flip).into_iter().map(|vtx| self.ids[vtx]));
+                }
+                adjacency_list.insert(self.ids[vertex], list);
+                continue;
+            }
+            // Otherwise just merge its adjacency list
+            let start = self.embedding[vertex].external_edges.0;
+            adjacency_list.insert(self.ids[vertex], self.get_adjacency_list(start, flip).into_iter().map(|vtx| self.ids[vtx]).collect());
+        }
+        // Convert to planar embedding
+        PlanarEmbedding { circular_adjacency_lists: adjacency_list }
+    }
+
+    /// Finds a kuratowski subgraph from a embedding. Assumes the core algorithm has been run until failure.
+    fn find_kuratowski(&self) -> KuratowskiSubgraph{
+        todo!()
     }
 }
 /// Sets up the vtx_map, vtx_data data with 
@@ -532,7 +591,9 @@ struct VertexEmbedding{
     /// The canonical child of the containing bicomp, only valid on external neighbors of root vertex. \
     /// Can be used to test if a vertex is an external neighbor of the root vtx
     /// Canonical Child: For bicomp with root a and minimal dfs child b, b is the canonical child.
-    canonical_child: Option<usize>
+    canonical_child: Option<usize>,
+    /// Whether or not the bicomp with this canonical child was flipped. If a vtx is flipped, it means all descendent vtcs in the dfs tree are also flipped.
+    flipped: bool,
 }
 
 /// Pertinence information per Vertex. Set by Walkup, consumed by Walkdown
@@ -564,11 +625,18 @@ struct HalfEdge{
     short_circuit: bool,
 }
 
+/// Simple type to hold planar embeddings
+pub struct PlanarEmbedding{
+    circular_adjacency_lists: HashMap<VertexID, Vec<VertexID>>,
+}
+
+/// Simple type to hold kuratowski subgraph for non planar graphs
+pub struct KuratowskiSubgraph{
+    edge_set: HashSet<EdgeID>,
+}
+
 /// O(n) algorithm for determining if a graph is planar
-pub fn check_planarity<G: SimpleGraph>(graph: &G) -> bool{
-    if graph.vertex_count() <= 4 {return true;} // Trivial cases
-    if graph.edge_count() > graph.vertex_count()*3-5 {return false;} // By eulers formula
-    // Test planarity
+pub fn check_planarity<G: SimpleGraph>(graph: &G) -> Result<PlanarEmbedding, KuratowskiSubgraph>{
     // Create embedding structure
     let mut embedding = GraphEmbedding::new(graph);
     // Run DFS to build vtx data
@@ -585,10 +653,11 @@ pub fn check_planarity<G: SimpleGraph>(graph: &G) -> bool{
         // make sure all backedges were imbedded
         for descendent in embedding.dfs_data[reference].back_edges_to_descendents.iter(){
             // If failed to embed backedge, not
-            if embedding.pertinence[*descendent].pertinence == reference {return false;}
+            if embedding.pertinence[*descendent].pertinence == reference {return Err(embedding.find_kuratowski());}
         }
     }
-    true
+    // Is planar, return the planar embedding
+    Ok(embedding.recover_planar_embedding())
 }
 
 #[cfg(test)]
@@ -598,7 +667,7 @@ mod test{
     fn test_planarity(){
         let mut k33 = SparseSimpleGraph::default();
         k33.add_vertex(0); k33.add_vertex(1); k33.add_vertex(2); k33.add_vertex(3); k33.add_vertex(4);
-        assert!(check_planarity(&k33));
+        assert!(check_planarity(&k33).is_ok());
         k33.add_edge((0, 3));
         k33.add_edge((0, 4));
         k33.add_edge((0, 5));
@@ -607,11 +676,11 @@ mod test{
         k33.add_edge((1, 5));
         k33.add_edge((2, 3));
         k33.add_edge((2, 4));
-        assert!(check_planarity(&k33));
+        assert!(check_planarity(&k33).is_ok());
         k33.add_edge((2, 5));
-        assert!(!check_planarity(&k33));
+        assert!(check_planarity(&k33).is_err());
         let mut k5 = SparseSimpleGraph::default();
-        assert!(check_planarity(&k5));
+        assert!(check_planarity(&k5).is_ok());
         k5.add_edge((0, 1));
         k5.add_edge((0, 2));
         k5.add_edge((0, 3));
@@ -621,8 +690,8 @@ mod test{
         k5.add_edge((1, 4));
         k5.add_edge((2, 3));
         k5.add_edge((2, 4));
-        assert!(check_planarity(&k5));
+        assert!(check_planarity(&k5).is_ok());
         k5.add_edge((3, 4));
-        assert!(!check_planarity(&k5));
+        assert!(check_planarity(&k5).is_err());
     }
 }
