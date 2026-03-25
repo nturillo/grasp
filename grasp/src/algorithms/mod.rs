@@ -6,3 +6,4 @@ pub mod distance;
 pub mod trees;
 pub mod gonality;
 pub mod matchings;
+pub mod planarity;
