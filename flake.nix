@@ -36,7 +36,8 @@
           python312
         ];
         buildInputs = with pkgs; [
-          xorg.libX11 xorg.libXcursor xorg.libXi xorg.libXrandr # To use the x11 feature
+          libxcb libxkbcommon openssl libGL
+          libx11 libxi libxcursor libxrandr # To use the x11 feature
           rt
           wayland
           python312
