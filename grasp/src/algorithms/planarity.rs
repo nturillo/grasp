@@ -484,7 +484,7 @@ impl GraphEmbedding{
 
     /// Finds a kuratowski subgraph from a embedding. Assumes the core algorithm has been run until failure.
     fn find_kuratowski(&self) -> KuratowskiSubgraph{
-        todo!()
+        KuratowskiSubgraph { edge_set: HashSet::default() }
     }
 }
 /// Sets up the vtx_map, vtx_data data with 
@@ -637,6 +637,7 @@ pub struct KuratowskiSubgraph{
 
 /// O(n) algorithm for determining if a graph is planar
 pub fn check_planarity<G: SimpleGraph>(graph: &G) -> Result<PlanarEmbedding, KuratowskiSubgraph>{
+    if graph.is_empty() {return Ok(PlanarEmbedding { circular_adjacency_lists: HashMap::default() });}
     // Create embedding structure
     let mut embedding = GraphEmbedding::new(graph);
     // Run DFS to build vtx data
