@@ -179,10 +179,13 @@ N: Number + PartialOrd + Default + Copy + 'a, {
                 }
             }
 
-            if self.finished.contains(&v) {
-                continue;
+            let g_v = *self.dist.get(&v).unwrap_or(&N::default());
+
+            if let Some(&best) = self.dist.get(&v) {
+                if g_v > best {
+                    continue;
+                }
             }
-            self.finished.insert(v);
 
             let neighbor_list = self.g.neighbors(v);
 

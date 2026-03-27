@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use grasp::graph::{adjacency_list::SparseSimpleGraph, graph_ops::GraphOps, GraphTrait, GraphMut};
+use grasp::graph::{adjacency_list::SparseSimpleGraph, graph_ops::GraphOps, GraphTrait, GraphMut, AnyVertexGraph};
 use gdraw::app::GraspApp;
 
 
@@ -10,8 +10,13 @@ fn open_app_with_graph(py_graph: &PyAny) -> PyResult<()> {
     let edges: Vec<(usize, usize)> = py_edges.extract()?;
     let mut graph = SparseSimpleGraph::default();
     for (u, v) in edges {
-        graph.try_add_edge((u, v))
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{:?}", e)))?;
+        if !graph.has_vertex(u) {
+            graph.add_vertex(u);
+        }
+        if !graph.has_vertex(v) {
+            graph.add_vertex(v);
+        }
+        graph.add_edge((u, v));
     }
     let mut app = GraspApp::default();
     app.load(&graph);
