@@ -1172,6 +1172,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "gdraw-python"
+version = "0.1.0"
+dependencies = [
+ "gdraw",
+ "grasp",
+ "pyo3",
+]
+
+[[package]]
 name = "gethostname"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
