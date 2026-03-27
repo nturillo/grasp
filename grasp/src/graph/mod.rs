@@ -7,6 +7,7 @@ pub mod set;
 pub mod directed;
 pub mod constructors;
 pub mod permutation;
+pub mod homogenous;
 
 pub mod prelude{
     pub use super::{

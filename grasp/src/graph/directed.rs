@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use crate::graph::{EdgeID, GraphTrait, VertexID, set::Set};
 
 /// Tag Trait Used to represent the promise that edge ab=ba
@@ -58,11 +60,15 @@ impl<'a, G: DiGraph> GraphTrait for SimpleView<'a, G>{
 impl<'a, G: DiGraph> SimpleGraph for SimpleView<'a, G>{}
 
 pub struct UnderlyingView<'a, G: GraphTrait>{
-    graph: &'a G
+    graph: &'a G,
+    edge_count: RefCell<Option<usize>> // Allows lazy edge_count determination. edge_count calculated only when asked, and recorded for future reference
 }
 impl<'a, G: GraphTrait> From<&'a G> for UnderlyingView<'a, G>{
     fn from(graph: &'a G) -> Self {
-        Self{graph}
+        Self{
+            graph, 
+            edge_count: RefCell::new(None)
+        }
     }
 }
 impl<'a, G: DiGraph> GraphTrait for UnderlyingView<'a, G>{
@@ -87,7 +93,13 @@ impl<'a, G: DiGraph> GraphTrait for UnderlyingView<'a, G>{
         })
     }
     fn edge_count(&self) -> usize {
-        self.edges().count()
+        if let Some(edge_count) = *self.edge_count.borrow() {
+            edge_count
+        } else {
+            let count = self.edges().count();
+            self.edge_count.replace(Some(count));
+            count
+        }
     }
 }
 impl<'a, G: DiGraph> SimpleGraph for UnderlyingView<'a, G>{}
