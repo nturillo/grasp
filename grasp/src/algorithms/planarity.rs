@@ -1,127 +1,11 @@
 use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Debug, mem::swap, usize};
-use bimap::BiHashMap;
-
 use crate::graph::prelude::*;
+use super::search_visitors::*;
 
-/// Trait for graphs with Homogenous vertex ID's, necessary for algorithm speedup
-pub trait HomogenousVertexId: GraphTrait{}
-
-#[derive(Debug)]
-pub struct HomogenousView<'a, G: GraphTrait>{
-    /// Map from original ID to homogenous ID
-    vertex_map: BiHashMap<VertexID, VertexID>,
-    /// VertexID not used by graph, useful for when we want to map a invalid id to an id invalid in graph
-    unused_id: VertexID,
-    graph: &'a G
-}
-impl<'a, G: GraphTrait> HomogenousView<'a, G>{
-    pub fn from_graph(graph: &'a G) -> Self{
-        let mut vertex_map = BiHashMap::with_capacity(graph.vertex_count());
-        let mut unused_id = 0;
-        for (i, vertex) in graph.vertices().enumerate(){
-            if vertex >= unused_id {unused_id = vertex+1;}
-            vertex_map.insert(vertex, i);
-        }
-        Self{vertex_map, graph, unused_id}
-    }
-}
-impl<'a, G: GraphTrait> GraphTrait for HomogenousView<'a, G>{
-    fn is_empty(&self) -> bool {self.graph.is_empty()}
-    
-    fn vertex_count(&self) -> usize {self.graph.vertex_count()}
-    
-    fn edge_count(&self) -> usize {self.graph.edge_count()}
-    
-    fn has_vertex(&self, v: VertexID) -> bool {
-        let Some(v) = self.vertex_map.get_by_right(&v) else {return false;};
-        self.graph.has_vertex(*v)
-    }
-    
-    fn has_edge(&self, e: EdgeID) -> bool {
-        let Some(v1) = self.vertex_map.get_by_right(&e.0) else {return false;};
-        let Some(v2) = self.vertex_map.get_by_right(&e.1) else {return false;};
-        self.graph.has_edge((*v1, *v2))
-    }
-    
-    fn vertices(&self) -> impl Iterator<Item=VertexID> {(0..self.graph.vertex_count()).into_iter()}
-    
-    fn edges(&self) -> impl Iterator<Item=EdgeID> {
-        self.graph.edges().map(|(v1, v2)| (
-            *self.vertex_map.get_by_left(&v1).unwrap(),
-            *self.vertex_map.get_by_left(&v2).unwrap()
-        ))
-    }
-    
-    fn neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {
-        // inner graphs ID of v, or a unused id
-        let v = self.vertex_map.get_by_right(&v).copied().unwrap_or(self.unused_id);
-        self.graph.neighbors(v).with_bimap(&self.vertex_map)
-    }
-    
-    fn vertex_set(&self) -> impl Set<Item = VertexID> {
-        self.graph.vertex_set().with_bimap(&self.vertex_map)
-    }
-}
-impl<'a, G: GraphTrait> HomogenousVertexId for HomogenousView<'a, G>{}
-impl<'a, G: GraphTrait+SimpleGraph> SimpleGraph for HomogenousView<'a, G>{}
-
-pub trait DfsSimpleVisitor{
-    // Called on the root vtcs of the search. (VTCS without parent)
-    fn root_vertex(&mut self, _vertex: VertexID){}
-    // Called on vtcs in preorder
-    fn discover_vertex(&mut self, _vertex: VertexID){}
-    // Called on vtcs in postorder
-    fn finish_vertex(&mut self, _vertex: VertexID){}
-    // Called once per tree edge
-    fn tree_edge(&mut self, _edge: EdgeID){}
-    // Called once per back edge
-    fn back_edge(&mut self, _edge: EdgeID){}
-}
-
-pub fn dfs_simple_recursive<G: GraphTrait, V: DfsSimpleVisitor>(
-    graph: &G,
-    vertex: VertexID,
-    visitor: &mut V
-){
-    let mut dfs_index = HashMap::default();
-    let mut current_dfs_index = 0;
-    // Run over starting vtx
-    visitor.root_vertex(vertex);
-    dfs_recurse(graph, vertex, None, &mut dfs_index, &mut current_dfs_index, visitor);
-    // Run over any remaining vtcs
-    for i in 0..graph.vertex_count() {
-        if dfs_index.contains_key(&i) {continue;}
-        visitor.root_vertex(i);
-        dfs_recurse(graph, i, None, &mut dfs_index, &mut current_dfs_index, visitor);
-    }
-}
-fn dfs_recurse<G: GraphTrait, V: DfsSimpleVisitor>(
-    graph: &G,
-    vertex: VertexID, 
-    parent: Option<VertexID>,
-    dfs_index: &mut HashMap<VertexID, usize>,
-    current_dfs_index: &mut usize, 
-    visitor: &mut V
-){
-    dfs_index.insert(vertex, *current_dfs_index);
-    *current_dfs_index += 1;
-
-    visitor.discover_vertex(vertex);
-    // Visit children
-    for vtx in graph.neighbors(vertex).iter().copied(){
-        if dfs_index.contains_key(&vtx) { // back edge or parent tree edge
-            if parent != Some(vtx) && dfs_index[&vertex] > dfs_index[&vtx] {
-                visitor.back_edge((vertex, vtx));
-            }
-            continue;
-        }
-        dfs_recurse(graph, vtx, Some(vertex), dfs_index, current_dfs_index, visitor);
-        visitor.tree_edge((vertex, vtx)); // tree edge
-    }
-    visitor.finish_vertex(vertex);
-}
-
-struct GraphEmbedding{
+/// Struct used to calculate planarity and build planarity structures
+#[derive(Debug, Clone)]
+pub struct GraphPlanarity<'a, G: GraphTrait>{
+    graph: &'a G,
     /// Maps graph vertex to dfs_index
     vtx_map: HashMap<VertexID, usize>,
     /// DFS Info indexed by DFI
@@ -136,16 +20,19 @@ struct GraphEmbedding{
     ids: Vec<VertexID>,
     /// Represents the embedding of the bicomps. Requires that starting from a root_edge, you can traverse the external face of the bicomp
     edge_data: Vec<HalfEdge>,
-    /// Counter used during dfs to get dfs_index
-    dfs_index: usize,
     /// Number of vtcs
     vtx_count: usize,
+    /// Whether the algorithm has been run
+    is_planar: Option<bool>,
+    /// DFS index tracker for use in dfs visitor
+    dfs_index: usize
 }
-impl GraphEmbedding{
-    pub fn new<G: GraphTrait>(graph: &G) -> Self{
+impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
+    pub fn from_graph(graph: &'a G) -> Self{
         let vertex_count = graph.vertex_count();
         let edge_count = graph.edge_count();
         Self{
+            graph,
             vtx_map: HashMap::with_capacity(vertex_count),
             dfs_data: vec![DfsData::default(); vertex_count],
             seperated_dfs_children: vec![SeperatedDfsChildren::default(); vertex_count],
@@ -153,8 +40,48 @@ impl GraphEmbedding{
             pertinence: vec![VertexPertinence::default(); vertex_count],
             ids: vec![VertexID::default(); vertex_count],
             edge_data: Vec::with_capacity(2*edge_count),
-            dfs_index: 0,
-            vtx_count: graph.vertex_count()
+            vtx_count: graph.vertex_count(),
+            is_planar: None,
+            dfs_index: 0
+        }
+    }
+
+    /// O(n) algorithm for determining if a graph is planar
+    pub fn compute_planarity(&mut self) -> bool {
+        if let Some(planarity) = self.is_planar {return planarity;}
+        else if self.vtx_count == 0 {
+            self.is_planar = Some(true); return true;
+        }
+        let vertex = self.graph.vertices().next().unwrap();
+        dfs_simple_recursive(self.graph, vertex, self);
+        // Efficiently create sorted seperated_dfs_children lists on the vtcs.
+        // Also embeds tree edges into the embedding.
+        self.create_seperated_dfs_children();
+        // Start adding back edges to embedding in reverse DFS order
+        for reference in (0..self.vtx_count).rev(){
+            // Walkup
+            self.walkup(reference);
+            // Walkdown
+            self.walkdown(reference);
+            // make sure all backedges were imbedded
+            for descendent in self.dfs_data[reference].back_edges_to_descendents.iter(){
+                // If failed to embed backedge, not
+                if self.pertinence[*descendent].pertinence == reference {
+                    self.is_planar = Some(false);
+                    return false;
+                }
+            }
+        }
+        // Is planar, return true
+        self.is_planar = Some(true);
+        true
+    }
+    /// Returns a planar embedding if the graph is planar, and a kuratowski subgraph if not
+    pub fn get_planarity_structure(&mut self) -> Result<PlanarEmbedding, KuratowskiSubgraph>{
+        if self.compute_planarity() {
+            Ok(self.recover_planar_embedding())
+        } else {
+            Err(self.find_kuratowski())
         }
     }
 
@@ -484,11 +411,12 @@ impl GraphEmbedding{
 
     /// Finds a kuratowski subgraph from a embedding. Assumes the core algorithm has been run until failure.
     fn find_kuratowski(&self) -> KuratowskiSubgraph{
+        // TODO: write this part of the algorithm. 
         KuratowskiSubgraph { edge_set: HashSet::default() }
     }
 }
 /// Sets up the vtx_map, vtx_data data with 
-impl DfsSimpleVisitor for GraphEmbedding{
+impl<'a, G: GraphTrait> DfsSimpleVisitor for GraphPlanarity<'a, G>{
     fn discover_vertex(&mut self, vertex: VertexID) {
         // Get preorder DFI and record into vtx_map
         let index = self.dfs_index; self.dfs_index += 1;
@@ -530,27 +458,19 @@ impl DfsSimpleVisitor for GraphEmbedding{
         self.dfs_data[ancestor].back_edges_to_descendents.push(vertex);
     }
 }
-impl Debug for GraphEmbedding{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "GraphEmbedding {{")?;
-        writeln!(f, "  vtx_data: [")?;
-        for vtx in 0..self.vtx_count {
-            writeln!(f, "    {:?},", self.dfs_data[vtx])?;
-            writeln!(f, "        {:?},", self.seperated_dfs_children[vtx])?;
-            writeln!(f, "        {:?},", self.embedding[vtx])?;
-            writeln!(f, "        {:?},", self.pertinence[vtx])?;
-        }
-        writeln!(f, "  ],")?;
-        writeln!(f, "  edge_data: [")?;
-        for edge in &self.edge_data {
-            writeln!(f, "    {:?},", edge)?;
-        }
-        writeln!(f, "  ],")?;
-        writeln!(f, "  dfs_index: {},", self.dfs_index)?;
-        writeln!(f, "  vtx_count: {}", self.vtx_count)?;
-        write!(f, "}}")
-    }
+
+/// Simple type to hold planar embeddings
+#[derive(Debug, Default, Clone)]
+pub struct PlanarEmbedding{
+    pub circular_adjacency_lists: HashMap<VertexID, Vec<VertexID>>,
 }
+
+/// Simple type to hold kuratowski subgraph for non planar graphs
+#[derive(Debug, Default, Clone)]
+pub struct KuratowskiSubgraph{
+    pub edge_set: HashSet<EdgeID>,
+}
+
 
 /// DFS Data per Vertex
 #[derive(Debug, Default, Clone)]
@@ -625,50 +545,14 @@ struct HalfEdge{
     short_circuit: bool,
 }
 
-/// Simple type to hold planar embeddings
-pub struct PlanarEmbedding{
-    circular_adjacency_lists: HashMap<VertexID, Vec<VertexID>>,
-}
-
-/// Simple type to hold kuratowski subgraph for non planar graphs
-pub struct KuratowskiSubgraph{
-    edge_set: HashSet<EdgeID>,
-}
-
-/// O(n) algorithm for determining if a graph is planar
-pub fn check_planarity<G: SimpleGraph>(graph: &G) -> Result<PlanarEmbedding, KuratowskiSubgraph>{
-    if graph.is_empty() {return Ok(PlanarEmbedding { circular_adjacency_lists: HashMap::default() });}
-    // Create embedding structure
-    let mut embedding = GraphEmbedding::new(graph);
-    // Run DFS to build vtx data
-    dfs_simple_recursive(graph, 0, &mut embedding);
-    // Efficiently create sorted seperated_dfs_children lists on the vtcs.
-    // Also embeds tree edges into the embedding.
-    embedding.create_seperated_dfs_children();
-    // Start adding back edges to embedding in reverse DFS order
-    for reference in (0..graph.vertex_count()).rev(){
-        // Walkup
-        embedding.walkup(reference);
-        // Walkdown
-        embedding.walkdown(reference);
-        // make sure all backedges were imbedded
-        for descendent in embedding.dfs_data[reference].back_edges_to_descendents.iter(){
-            // If failed to embed backedge, not
-            if embedding.pertinence[*descendent].pertinence == reference {return Err(embedding.find_kuratowski());}
-        }
-    }
-    // Is planar, return the planar embedding
-    Ok(embedding.recover_planar_embedding())
-}
-
 #[cfg(test)]
 mod test{
-    use crate::{algorithms::planarity::check_planarity, graph::prelude::*};
+    use crate::{algorithms::planarity::GraphPlanarity, graph::prelude::*};
     #[test]
     fn test_planarity(){
         let mut k33 = SparseSimpleGraph::default();
         k33.add_vertex(0); k33.add_vertex(1); k33.add_vertex(2); k33.add_vertex(3); k33.add_vertex(4);
-        assert!(check_planarity(&k33).is_ok());
+        assert!(GraphPlanarity::from_graph(&k33).compute_planarity());
         k33.add_edge((0, 3));
         k33.add_edge((0, 4));
         k33.add_edge((0, 5));
@@ -677,11 +561,11 @@ mod test{
         k33.add_edge((1, 5));
         k33.add_edge((2, 3));
         k33.add_edge((2, 4));
-        assert!(check_planarity(&k33).is_ok());
+        assert!(GraphPlanarity::from_graph(&k33).compute_planarity());
         k33.add_edge((2, 5));
-        assert!(check_planarity(&k33).is_err());
+        assert!(!GraphPlanarity::from_graph(&k33).compute_planarity());
         let mut k5 = SparseSimpleGraph::default();
-        assert!(check_planarity(&k5).is_ok());
+        assert!(GraphPlanarity::from_graph(&k5).compute_planarity());
         k5.add_edge((0, 1));
         k5.add_edge((0, 2));
         k5.add_edge((0, 3));
@@ -691,8 +575,8 @@ mod test{
         k5.add_edge((1, 4));
         k5.add_edge((2, 3));
         k5.add_edge((2, 4));
-        assert!(check_planarity(&k5).is_ok());
+        assert!(GraphPlanarity::from_graph(&k5).compute_planarity());
         k5.add_edge((3, 4));
-        assert!(check_planarity(&k5).is_err());
+        assert!(!GraphPlanarity::from_graph(&k5).compute_planarity());
     }
 }

@@ -5,6 +5,7 @@ pub mod graph_ops;
 pub mod util;
 pub mod set;
 pub mod directed;
+pub mod homogenous;
 
 pub mod prelude{
     pub use super::{
