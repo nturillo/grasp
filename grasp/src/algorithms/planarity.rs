@@ -250,20 +250,28 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         let (v_first, v_second) = self.embedding[vertex].external_edges;
         let (r_first, r_second) = self.embedding[canon].canonical_edges;
 
+        //println!("Setting {} {} next to {} {}", vertex, self.edge_data[v_second].neighbor, vertex, reference);
         self.edge_data[v_second].next = to_r;
+        //println!("Setting {} {} next to {} {}", reference, self.edge_data[r_second].neighbor, reference, vertex);
         self.edge_data[r_second].next = to_v;
 
+        //println!("Setting {} {} next to {} {}", vertex, reference, vertex, self.edge_data[v_first].neighbor);
         self.edge_data.push(HalfEdge { twin: to_v, next: v_first, neighbor: reference, short_circuit });
+        //println!("Setting {} {} next to {} {}", reference, vertex, reference, self.edge_data[r_first].neighbor);
         self.edge_data.push(HalfEdge { twin: to_r, next: r_first, neighbor: vertex, short_circuit });
-
+        
         if in_on_first {
+            //println!("Setting {} first -> {}", vertex, reference);
             self.embedding[vertex].external_edges.0 = to_r;
         } else {
+            //println!("Setting {} second -> {}", vertex, reference);
             self.embedding[vertex].external_edges.1 = to_r;
         }
         if left_root_on_first {
+            //println!("Setting canon {} first -> {}", reference, vertex);
             self.embedding[canon].canonical_edges.0 = to_v;
         } else {
+            //println!("Setting canon {} second -> {}", reference, vertex);
             self.embedding[canon].canonical_edges.1 = to_v;
         }
         // Setup canonical child pointer
@@ -279,12 +287,22 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         // Remove merged_canon from merged_canon's parents 
         self.remove_seperated_dfs_child(root, canon);
         // Circular Union: 
+        // println!("Setting {} {} next to {} {}", 
+        //     root, self.edge_data[self.embedding[canon].canonical_edges.1].neighbor, 
+        //     root, self.edge_data[self.embedding[root].external_edges.0].neighbor
+        // );
         self.edge_data[self.embedding[canon].canonical_edges.1].next = self.embedding[root].external_edges.0;
+        // println!("Setting {} {} next to {} {}", 
+        //     root, self.edge_data[self.embedding[root].external_edges.1].neighbor, 
+        //     root, self.edge_data[self.embedding[canon].canonical_edges.0].neighbor
+        // );
         self.edge_data[self.embedding[root].external_edges.1].next = self.embedding[canon].canonical_edges.0;
         // Update external Edges
         if in_on_first {
+            //println!("Merge: Setting {} first -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.0].neighbor);
             self.embedding[root].external_edges.0 = self.embedding[canon].canonical_edges.0;
         }else {
+            //println!("Merge: Setting {} second -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.1].neighbor);
             self.embedding[root].external_edges.1 = self.embedding[canon].canonical_edges.1;
         }
         // Reset canon option
@@ -294,7 +312,10 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
     }
     /// Flips a bicomp from canonical child.
     fn flip_bicomp(&mut self, canon: usize){
+        // If we are a singleton bicomp, don't flip its extraneous and messes up the planar embedding
+        if self.embedding[canon].external_edges.0 == self.embedding[canon].external_edges.1 {return;}
         let (start, end) = &mut self.embedding[canon].canonical_edges;
+        //println!("Reversing list from {} {} to {} {}", self.dfs_data[canon].parent.unwrap(), self.edge_data[*start].neighbor, self.dfs_data[canon].parent.unwrap(), self.edge_data[*end].neighbor);
         // Swap adjacency list direction
         let start_edge = *start;
         let mut prev = start_edge;
@@ -309,6 +330,7 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         self.edge_data[start_edge].next = prev;
         
         // Swap external edge pointers
+        //println!("Swapping vertex {}'s external edges, {} {}", self.dfs_data[canon].parent.unwrap(), self.edge_data[*start].neighbor, self.edge_data[*end].neighbor);
         std::mem::swap(start, end);
         // set sign of canon vtx to -1
         self.embedding[canon].flipped = true;
@@ -322,7 +344,12 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         let next_vertex = self.edge_data[out_edge].neighbor;
         // If next vertexs first external edge is the twin of out edge, then we came in_on_first.
         let on_first = self.edge_data[self.embedding[next_vertex].external_edges.0].twin == out_edge;
-        (next_vertex, on_first)
+        // If next vertex is end of tree edge, then in_on_first is always false
+        if self.embedding[canon].canonical_edges.1 == self.embedding[canon].canonical_edges.0 {
+            (next_vertex, false)
+        }else {
+            (next_vertex, on_first)
+        }
     }
     /// Given current vertex and whether the first external edge was used to traverse to it,\
     /// returns next vertex and whether the first external edge was used to traverse to it
@@ -333,7 +360,12 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         let next_vertex = self.edge_data[out_edge].neighbor;
         // If next vertexs first external edge is the twin of out edge, then we came in_on_first.
         let on_first = self.edge_data[self.embedding[next_vertex].external_edges.0].twin == out_edge;
-        (next_vertex, on_first)
+        // If next vertex is end of tree edge, then in_on_first is always false
+        if self.embedding[vertex].external_edges.1 == self.embedding[vertex].external_edges.0 {
+            (next_vertex, false)
+        }else {
+            (next_vertex, on_first)
+        }
     }
     
     /// Finds the first active (pertinent or externally active) vertex on the external face of a bicomp
@@ -396,7 +428,8 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
                 let mut list = Vec::new();
                 for child in self.dfs_data[vertex].dfs_children.iter(){
                     let start = self.embedding[*child].canonical_edges.0;
-                    list.extend(self.get_adjacency_list(start, flip).into_iter().map(|vtx| self.ids[vtx]));
+                    let child_flip = flip ^ self.embedding[*child].flipped;
+                    list.extend(self.get_adjacency_list(start, child_flip).into_iter().map(|vtx| self.ids[vtx]));
                 }
                 adjacency_list.insert(self.ids[vertex], list);
                 continue;
@@ -580,3 +613,106 @@ mod test{
         assert!(!GraphPlanarity::from_graph(&k5).compute_planarity());
     }
 }
+/*
+edge_data: [
+    0  HalfEdge { twin: 1, next: 16, neighbor: 4, short_circuit: false }, 
+    1  HalfEdge { twin: 0, next: 8, neighbor: 3, short_circuit: false }, 
+    2  HalfEdge { twin: 3, next: 9, neighbor: 3, short_circuit: false }, 
+    3  HalfEdge { twin: 2, next: 0, neighbor: 2, short_circuit: false }, 
+    4  HalfEdge { twin: 5, next: 11, neighbor: 2, short_circuit: false }, 
+    5  HalfEdge { twin: 4, next: 2, neighbor: 1, short_circuit: false }, 
+    6  HalfEdge { twin: 7, next: 17, neighbor: 1, short_circuit: false }, 
+    7  HalfEdge { twin: 6, next: 13, neighbor: 0, short_circuit: false }, 
+    8  HalfEdge { twin: 9, next: 12, neighbor: 2, short_circuit: false }, 
+    9  HalfEdge { twin: 8, next: 5, neighbor: 4, short_circuit: false }, 
+    10 HalfEdge { twin: 11, next: 3, neighbor: 1, short_circuit: false }, 
+    11 HalfEdge { twin: 10, next: 7, neighbor: 3, short_circuit: false }, 
+    12 HalfEdge { twin: 13, next: 14, neighbor: 1, short_circuit: false }, 
+    13 HalfEdge { twin: 12, next: 4, neighbor: 4, short_circuit: false }, 
+    14 HalfEdge { twin: 15, next: 1, neighbor: 0, short_circuit: false }, 
+    15 HalfEdge { twin: 14, next: 6, neighbor: 4, short_circuit: false }, 
+    16 HalfEdge { twin: 17, next: 10, neighbor: 0, short_circuit: false }, 
+    17 HalfEdge { twin: 16, next: 15, neighbor: 3, short_circuit: false }
+]
+
+GraphPlanarity { 
+    graph: SparseSimpleGraph { adjacency_list: {0: {1, 2, 3}, 3: {1, 2, 0}, 2: {0, 3, 1}, 1: {2, 3, 0}} }, 
+    vtx_map: {0: 0, 2: 2, 1: 1, 3: 3}, 
+    dfs_data: [
+        DfsData { lowpoint: 0, least_ancestor: 0, parent: None, dfs_children: [1], back_edges_to_descendents: [2, 3] }, 
+        DfsData { lowpoint: 0, least_ancestor: 1, parent: Some(0), dfs_children: [2], back_edges_to_descendents: [3] }, 
+        DfsData { lowpoint: 0, least_ancestor: 0, parent: Some(1), dfs_children: [3], back_edges_to_descendents: [] }, 
+        DfsData { lowpoint: 0, least_ancestor: 0, parent: Some(2), dfs_children: [], back_edges_to_descendents: [] }
+    ], 
+    seperated_dfs_children: [SeperatedDfsChildren { start: Some(1), end: Some(1), next: None, prev: None }, SeperatedDfsChildren { start: None, end: None, next: None, prev: None }, SeperatedDfsChildren { start: None, end: None, next: None, prev: None }, SeperatedDfsChildren { start: None, end: None, next: None, prev: None }], 
+    embedding: [
+        VertexEmbedding { external_edges: (0, 0), canonical_edges: (0, 0), canonical_child: None, flipped: false }, 
+        VertexEmbedding { external_edges: (5, 9), canonical_edges: (15, 4), canonical_child: Some(1), flipped: false }, 
+        VertexEmbedding { external_edges: (12, 0), canonical_edges: (11, 9), canonical_child: Some(1), flipped: true }, 
+        VertexEmbedding { external_edges: (14, 8), canonical_edges: (0, 0), canonical_child: Some(1), flipped: true }
+    ], pertinence: [VertexPertinence { pertinence: 18446744073709551615, pertinent_roots: [], visited: 18446744073709551615 }, VertexPertinence { pertinence: 18446744073709551615, pertinent_roots: [], visited: 0 }, VertexPertinence { pertinence: 4, pertinent_roots: [], visited: 0 }, VertexPertinence { pertinence: 4, pertinent_roots: [], visited: 0 }], 
+    ids: [0, 1, 2, 3], 
+    edge_data: [
+        HalfEdge { twin: 1, next: 12, neighbor: 3, short_circuit: false }, 
+        HalfEdge { twin: 0, next: 6, neighbor: 2, short_circuit: false }, 
+        HalfEdge { twin: 3, next: 7, neighbor: 2, short_circuit: false }, 
+        HalfEdge { twin: 2, next: 0, neighbor: 1, short_circuit: false }, 
+        HalfEdge { twin: 5, next: 15, neighbor: 1, short_circuit: false }, 
+        HalfEdge { twin: 4, next: 11, neighbor: 0, short_circuit: false }, 
+        HalfEdge { twin: 7, next: 8, neighbor: 1, short_circuit: false }, 
+        HalfEdge { twin: 6, next: 9, neighbor: 3, short_circuit: false }, 
+        HalfEdge { twin: 9, next: 14, neighbor: 1, short_circuit: true }, 
+        HalfEdge { twin: 8, next: 5, neighbor: 3, short_circuit: true }, 
+        HalfEdge { twin: 11, next: 3, neighbor: 1, short_circuit: true }, 
+        HalfEdge { twin: 10, next: 2, neighbor: 2, short_circuit: true }, 
+        HalfEdge { twin: 13, next: 10, neighbor: 0, short_circuit: false }, 
+        HalfEdge { twin: 12, next: 4, neighbor: 2, short_circuit: false }, 
+        HalfEdge { twin: 15, next: 1, neighbor: 0, short_circuit: false }, 
+        HalfEdge { twin: 14, next: 13, neighbor: 3, short_circuit: false }
+    ], 
+    vtx_count: 4, is_planar: Some(true), dfs_index: 4 }
+Ok(PlanarEmbedding { circular_adjacency_lists: {
+    0: [3, 2, 1], 
+    1: [0, 2, 3], 
+    2: [3, 1, 0], 
+    3: [0, 2, 1]
+    } })
+
+
+GraphPlanarity { 
+    graph: SparseSimpleGraph { adjacency_list: {2: {0, 1}, 1: {2, 0}, 0: {2, 1}} }, 
+    vtx_map: {2: 0, 0: 1, 1: 2}, 
+    dfs_data: [
+        DfsData { lowpoint: 0, least_ancestor: 0, parent: None, dfs_children: [1], back_edges_to_descendents: [2] }, 
+        DfsData { lowpoint: 0, least_ancestor: 1, parent: Some(0), dfs_children: [2], back_edges_to_descendents: [] }, 
+        DfsData { lowpoint: 0, least_ancestor: 0, parent: Some(1), dfs_children: [], back_edges_to_descendents: [] }
+    ], 
+    seperated_dfs_children: [
+        SeperatedDfsChildren { start: Some(1), end: Some(1), next: None, prev: None }, 
+        SeperatedDfsChildren { start: None, end: None, next: None, prev: None }, 
+        SeperatedDfsChildren { start: None, end: None, next: None, prev: None }
+    ], 
+    embedding: [
+        VertexEmbedding { external_edges: (0, 0), canonical_edges: (0, 0), canonical_child: None, flipped: false }, 
+        VertexEmbedding { external_edges: (3, 0), canonical_edges: (5, 2), canonical_child: Some(1), flipped: false }, 
+        VertexEmbedding { external_edges: (1, 4), canonical_edges: (0, 0), canonical_child: Some(1), flipped: true }
+    ], 
+    pertinence: [
+        VertexPertinence { pertinence: 18446744073709551615, pertinent_roots: [], visited: 18446744073709551615 }, 
+        VertexPertinence { pertinence: 18446744073709551615, pertinent_roots: [], visited: 0 }, 
+        VertexPertinence { pertinence: 3, pertinent_roots: [], visited: 0 }
+    ], 
+    ids: [2, 0, 1], 
+    edge_data: [
+        HalfEdge { twin: 1, next: 3, neighbor: 2, short_circuit: false }, 
+        HalfEdge { twin: 0, next: 4, neighbor: 1, short_circuit: false }, 
+        HalfEdge { twin: 3, next: 5, neighbor: 1, short_circuit: false }, 
+        HalfEdge { twin: 2, next: 0, neighbor: 0, short_circuit: false }, 
+        HalfEdge { twin: 5, next: 1, neighbor: 0, short_circuit: false }, 
+        HalfEdge { twin: 4, next: 2, neighbor: 2, short_circuit: false }
+    ], 
+    vtx_count: 3, is_planar: Some(true), dfs_index: 3 
+}
+Ok(PlanarEmbedding { circular_adjacency_lists: {2: [1, 0], 0: [2, 1], 1: [2, 0]} })
+*/
+
