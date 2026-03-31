@@ -32,17 +32,23 @@ impl Matching {
         }
     }
     pub fn add_edge(&mut self, edge: EdgeID) -> Result<(), crate::graph::prelude::GraphError> {
+        if edge.0 == edge.1 {
+            return Err(crate::graph::prelude::GraphError::EdgeNotAddable(
+                edge,
+                "Loop edges are not allowed in a matching".to_string(),
+            ));
+        }
         if self.has_edge(edge) {
             return Ok(());
         }
         if self.has_vertex(edge.0) || self.has_vertex(edge.1) {
             Err(crate::graph::prelude::GraphError::EdgeNotAddable(edge, "One or both vertices are already matched".to_string()))
         } else {
-        self.vertices.insert(edge.0);
-        self.vertices.insert(edge.1);
-        self.edges.insert(edge.0, edge.1);
-        self.edges.insert(edge.1, edge.0);
-        Ok(())
+            self.vertices.insert(edge.0);
+            self.vertices.insert(edge.1);
+            self.edges.insert(edge.0, edge.1);
+            self.edges.insert(edge.1, edge.0);
+            Ok(())
         }
     }
     pub fn remove_edge(&mut self, edge: EdgeID) {
