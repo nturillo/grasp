@@ -1,6 +1,6 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet, VecDeque}, hash::Hash, vec};
 
-use crate::{algorithms::algo_traits::AlgoTrait, graph::{EdgeID, VertexID, prelude::{DiGraph, DigraphProjection, SimpleGraph}, set::Set}};
+use crate::{algorithms::{algo_traits::AlgoTrait, search::BfsIter}, graph::{AnyVertexGraph, EdgeID, EdgeType, GraphMut, GraphTrait, VertexID, prelude::{DiGraph, DigraphProjection, HashMapLabeledDiGraph, HashMapLabeledSimpleGraph, LabeledGraph, LabeledGraphMut, SimpleGraph, SparseDiGraph}, set::Set}};
 
 /// Determine if a simple graph is connected.
 pub fn is_connected<G: SimpleGraph>(g: &G) -> bool {
@@ -73,8 +73,8 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<HashSet<VertexID>
     comps
 }
 
-/// Returns a simple graph's articulation points.
-pub fn articulation_points<G: SimpleGraph>(g: &G) -> HashSet<VertexID> {
+/// Returns a simple graph's cut vertices.
+pub fn cut_vertices<G: SimpleGraph>(g: &G) -> HashSet<VertexID> {
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -172,6 +172,121 @@ pub fn simple_graph_is_complete<G: SimpleGraph>(g: &G) -> bool {
 pub fn digraph_is_complete<G: DiGraph>(g: &G) -> bool {
     let n = g.vertex_count();
     g.edge_count() == n * (n - 1)
+}
+
+/// Returns a graph's edge connectivity.
+pub fn edge_connectivity<G: SimpleGraph>(g: &G) -> u32 {
+    if g.vertex_count() < 2 { return 0; };
+
+    let mut flow_graph = HashMapLabeledDiGraph::<SparseDiGraph, (), u32>::default();
+    for edge in g.edges() {
+        flow_graph.add_edge(edge);
+        flow_graph.set_edge_label(edge, 1);
+        flow_graph.add_edge(edge.inv());
+        flow_graph.set_edge_label(edge.inv(), 1);
+    }
+
+    let vertices: Vec<VertexID> = g.vertices().collect();
+    let source = vertices[0];
+    vertices[1..].iter().map(|&target| max_flow(&flow_graph, source, target)).min().unwrap_or(0)
+}
+
+/// Returns a graph's vertex connectivity.
+pub fn vertex_connectivity<G: SimpleGraph>(g: &G) -> u32 {
+    let mut min_flow = (g.vertex_count() - 1) as u32;
+    if min_flow == 0 || g.is_empty() { return 0; };
+
+    let mut flow_graph = HashMapLabeledDiGraph::<SparseDiGraph, (), u32>::default();
+    let mut pairs = HashMap::<VertexID, (VertexID, VertexID)>::default();
+    for v in g.vertices() {
+        let (v1, v2) = (flow_graph.create_vertex(), flow_graph.create_vertex());
+        pairs.insert(v,  (v1, v2));
+        flow_graph.add_edge((v1, v2));
+        flow_graph.set_edge_label((v1, v2), 1);
+    }
+
+    for (s, t) in g.edges() {
+        let (u1, u2) = pairs[&s];
+        let (v1, v2) = pairs[&t];
+
+        flow_graph.add_edge((u2, v1));
+        flow_graph.set_edge_label((u2, v1), u32::MAX);
+        flow_graph.add_edge((v2, u1));
+        flow_graph.set_edge_label((v2, u1), u32::MAX);
+    }
+
+    let vertices: Vec<VertexID> = g.vertices().collect();
+    for i in 0..vertices.len() {
+        for j in (i+1)..vertices.len() {
+            let s = vertices[i];
+            let t = vertices[j];
+            if !g.has_edge((s, t)) {
+                min_flow = min_flow.min(max_flow(&flow_graph, pairs[&s].1, pairs[&t].0));
+            }
+        }
+    }
+    min_flow
+}
+
+/// Returns the max flow between a source and target.
+pub fn max_flow<G: LabeledGraph<EdgeData = u32> + DiGraph>(g: &G, source: VertexID, target: VertexID) -> u32
+{
+    fn bfs(g: &HashMapLabeledDiGraph::<SparseDiGraph, (), u32>, source: VertexID, target: VertexID, parent: &mut HashMap<VertexID, Option<VertexID>>) -> bool {
+        let mut visited: HashSet<VertexID> = HashSet::with_capacity(g.vertex_count());
+        let mut queue: VecDeque<VertexID> = Default::default();
+        queue.push_back(source);
+        parent.insert(source, None);
+        visited.insert(source);
+
+        while !queue.is_empty() {
+            let cur = queue.pop_front().unwrap();
+
+            for &neighbor in g.out_neighbors(cur).iter() {
+                if !visited.contains(&neighbor) && g.get_edge_label((cur, neighbor)).is_some_and(|&cap| cap > 0) {
+                    parent.insert(neighbor, Some(cur));
+                    if neighbor == target {
+                        return true;
+                    }
+
+                    queue.push_back(neighbor);
+                    visited.insert(neighbor);
+                }
+            }
+        }
+
+        false
+    }
+
+    let mut flow = 0;
+    let mut parent: HashMap<VertexID, Option<VertexID>> = Default::default();
+    let mut residual = HashMapLabeledDiGraph::<SparseDiGraph, (), u32>::default();
+
+    for (edge, cap) in g.edge_labels() {
+        residual.add_edge(edge);
+        residual.add_edge(edge.inv());
+        residual.set_edge_label(edge, *cap);
+    }
+
+    while bfs(&residual, source, target, &mut parent) {
+        let mut path = u32::MAX;
+        let mut cur = target;
+        while let &Some(cur_parent) = parent.get(&cur).unwrap() {
+            path = path.min(*residual.get_edge_label((cur_parent, cur)).unwrap());
+            cur = cur_parent;
+        }
+
+        let mut cur = target;
+        while let &Some(cur_parent) = parent.get(&cur).unwrap() {
+            let edge = (cur_parent, cur);
+            residual.set_edge_label(edge, *residual.get_edge_label(edge).unwrap() - path);
+            residual.set_edge_label(edge.inv(), *residual.get_edge_label(edge.inv()).unwrap_or(&0) + path);
+            cur = cur_parent;
+        }
+
+        flow += path;
+    }
+
+    flow
 }
 
 #[cfg(test)]
@@ -290,7 +405,7 @@ mod test {
     }
 
     #[test]
-    pub fn check_articulation_points() {
+    pub fn check_cut_vertices() {
         let mut graph = SparseSimpleGraph::default();
         graph.add_edge((1, 2));
         graph.add_edge((2, 3));
@@ -298,7 +413,7 @@ mod test {
         graph.add_edge((3, 4));
         graph.add_edge((4, 5));
         graph.add_edge((6, 1));
-        pretty_assertions::assert_eq!(HashSet::from([1, 3, 4]), articulation_points(&graph));
+        pretty_assertions::assert_eq!(HashSet::from([1, 3, 4]), cut_vertices(&graph));
     }
 
     #[test]
@@ -311,5 +426,31 @@ mod test {
         graph.add_edge((4, 5));
         graph.add_edge((6, 1));
         pretty_assertions::assert_eq!(HashSet::from([(1, 6), (3, 4), (4, 5)]), bridges(&graph));
+    }
+
+    #[test]
+    pub fn edge_connectivity_test() {
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 1));
+        graph.add_edge((3, 4));
+        graph.add_edge((4, 5));
+        graph.add_edge((6, 1));
+        graph.add_edge((6, 5));
+        pretty_assertions::assert_eq!(2, edge_connectivity(&graph));
+    }
+
+    #[test]
+    pub fn vertex_connectivity_test() {
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 1));
+        graph.add_edge((3, 4));
+        graph.add_edge((4, 5));
+        graph.add_edge((6, 1));
+        graph.add_edge((6, 5));
+        pretty_assertions::assert_eq!(2, vertex_connectivity(&graph));
     }
 }
