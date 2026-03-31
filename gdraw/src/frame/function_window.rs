@@ -128,7 +128,8 @@ impl FunctionWindow {
                                 ReturnType::VertexList(verts) => { graph.clear_highlights(); graph.highlight_set(&verts.iter().cloned().collect::<HashSet<VertexID>>(), style.highlight_color);},
                                 ReturnType::Edge(e) => { graph.clear_highlights(); graph.highlight_edges(&HashSet::from([e]), style.highlight_color);},
                                 ReturnType::EdgeList(edges) => { graph.clear_highlights(); graph.highlight_edges(&edges.iter().cloned().collect::<HashSet<EdgeID>>(), style.edge_highlight_color);},
-                                ReturnType::Graph(rgraph) => {*graph = Graph::from(&rgraph); apply(graph);}
+                                ReturnType::DiGraph(rgraph) => {*graph = Graph::from(&rgraph); apply(graph); graph.directed = true;},
+                                ReturnType::SimpleGraph(rgraph) => {*graph = Graph::from(&rgraph); apply(graph); graph.directed = false;},
                                 _ => (),
                             }
 

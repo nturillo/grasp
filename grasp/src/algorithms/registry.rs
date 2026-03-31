@@ -1,4 +1,4 @@
-use crate::graph::{EdgeID, VertexID, prelude::{SparseDiGraph}};
+use crate::graph::{EdgeID, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
 
 #[linkme::distributed_slice]
 pub static ALGORITHMS: [FunctionData];
@@ -107,7 +107,8 @@ pub enum ReturnType {
     Edge(EdgeID),
     VertexList(Vec<VertexID>),
     EdgeList(Vec<EdgeID>),
-    Graph(SparseDiGraph),
+    SimpleGraph(SparseSimpleGraph),
+    DiGraph(SparseDiGraph),
 }
 
 pub struct FunctionData {
