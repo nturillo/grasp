@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, str::Split};
+use std::{collections::BTreeMap};
 
 use eframe::egui::{InnerResponse, Ui, ViewportCommand};
 use grasp::algorithms::registry::{ALGORITHMS, FunctionData};

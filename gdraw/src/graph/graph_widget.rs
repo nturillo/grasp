@@ -1,4 +1,4 @@
-use eframe::egui::{Rect, Response, Sense, Stroke, Ui, Vec2, Widget};
+use eframe::egui::{Stroke, Ui, Vec2};
 
 use crate::{
     frame::style::Style,

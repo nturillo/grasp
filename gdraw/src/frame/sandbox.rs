@@ -5,8 +5,7 @@ use crate::{
         storage::Graph,
     },
 };
-use eframe::egui::{Pos2, Rect, Response, Ui, Vec2};
-use grasp::graph::{EdgeID, VertexID};
+use eframe::egui::{Pos2, Rect, Ui, Vec2};
 
 pub(crate) struct Sandbox {
     pub center: Vec2,

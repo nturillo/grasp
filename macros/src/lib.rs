@@ -1,7 +1,7 @@
 use proc_macro::{Span, TokenStream};
 
 use quote::{format_ident, quote};
-use syn::{Error, FnArg, ItemFn, LitStr, Meta, Token, parse_macro_input, punctuated::Punctuated, ExprTuple, ExprArray, Expr, DeriveInput, Attribute};
+use syn::{Error, FnArg, ItemFn, Meta, Token, parse_macro_input, punctuated::Punctuated, ExprTuple, ExprArray, Expr, DeriveInput, Attribute};
 
 fn new_error(string: String) -> TokenStream {
     Error::new(Span::call_site().into(), string).into_compile_error().into()

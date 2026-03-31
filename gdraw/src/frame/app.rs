@@ -1,6 +1,6 @@
 use crate::{
     frame::{
-        function_window::FunctionWindow, graph_interaction::{self, handle_vertex_response, vertex_context}, header, sandbox::{self, Sandbox}, style::Style, windows
+        function_window::FunctionWindow, graph_interaction::{handle_vertex_response, vertex_context}, header, sandbox::{self, Sandbox}, style::Style, windows
     },
     graph::{
         layout::{self, LayoutConfig},
@@ -9,8 +9,8 @@ use crate::{
 };
 use eframe::{egui::{
     self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Rect, Sense, Stroke, TopBottomPanel, Vec2, Window
-}, epaint::Vertex};
-use grasp::graph::{GraphTrait, VertexID, prelude::{DigraphProjection, SparseDiGraph, SparseSimpleGraph}, set::Set};
+}};
+use grasp::graph::{GraphTrait, VertexID, prelude::{SparseDiGraph}, set::Set};
 
 pub struct GraspApp {
     pub style: Style,
@@ -181,15 +181,15 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                             }
                         }
                     }
+                }
+            }
 
-                    self.sandbox.scale *= (1.0 + self.style.scroll_sensitivity).powf(
-                            ui.ctx()
+            self.sandbox.scale *= (1.0 + self.style.scroll_sensitivity).powf(
+                            -1.0 * ui.ctx()
                                 .input(|input| input.smooth_scroll_delta)
                                 .y
                                 .clamp(-10.0, 10.0),
                         );
-                }
-            }
 
             if let Some(id) = self.vertex_focused {
                 response.context_menu(|ui| vertex_context(self.graph, ui, &id));

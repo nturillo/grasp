@@ -1,4 +1,3 @@
-use eframe::egui::Color32;
 use gdraw::app::GraspApp;
 use grasp::graph::prelude::*;
 
