@@ -40,6 +40,8 @@ impl<N: Number> AsRef<N> for OrdNumber<N>{
 pub trait AlgoTrait: SimpleGraph {
     fn bfs_iter<'a>(&'a self, v: VertexID) -> Result<BfsIter<'a, Self>, GraphError> where Self: Sized;
     fn dfs_iter<'a>(&'a self, v: VertexID) -> Result<DfsIter<'a, Self>, GraphError> where Self: Sized;
+    fn dijkstra_iter<'a, WF, N>(&'a self, source: VertexID, weight: WF) -> Result<Dijkstra<'a, Self, WF, N>, GraphError> where Self: Sized + GraphTrait, WF: Fn(&Self, EdgeID) -> Option<N> + 'a, N: Number + PartialOrd + Default + Copy + 'a;
+    fn astar_iter<'a, WF, HF, N>(&'a self, source: VertexID, target: VertexID, weight: WF, heuristic: HF) -> Result<AStar<'a, Self, WF, HF, N>, GraphError> where Self: Sized + GraphTrait, WF: Fn(&Self, EdgeID) -> Option<N> + 'a, HF: Fn(VertexID) -> N + 'a, N: Number + PartialOrd + Default + Copy + 'a;
 }
 
 impl<G:SimpleGraph> AlgoTrait for G {
@@ -54,5 +56,15 @@ impl<G:SimpleGraph> AlgoTrait for G {
     {
         TraversalIter::from_source(v, &self)
 
+    }
+    fn dijkstra_iter<'a, WF, N>(&'a self, source: VertexID, weight: WF) -> Result<Dijkstra<'a, Self, WF, N>, GraphError> where
+        Self: Sized + GraphTrait,  WF: Fn(&Self, EdgeID) -> Option<N> + 'a, N: Number + PartialOrd + Default + Copy + 'a,
+    {
+        Dijkstra::from_source(source, self, weight)
+    }
+    fn astar_iter<'a, WF, HF, N>(&'a self, source: VertexID, target: VertexID, weight: WF, heuristic: HF) -> Result<AStar<'a, Self, WF, HF, N>, GraphError> where
+        Self: Sized + GraphTrait,  WF: Fn(&Self, EdgeID) -> Option<N> + 'a, HF: Fn(VertexID) -> N + 'a, N: Number + PartialOrd + Default + Copy + 'a,
+    {
+        AStar::from_source(source, target, self, weight, heuristic)
     }
 }

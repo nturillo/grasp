@@ -36,26 +36,36 @@ pub trait LabeledGraphMut: LabeledGraph{
     fn remove_edge_label(&mut self, e: EdgeID) -> Option<Self::EdgeData>;
 }
 
-/// Basic implementation of a labeled graph which stores labels in a std HashMap
-#[derive(Debug, GraphOps, SimpleGraphOps)]
+/// Basic implementation of a labeled digraph which stores labels in a std HashMap
+#[derive(Debug, GraphOps)]
 #[graph_ops(labeled)]
-pub struct HashMapLabeledGraph<G, V=(), E=()> where G: GraphTrait {
+pub struct HashMapLabeledDiGraph<G, V=(), E=()> where G: DiGraph {
     pub graph: G,
     pub vertex_labels: HashMap<VertexID, V>,
-    pub edge_labels: HashMap<EdgeID, E>,
+    pub edge_labels: HashMap<EdgeID, E>
 }
-impl<G: GraphTrait+Default, V, E> Default for HashMapLabeledGraph<G, V, E>{
-    fn default() -> Self {
-        Self {
-            graph: G::default(),
-            vertex_labels: HashMap::default(),
-            edge_labels: HashMap::default(),
-        }
+
+impl<G: DiGraph, V, E> DiGraph for HashMapLabeledDiGraph<G, V, E>{
+    fn out_neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {
+        self.graph.out_neighbors(v)
+    }
+
+    fn all_neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {
+        self.graph.all_neighbors(v)
+    }
+
+    fn in_neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {
+        self.graph.in_neighbors(v)
     }
 }
-impl<G: GraphTrait+SimpleGraph, V, E> SimpleGraph for HashMapLabeledGraph<G, V, E>{}
 
-impl<G: GraphTrait, V, E> GraphTrait for HashMapLabeledGraph<G, V, E>{
+impl<G: DiGraph+Default, V, E> Default for HashMapLabeledDiGraph<G, V, E>{
+    fn default() -> Self {
+        Self{graph: G::default(), vertex_labels: HashMap::default(), edge_labels: HashMap::default()}
+    }
+}
+
+impl<G: DiGraph, V, E> GraphTrait for HashMapLabeledDiGraph<G, V, E>{
     fn vertex_count(&self) -> usize {self.graph.vertex_count()}
     fn edge_count(&self) -> usize {self.graph.edge_count()}
     fn has_vertex(&self, v: VertexID) -> bool {self.graph.has_vertex(v)}
@@ -65,32 +75,139 @@ impl<G: GraphTrait, V, E> GraphTrait for HashMapLabeledGraph<G, V, E>{
     fn neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {self.graph.neighbors(v)}
     fn vertex_set(&self) -> impl Set<Item = VertexID> {self.graph.vertex_set()}
 }
-impl<G: GraphMut, V, E> GraphMut for HashMapLabeledGraph<G, V, E>{
+impl<G: DiGraph+GraphMut, V, E> GraphMut for HashMapLabeledDiGraph<G, V, E>{
     fn create_vertex(&mut self) -> VertexID {self.graph.create_vertex()}
-    
+
     fn remove_vertex(&mut self, v: VertexID) -> impl Iterator<Item = EdgeID> {
         let edges = self.graph.remove_vertex(v);
         self.vertex_labels.remove(&v);
         self.edge_labels.retain(|(v1, v2), _| *v1!=v && *v2!=v);
         edges
     }
-    
+
     fn try_add_edge(&mut self, edge: EdgeID) -> Result<(), GraphError> {self.graph.try_add_edge(edge)}
-    
+
     fn remove_edge(&mut self, e: EdgeID) -> bool {
         if self.graph.remove_edge(e) {
-            self.edge_labels.remove(&e.to_simple());
-            // Ensures correct behaviour with digraphs
-            if !self.graph.has_edge(e.inv()) {self.edge_labels.remove(&e.inv());}
+            self.edge_labels.remove(&e);
             true
         }else {false}
     }
 }
-impl<G: AnyVertexGraph, V, E> AnyVertexGraph for HashMapLabeledGraph<G, V, E>{
+impl<G: DiGraph+AnyVertexGraph, V, E> AnyVertexGraph for HashMapLabeledDiGraph<G, V, E>{
     fn add_vertex(&mut self, id: VertexID) {self.graph.add_vertex(id);}
 }
 
-impl<G: GraphTrait, V, E> LabeledGraph for HashMapLabeledGraph<G, V, E>{
+impl<G: DiGraph, V, E> LabeledGraph for HashMapLabeledDiGraph<G, V, E>{
+    type VertexData = V;
+    type EdgeData = E;
+
+    fn get_vertex_label(&self, v: VertexID) -> Option<&Self::VertexData> {
+        self.vertex_labels.get(&v)
+    }
+
+    fn get_edge_label(&self, e: EdgeID) -> Option<&Self::EdgeData> {
+        self.edge_labels.get(&e)
+    }
+
+    fn vertex_labels(&self) -> impl Iterator<Item=(VertexID, &Self::VertexData)> {
+        self.vertex_labels.iter().map(|(v, l)| (*v, l))
+    }
+
+    fn edge_labels(&self) -> impl Iterator<Item=(EdgeID, &Self::EdgeData)> {
+        self.edge_labels.iter().map(|(e, l)|(*e, l))
+    }
+}
+impl<G: DiGraph, V, E> LabeledGraphMut for HashMapLabeledDiGraph<G, V, E>{
+    fn set_vertex_label(&mut self, vertex: VertexID, label: Self::VertexData) -> Option<Self::VertexData> {
+        assert!(self.graph.has_vertex(vertex));
+        self.vertex_labels.insert(vertex, label)
+    }
+    fn set_edge_label(&mut self, edge: EdgeID, label: Self::EdgeData) -> Option<Self::EdgeData> {
+        assert!(self.graph.has_edge(edge));
+        self.edge_labels.insert(edge, label)
+    }
+    fn set_vertex_labels(&mut self, labels: impl IntoIterator<Item = (VertexID, Self::VertexData)>) {
+        for (v, l) in labels{
+            self.set_vertex_label(v, l);
+        }
+    }
+    fn set_edge_labels(&mut self, labels: impl IntoIterator<Item = (EdgeID, Self::EdgeData)>) {
+        for (e, l) in labels{
+            self.set_edge_label(e, l);
+        }
+    }
+    fn fill_vertex_labels(&mut self, mut labeler: impl FnMut(VertexID) -> Option<Self::VertexData>) {
+        for vertex in self.graph.vertices() {
+            let Some(label) = labeler(vertex) else {continue;};
+            self.vertex_labels.insert(vertex, label);
+        }
+    }
+    fn fill_edge_labels(&mut self, mut labeler: impl FnMut(EdgeID) -> Option<Self::EdgeData>) {
+        for edge in self.graph.edges().map(|e| e.to_owned()) {
+            let Some(label) = labeler(edge) else {continue;};
+            self.edge_labels.insert(edge, label);
+        }
+    }
+    fn remove_vertex_label(&mut self, v: VertexID) -> Option<Self::VertexData> {
+        self.vertex_labels.remove(&v)
+    }
+    fn remove_edge_label(&mut self, e: EdgeID) -> Option<Self::EdgeData> {
+        self.edge_labels.remove(&e)
+    }
+}
+
+/// Basic implementation of a labeled simple graph which stores labels in a std HashMap
+#[derive(Debug, GraphOps, SimpleGraphOps)]
+#[graph_ops(labeled)]
+pub struct HashMapLabeledSimpleGraph<G, V=(), E=()> where G: SimpleGraph {
+    pub graph: G,
+    pub vertex_labels: HashMap<VertexID, V>,
+    pub edge_labels: HashMap<EdgeID, E>
+}
+
+impl<G: SimpleGraph, V, E> SimpleGraph for HashMapLabeledSimpleGraph<G, V, E>{}
+
+impl<G: SimpleGraph+Default, V, E> Default for HashMapLabeledSimpleGraph<G, V, E>{
+    fn default() -> Self {
+        Self{graph: G::default(), vertex_labels: HashMap::default(), edge_labels: HashMap::default()}
+    }
+}
+
+impl<G: SimpleGraph, V, E> GraphTrait for HashMapLabeledSimpleGraph<G, V, E>{
+    fn vertex_count(&self) -> usize {self.graph.vertex_count()}
+    fn edge_count(&self) -> usize {self.graph.edge_count()}
+    fn has_vertex(&self, v: VertexID) -> bool {self.graph.has_vertex(v)}
+    fn has_edge(&self, e: EdgeID) -> bool {self.graph.has_edge(e)}
+    fn vertices(&self) -> impl Iterator<Item=VertexID> {self.graph.vertices()}
+    fn edges(&self) -> impl Iterator<Item=EdgeID> {self.graph.edges()}
+    fn neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {self.graph.neighbors(v)}
+    fn vertex_set(&self) -> impl Set<Item = VertexID> {self.graph.vertex_set()}
+}
+impl<G: SimpleGraph+GraphMut, V, E> GraphMut for HashMapLabeledSimpleGraph<G, V, E>{
+    fn create_vertex(&mut self) -> VertexID {self.graph.create_vertex()}
+
+    fn remove_vertex(&mut self, v: VertexID) -> impl Iterator<Item = EdgeID> {
+        let edges = self.graph.remove_vertex(v);
+        self.vertex_labels.remove(&v);
+        self.edge_labels.retain(|(v1, v2), _| *v1!=v && *v2!=v);
+        edges
+    }
+
+    fn try_add_edge(&mut self, edge: EdgeID) -> Result<(), GraphError> {self.graph.try_add_edge(edge)}
+
+    fn remove_edge(&mut self, e: EdgeID) -> bool {
+        if self.graph.remove_edge(e) {
+            self.edge_labels.remove(&e.to_simple());
+            true
+        }else {false}
+    }
+}
+impl<G: SimpleGraph+AnyVertexGraph, V, E> AnyVertexGraph for HashMapLabeledSimpleGraph<G, V, E>{
+    fn add_vertex(&mut self, id: VertexID) {self.graph.add_vertex(id);}
+}
+
+impl<G: SimpleGraph, V, E> LabeledGraph for HashMapLabeledSimpleGraph<G, V, E>{
     type VertexData = V;
     type EdgeData = E;
 
@@ -110,7 +227,7 @@ impl<G: GraphTrait, V, E> LabeledGraph for HashMapLabeledGraph<G, V, E>{
         self.edge_labels.iter().map(|(e, l)|(*e, l))
     }
 }
-impl<G: GraphTrait, V, E> LabeledGraphMut for HashMapLabeledGraph<G, V, E>{
+impl<G: SimpleGraph, V, E> LabeledGraphMut for HashMapLabeledSimpleGraph<G, V, E>{
     fn set_vertex_label(&mut self, vertex: VertexID, label: Self::VertexData) -> Option<Self::VertexData> {
         assert!(self.graph.has_vertex(vertex));
         self.vertex_labels.insert(vertex, label)
@@ -161,10 +278,9 @@ mod test {
 
     /// ensures basic labeled graph functionality works
     #[test]
-    fn hashmap_labeled_graph_test() {
-        let mut graph = HashMapLabeledGraph::<SparseSimpleGraph, u8, f32>::default();
-        graph.add_edge((0, 1));
-        graph.add_edge((1, 2));
+    fn hashmap_labeled_graph_test(){
+        let mut graph = HashMapLabeledSimpleGraph::<SparseSimpleGraph, u8, f32>::default();
+        graph.add_edge((0, 1)); graph.add_edge((1, 2));
         graph.set_vertex_label(1, 3_u8);
         graph.set_edge_label((1, 2), 3.14);
         assert_eq!(graph.get_edge_label((0, 1)), None);
@@ -178,10 +294,30 @@ mod test {
         assert_eq!(graph.get_edge_label((1, 2)), None);
     }
 
+    /// ensures basic labeled digraph functionality works
+    #[test]
+    fn hashmap_labeled_digraph_test(){
+        let mut graph = HashMapLabeledDiGraph::<SparseDiGraph, u8, f32>::default();
+        graph.add_edge((0, 1)); graph.add_edge((1, 2)); graph.add_edge((2, 1));
+        graph.set_vertex_label(1, 3_u8);
+        graph.set_edge_label((1, 2), 3.14);
+        graph.set_edge_label((2, 1), 1.2);
+        assert_eq!(graph.get_edge_label((0, 1)), None);
+        assert_eq!(graph.get_vertex_label(0), None);
+        assert_eq!(graph.get_vertex_label(2), None);
+        assert_eq!(graph.get_vertex_label(1), Some(&3_u8));
+        assert_eq!(graph.get_edge_label((1, 2)), Some(&3.14));
+        assert_eq!(graph.get_edge_label((2, 1)), Some(&1.2));
+        let edges: HashSet<_> = graph.remove_vertex(1).collect();
+        assert!(edges.len()==3);
+        assert_eq!(graph.get_vertex_label(1), None);
+        assert_eq!(graph.get_edge_label((1, 2)), None);
+    }
+
     /// Ensures graphops work with labels being repositioned after operations
     #[test]
-    fn hashmap_labeled_graphops_test() {
-        type TestGraph = HashMapLabeledGraph<SparseSimpleGraph, u8, f32>;
+    fn hashmap_labeled_graphops_test(){
+        type TestGraph = HashMapLabeledSimpleGraph<SparseSimpleGraph, u8, f32>;
         let mut dot = TestGraph::default();
         let mut line = TestGraph::default();
         dot.add_vertex(0); line.add_edge((0, 1));
