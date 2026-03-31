@@ -1,4 +1,4 @@
-use std::{collections::HashSet, hash::Hash, marker::PhantomData, path::Iter};
+use std::{collections::HashSet, hash::Hash, marker::PhantomData};
 
 pub trait Set {
     type Item: Eq;
