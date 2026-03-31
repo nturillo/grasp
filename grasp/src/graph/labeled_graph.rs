@@ -246,9 +246,14 @@ impl<G: SimpleGraph, V, E> LabeledGraphMut for HashMapLabeledSimpleGraph<G, V, E
             self.set_edge_label(e.to_simple(), l);
         }
     }
-    fn fill_vertex_labels(&mut self, mut labeler: impl FnMut(VertexID) -> Option<Self::VertexData>) {
+    fn fill_vertex_labels(
+        &mut self,
+        mut labeler: impl FnMut(VertexID) -> Option<Self::VertexData>,
+    ) {
         for vertex in self.graph.vertices() {
-            let Some(label) = labeler(vertex) else {continue;};
+            let Some(label) = labeler(vertex) else {
+                continue;
+            };
             self.vertex_labels.insert(vertex, label);
         }
     }
@@ -267,9 +272,9 @@ impl<G: SimpleGraph, V, E> LabeledGraphMut for HashMapLabeledSimpleGraph<G, V, E
 }
 
 #[cfg(test)]
-mod test{
-    use std::collections::HashSet;
+mod test {
     use crate::graph::prelude::*;
+    use std::collections::HashSet;
 
     /// ensures basic labeled graph functionality works
     #[test]
@@ -326,7 +331,10 @@ mod test{
         test_merged.add_edge((*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()));
         test_merged.add_vertex(*map_dot.get(&0).unwrap());
         test_merged.set_vertex_label(*map_dot.get(&0).unwrap(), 1_u8);
-        test_merged.set_edge_label((*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()), 5.0);
+        test_merged.set_edge_label(
+            (*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()),
+            5.0,
+        );
         test_merged.set_vertex_label(*map_line.get(&1).unwrap(), 8_u8);
         assert!(labeled_graphs_eq(&merged, &test_merged));
         // Subgraph
@@ -349,7 +357,10 @@ mod test{
         test_join.add_vertex(*map_dot.get(&0).unwrap());
         test_join.set_vertex_label(*map_dot.get(&0).unwrap(), 1_u8);
         test_join.set_vertex_label(*map_line.get(&1).unwrap(), 8_u8);
-        test_join.set_edge_label((*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()), 5.0);
+        test_join.set_edge_label(
+            (*map_line.get(&0).unwrap(), *map_line.get(&1).unwrap()),
+            5.0,
+        );
         test_join.add_edge((*map_dot.get(&0).unwrap(), *map_line.get(&0).unwrap()));
         test_join.add_edge((*map_dot.get(&0).unwrap(), *map_line.get(&1).unwrap()));
         assert!(labeled_graphs_eq(&join, &test_join));
