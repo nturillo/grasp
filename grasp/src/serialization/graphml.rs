@@ -387,7 +387,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
     use crate::graph::prelude::SparseDiGraph;
     use crate::serialization::graphml::*;
-    use crate::{graph::prelude::HashMapLabeledGraph};
+    use crate::{graph::prelude::HashMapLabeledSimpleGraph};
     use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
 
     #[cfg(feature = "xml")]
@@ -481,7 +481,7 @@ mod tests {
             color: &'static str,
         }
 
-        let mut base = HashMapLabeledGraph::<SparseSimpleGraph, VData, i32>::default();
+        let mut base = HashMapLabeledSimpleGraph::<SparseSimpleGraph, VData, i32>::default();
         base.add_edge((1, 2));
         base.add_edge((2, 3));
         base.add_edge((2, 4));
@@ -538,7 +538,7 @@ mod tests {
             adata: AData,
         }
 
-        let mut base = HashMapLabeledGraph::<SparseSimpleGraph, BData, i32>::default();
+        let mut base = HashMapLabeledSimpleGraph::<SparseSimpleGraph, BData, i32>::default();
         base.add_edge((1, 2));
 
         base.edge_labels.insert((1, 2), 12);
@@ -584,7 +584,7 @@ mod tests {
         }
 
         let s = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<graphml xmlns=\"http://graphml.graphdrawing.org/xmlns\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd\">\n  <key id=\"adata.color\" for=\"node\" attr.name=\"adata.color\" attr.type=\"string\"/>\n  <key id=\"adata.size\" for=\"node\" attr.name=\"adata.size\" attr.type=\"long\"/>\n  <key id=\"shape\" for=\"node\" attr.name=\"shape\" attr.type=\"string\"/>\n  <key id=\"0E\" for=\"edge\" attr.name=\"0E\" attr.type=\"long\"/>\n  <graph edgedefault=\"undirected\">\n    <node id=\"1\">\n      <data key=\"adata.color\">Red</data>\n      <data key=\"adata.size\">0</data>\n      <data key=\"shape\">round</data>\n    </node>\n    <node id=\"2\">\n      <data key=\"adata.color\">Green</data>\n      <data key=\"adata.size\">3</data>\n      <data key=\"shape\">square</data>\n    </node>\n    <edge source=\"1\" target=\"2\">\n      <data key=\"0E\">12</data>\n    </edge>\n  </graph>\n</graphml>";
-        let from = labeled_from_graphml::<HashMapLabeledGraph::<SparseSimpleGraph, BData, i32>>(s.to_string());
+        let from = labeled_from_graphml::<HashMapLabeledSimpleGraph::<SparseSimpleGraph, BData, i32>>(s.to_string());
 
         pretty_assertions::assert_eq!(true, from.is_ok());
         pretty_assertions::assert_eq!(s, labeled_to_graphml_simple(from.expect("preverified")));

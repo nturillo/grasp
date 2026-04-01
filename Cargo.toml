@@ -2,9 +2,10 @@
 resolver = "3"
 members = [
     "grasp",
-    "python",
+    "grasp-python",
     "gdraw",
-    "macros"
+    "gdraw-python",
+    "macros",
 ]
 
 default-members = [

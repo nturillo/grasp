@@ -557,7 +557,7 @@ mod tests {
             color: &'static str,
         }
 
-        let mut base = HashMapLabeledGraph::<SparseSimpleGraph, VData, i32>::default();
+        let mut base = HashMapLabeledSimpleGraph::<SparseSimpleGraph, VData, i32>::default();
         base.add_edge((1, 2));
         base.add_edge((2, 3));
         base.add_edge((2, 4));
@@ -699,7 +699,7 @@ mod tests {
                     \t]\n\
                     ]";
 
-        let from = labeled_from_gml::<HashMapLabeledGraph<SparseSimpleGraph, VData, i32>>(s.to_string());
+        let from = labeled_from_gml::<HashMapLabeledSimpleGraph<SparseSimpleGraph, VData, i32>>(s.to_string());
 
         pretty_assertions::assert_eq!(from.is_ok(), true);
         pretty_assertions::assert_eq!(s, labeled_to_gml(&from.expect("Unexpected error")));
