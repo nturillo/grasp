@@ -5,6 +5,8 @@ pub mod graph_ops;
 pub mod util;
 pub mod set;
 pub mod directed;
+pub mod constructors;
+pub mod permutation;
 
 pub mod prelude{
     pub use super::{

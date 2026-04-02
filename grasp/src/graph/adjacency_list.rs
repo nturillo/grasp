@@ -124,9 +124,7 @@ impl GraphTrait for SparseDiGraph {
     }
     
     fn neighbors(&self, v: usize) -> impl Set<Item = usize> {
-        let out_set = self.out_adjacency.get(&v).unwrap();
-        let in_set = self.in_adjacency.get(&v).unwrap();
-        Set::union(out_set, in_set)
+        self.out_adjacency.get(&v).unwrap()
     }
     fn vertex_set(&self) -> impl Set<Item = usize> {
         &self.out_adjacency
