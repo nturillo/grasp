@@ -31,8 +31,7 @@ impl GraphTrait for PermutationGraph{
         v<self.vertex_count
     }
 
-    fn has_edge(&self, e: EdgeID) -> bool {
-        let (u, v) = e;
+    fn has_edge(&self, (u, v): EdgeID) -> bool {
         self.edges.get(&u).is_some_and(|n| n.contains(&v))
     }
 
@@ -42,7 +41,7 @@ impl GraphTrait for PermutationGraph{
 
     fn edges(&self) -> impl Iterator<Item=EdgeID> {
         self.edges.iter().map(|(u, n)| {
-            n.iter().map(|v| (*u, *v))
+            n.iter().filter_map(|v| if *u<*v {Some((*u, *v))} else {None})
         }).flatten()
     }
 
@@ -59,8 +58,9 @@ impl GraphMut for PermutationGraph{
         panic!("Tried to create a new vertex on a permutation graph")
     }
 
-    fn remove_vertex(&mut self, v: VertexID) -> impl Iterator<Item = EdgeID> {
+    fn remove_vertex(&mut self, _: VertexID) -> impl Iterator<Item = EdgeID> {
         panic!("Tried to remove a vertex on a permutation graph");
+        #[allow(unreachable_code)]
         vec![].into_iter()
     }
 
@@ -119,8 +119,7 @@ impl GraphTrait for PermutationDiGraph{
         v<self.vertex_count
     }
 
-    fn has_edge(&self, e: EdgeID) -> bool {
-        let (u, v) = e;
+    fn has_edge(&self, (u, v): EdgeID) -> bool {
         self.out_adjacency.get(&u).is_some_and(|n| n.contains(&v))
     }
 
@@ -147,8 +146,9 @@ impl GraphMut for PermutationDiGraph{
         panic!("Tried to create a new vertex on a permutation graph")
     }
 
-    fn remove_vertex(&mut self, v: VertexID) -> impl Iterator<Item = EdgeID> {
+    fn remove_vertex(&mut self, _: VertexID) -> impl Iterator<Item = EdgeID> {
         panic!("Tried to remove a vertex on a permutation graph");
+        #[allow(unreachable_code)]
         vec![].into_iter()
     }
 
@@ -179,11 +179,10 @@ impl DiGraph for PermutationDiGraph{
 }
 
 /// Given a permutation of 0..elements, produce the lehmer code
-pub fn to_lehmer(mut permutation: Vec<usize>, elements: usize) -> Vec<usize> {
-    assert!(permutation.len()==elements);
+pub fn permutation_to_lehmer(mut permutation: Vec<usize>) -> Vec<usize> {
     // count inversions
-    for i in 0..(elements-1){
-        for j in (i+1)..(elements) {
+    for i in 0..(permutation.len()-1){
+        for j in (i+1)..(permutation.len()) {
             if permutation[j]>permutation[i] {permutation[j] -= 1;}
         }
     }
@@ -191,11 +190,10 @@ pub fn to_lehmer(mut permutation: Vec<usize>, elements: usize) -> Vec<usize> {
 }
 
 /// Given a lehmer code of a permutation, recover the permutation
-pub fn from_lehmer(mut inversions: Vec<usize>, elements: usize) -> Vec<usize> {
-    assert!(inversions.len()==elements);
+pub fn permutation_from_lehmer(mut inversions: Vec<usize>) -> Vec<usize> {
     // count inversions
-    for i in (0..(elements-1)).rev() {
-        for j in i+1..elements {
+    for i in (0..(inversions.len()-1)).rev() {
+        for j in i+1..inversions.len() {
             if inversions[j]>=inversions[i] {
                 inversions[j] += 1;
             }
@@ -205,29 +203,25 @@ pub fn from_lehmer(mut inversions: Vec<usize>, elements: usize) -> Vec<usize> {
 }
 
 /// Given a permutation calculate lehmer code and convert to a natural number
-pub fn to_natural(mut permutation: Vec<usize>, elements: usize) -> usize{
-    assert!(permutation.len()==elements);
-    // count inversions
-    permutation = to_lehmer(permutation, elements);
+pub fn lehmer_to_natural(inversions: &Vec<usize>) -> usize{
     // sum
-    let sum = permutation.into_iter().rev().enumerate().map(
-        |(i, inversions)| inversions*factorial(i)
+    let sum = inversions.into_iter().rev().enumerate().map(
+        |(i, inversions)| {
+            *inversions*factorial(i)
+        }
     ).sum();
     sum
 }
 
 /// Given a natural embedding of the permutation using lehmer code, recover the permutation
-pub fn from_natural(mut code: usize, elements: usize) -> Vec<usize>{
+pub fn lehmer_from_natural(mut code: usize, elements: usize) -> Vec<usize>{
     let mut permutation = vec![0; elements];
     // put inversions into permutation
     for i in 1..elements{
-        let cur = code%factorial(i);
-        println!("{} {} {} {}", i, code, cur, code/factorial(i));
-        code = code/factorial(i);
+        let cur = code%(i+1);
+        code = code/(i+1);
         permutation[elements-1-i] = cur;
     }
-    // recreate permutation from inversions
-    permutation = from_lehmer(permutation, elements);
     permutation
 }
 
@@ -235,17 +229,21 @@ pub fn factorial(n: usize) -> usize{if n == 0 {1} else {(1..=n).product()}}
 
 #[cfg(test)]
 mod test{
-    use crate::graph::permutation::{from_lehmer, from_natural, to_lehmer, to_natural};
+    use crate::graph::permutation::{permutation_from_lehmer, permutation_to_lehmer, lehmer_from_natural, lehmer_to_natural};
+
+    fn lehmer_test(permutation: Vec<usize>){
+        let lehmer = permutation_to_lehmer(permutation.clone());
+        let recovered = permutation_from_lehmer(lehmer.clone());
+        let natural = lehmer_to_natural(&lehmer);
+        let recovered_natural = lehmer_from_natural(natural, 7);
+        assert!(permutation == recovered);
+        assert!(lehmer == recovered_natural);
+    }
 
     #[test]
     fn test_lehmer(){
-        let permutation = vec![6, 5, 4, 3, 2, 1, 0];
-        let lehmer = to_lehmer(permutation.clone(), 7);
-        let recovered = from_lehmer(lehmer.clone(), 7);
-        let natural = to_natural(permutation.clone(), 7);
-        let recovered_natural = from_natural(natural, 7);
-        println!("{:?} {:?} {:?} {:?} {:?}", permutation, lehmer, recovered, natural, recovered_natural);
-        assert!(permutation == recovered);
-        assert!(permutation == recovered_natural);
+        lehmer_test(vec![0, 1, 2, 3, 4, 5, 6]);
+        lehmer_test(vec![6, 5, 4, 3, 2, 1, 0]);
+        lehmer_test(vec![5, 3, 6, 4, 0, 1, 2]);
     }
 }
