@@ -153,7 +153,8 @@ mod test{
         let neighbors = HashSet::from_iter([1, 2]);
         let out_neighbors = HashSet::from_iter([1]);
         let in_neighbors = HashSet::from_iter([2]);
-        assert!(digraph.neighbors(0).set_eq(&neighbors));
+        assert!(digraph.neighbors(0).set_eq(&out_neighbors));
+        assert!(digraph.all_neighbors(0).set_eq(&neighbors));
         assert!(digraph.out_neighbors(0).set_eq(&out_neighbors));
         assert!(digraph.in_neighbors(0).set_eq(&in_neighbors));
     }
