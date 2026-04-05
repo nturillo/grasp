@@ -3,9 +3,9 @@ use pyo3::types::PyDict;
 use pyo3::exceptions::PyValueError;
 
 use grasp::graph::prelude::*;
-use grasp::graph::labeled_graph::{HashMapLabeledGraph, LabeledGraph, LabeledGraphMut};
+use grasp::graph::labeled_graph::{HashMapLabeledSimpleGraph, LabeledGraph, LabeledGraphMut};
 use grasp::algorithms::algo_traits::{AlgoTrait};
-use grasp::algorithms::search::{Dijkstra, ShortestPath};
+use grasp::algorithms::search::ShortestPath;
 
 #[pyclass(name = "SparseGraph")]
 #[derive(Debug)]
@@ -71,7 +71,7 @@ impl PySparseGraph {
     }
 
     fn vertex_set(&self) -> Vec<usize> {
-        self.inner.vertex_set().iter().cloned().collect()
+        self.inner.vertex_set().iter().map(|c| *c).collect()
     }
 
     fn neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
@@ -79,7 +79,7 @@ impl PySparseGraph {
             return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
 
-        Ok(self.inner.neighbors(v).iter().cloned().collect())
+        Ok(self.inner.neighbors(v).iter().map(|c| *c).collect())
     }
 
     fn bfs(&self, source: usize) -> PyResult<Vec<usize>> {
@@ -125,7 +125,7 @@ impl PySparseGraph {
         Ok((distances, predecessors))
     }
 
-    fn astar(&self, py: Python, source: usize, target: usize, weights: std::collections::HashMap<(usize, usize), f64>, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
+    fn astar(&self, _py: Python, source: usize, target: usize, weights: std::collections::HashMap<(usize, usize), f64>, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
 
         let weight_fn = move |_g: &SparseSimpleGraph, edge: EdgeID| -> Option<f64> {
             weights.get(&edge)
@@ -166,7 +166,7 @@ impl PySparseGraph {
         Ok((path, cost))
     }
 
-    fn kruskal(&self, py: Python, weights: std::collections::HashMap<(usize, usize), f64>) -> PyResult<(Vec<(usize, usize)>, f64)> {
+    fn kruskal(&self, _py: Python, weights: std::collections::HashMap<(usize, usize), f64>) -> PyResult<(Vec<(usize, usize)>, f64)> {
         let mut parent: std::collections::HashMap<usize, usize> =
             self.inner.vertices().map(|v| (v, v)).collect();
 
@@ -327,7 +327,7 @@ impl PySparseDiGraph {
             return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
 
-        Ok(self.inner.neighbors(v).iter().cloned().collect())
+        Ok(self.inner.neighbors(v).iter().map(|c| *c).collect())
     }
 
     fn out_neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
@@ -335,7 +335,7 @@ impl PySparseDiGraph {
             return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
 
-        Ok(self.inner.out_neighbors(v).iter().cloned().collect())
+        Ok(self.inner.out_neighbors(v).iter().map(|c| *c).collect())
     }
 
     fn in_neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
@@ -343,7 +343,7 @@ impl PySparseDiGraph {
             return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
 
-        Ok(self.inner.in_neighbors(v).iter().cloned().collect())
+        Ok(self.inner.in_neighbors(v).iter().map(|c| *c).collect())
     }
 
     fn to_simple(&self, py: Python) -> PyResult<PyObject> {
@@ -365,7 +365,7 @@ impl PySparseDiGraph {
 #[pyclass(name = "LabeledGraph")]
 #[derive(Debug)]
 pub struct PyLabeledGraph {
-    inner: HashMapLabeledGraph<SparseSimpleGraph, PyObject, PyObject>,
+    inner: HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>,
 }
 
 #[pymethods]
@@ -373,7 +373,7 @@ impl PyLabeledGraph {
     #[new]
     fn new() -> Self {
         Self {
-            inner: HashMapLabeledGraph::default(),
+            inner: HashMapLabeledSimpleGraph::default(),
         }
     }
 
@@ -448,7 +448,7 @@ impl PyLabeledGraph {
     }
 
     fn dijkstra(&self, py: Python, source: usize) -> PyResult<(PyObject, PyObject)> {
-        let weight_fn = |g: &HashMapLabeledGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| -> Option<f64> {
+        let weight_fn = |g: &HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| -> Option<f64> {
             g.get_edge_label(e)
                 .and_then(|obj| obj.extract::<f64>(py).ok())
         };
@@ -483,7 +483,7 @@ impl PyLabeledGraph {
     }
 
     fn astar(&self, py: Python, source: usize, target: usize, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
-        let weight_fn = |g: &HashMapLabeledGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| -> Option<f64> {
+        let weight_fn = |g: &HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| -> Option<f64> {
             g.get_edge_label(e)
                 .and_then(|obj| obj.extract::<f64>(py).ok())
         };

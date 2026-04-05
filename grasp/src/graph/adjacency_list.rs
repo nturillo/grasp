@@ -1,6 +1,6 @@
 //! Adjacency list implementation of graph
-use crate::graph::prelude::*;
-use std::collections::{HashMap, HashSet};
+use crate::graph::{prelude::*, set::IteratorAsCow};
+use std::{borrow::Cow, collections::{HashMap, HashSet}};
 
 
 #[derive(Default, Debug, GraphOps, SimpleGraphOps, Clone)]
@@ -212,8 +212,8 @@ impl<'a, K> Set for &'a HashMap<VertexID, K>{
     fn len(&self) -> usize {
         (*self).len()
     }
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> {
-        self.keys()
+    fn iter(&self) -> impl Iterator<Item = Cow<'_, VertexID>> {
+        self.keys().cow_borrowed()
     }
 }
 

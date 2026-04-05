@@ -51,8 +51,8 @@ pub fn get_components<G: GraphTrait>(graph: &G) -> Vec<impl Set<Item = VertexID>
         // start building 
         while let Some(v) = stack.pop_front(){
             for neighbor in graph.neighbors(v).iter(){
-                if unvisited.contains(neighbor) {
-                    unvisited.remove(neighbor); 
+                if unvisited.contains(&neighbor) {
+                    unvisited.remove(&neighbor); 
                     stack.push_back(*neighbor);
                     component.insert(*neighbor);
                 }

@@ -1,4 +1,4 @@
-use crate::graph::{BuildableGraph, GraphMut, VertexID, permutation::{PermutationDiGraph, factorial, from_natural}};
+use crate::graph::{BuildableGraph, GraphMut, VertexID};
 
 pub fn build_complete_graph<G: GraphMut+BuildableGraph>(size: usize) -> G{
     let mut graph = G::with_capacity(size, size*(size-1)/2);

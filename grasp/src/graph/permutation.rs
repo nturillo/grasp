@@ -51,7 +51,7 @@ impl GraphTrait for PermutationGraph{
     }
 
     fn vertex_set(&self) -> impl Set<Item = super::VertexID> {
-        HomogenousSet::new(self.vertex_count)
+        0..self.vertex_count
     }
 }
 impl GraphMut for PermutationGraph{
@@ -139,7 +139,7 @@ impl GraphTrait for PermutationDiGraph{
     }
 
     fn vertex_set(&self) -> impl Set<Item = super::VertexID> {
-        HomogenousSet::new(self.vertex_count)
+        0..self.vertex_count
     }
 }
 impl GraphMut for PermutationDiGraph{
@@ -176,29 +176,6 @@ impl DiGraph for PermutationDiGraph{
     fn in_neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {
         self.in_adjacency.get(&v)
     }
-}
-
-pub struct HomogenousSet{
-    elements: Vec<VertexID>
-}
-impl HomogenousSet {
-    pub fn new(element_count: usize) -> Self {
-        Self {
-            elements: (0..element_count).collect()
-        }
-    }
-}
-impl Set for HomogenousSet{
-    type Item = VertexID;
-
-    fn contains(&self, v: &Self::Item) -> bool {
-        *v < self.elements.len()
-    }
-
-    fn iter<'a>(&'a self) -> impl Iterator<Item = &'a Self::Item> {
-        self.elements.iter()
-    }
-
 }
 
 /// Given a permutation of 0..elements, produce the lehmer code
