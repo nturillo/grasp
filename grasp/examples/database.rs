@@ -1,18 +1,40 @@
 use std::{collections::HashSet, path::Path};
 
-use grasp::graph::prelude::*;
+use grasp::{algorithms::search::{Dijkstra, ShortestPath}, graph::prelude::*};
 use gdraw::app::GraspApp;
 use rusqlite::{self, Connection};
 
-const GRAPH_SIZE: usize = 10;
+const GRAPH_SIZE: usize = 6;
 
 /// Graph backed by a file on disk
 pub struct DatabaseGraph{
     db_connection: Connection
 }
 impl DatabaseGraph{
-    pub fn new(path: impl AsRef<Path>) -> Result<Self, rusqlite::Error>{
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, rusqlite::Error>{
         let db_connection = Connection::open(path)?;
+        // Setup graph struct
+        db_connection.execute(
+            "CREATE TABLE IF NOT EXISTS vertices (
+                ID BIGINT UNSIGNED PRIMARY KEY
+            );",
+            ()
+        )?;
+        // Setup edges
+        db_connection.execute(
+            "CREATE TABLE IF NOT EXISTS edges (
+                Start BIGINT UNSIGNED,
+                End BIGINT UNSIGNED,
+                PRIMARY KEY (Start, End)
+                FOREIGN KEY (Start) REFERENCES vertices(ID) ON DELETE CASCADE
+                FOREIGN KEY (End) REFERENCES vertices(ID) ON DELETE CASCADE
+            );", 
+            ()
+        )?;
+        Ok(Self{db_connection})
+    }
+    pub fn in_memory() -> Result<Self, rusqlite::Error>{
+        let db_connection = Connection::open_in_memory()?;
         // Setup graph struct
         db_connection.execute(
             "CREATE TABLE IF NOT EXISTS vertices (
@@ -54,7 +76,7 @@ impl GraphTrait for DatabaseGraph{
 
     fn has_edge(&self, e: EdgeID) -> bool {
         let mut stmt = self.db_connection.prepare(
-            "SELECT ID FROM edges WHERE edges.Start = (?1) AND edges.End = (?2);"
+            "SELECT 1 FROM edges WHERE edges.Start = (?1) AND edges.End = (?2);"
         ).expect("");
         stmt.exists([e.0.to_string(), e.1.to_string()]).expect("")
     }
@@ -164,13 +186,23 @@ impl GraphMut for DatabaseGraph{
         ).expect("") > 0
     }
 }
-
+impl DiGraph for DatabaseGraph{
+    fn in_neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {
+        let mut stmt = self.db_connection.prepare(
+            "SELECT Start FROM edges WHERE edges.End = (?1);"
+        ).expect("");
+        stmt.query_map([v.to_string()], |r| r.get::<usize, isize>(0)).expect("")
+            .filter_map(|id| id.ok().map(|i| i as VertexID))
+            .collect::<HashSet<VertexID>>()
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>>{
     let database_path = "db_example_graph.db3";
-    let mut graph = DatabaseGraph::new(database_path)?;
+    let mut graph = DatabaseGraph::open(database_path)?;
     println!("Vertex Count: {}, Edge Count: {}", graph.vertex_count(), graph.edge_count());
     // Build complete graph
+    println!("Building K{}", GRAPH_SIZE);
     let mut vertex_set = Vec::with_capacity(GRAPH_SIZE);
     for _ in 0..GRAPH_SIZE{
         let vertex = graph.create_vertex();
@@ -185,8 +217,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
         println!("Edge: {:?}", edge);
     }
     // Close and reopen graph
+    println!("Closing and Reopening Graph");
     drop(graph);
-    let mut graph = DatabaseGraph::new(database_path)?;
+    let mut graph = DatabaseGraph::open(database_path)?;
     println!("Vertex Count: {}, Edge Count: {}", graph.vertex_count(), graph.edge_count());
     // Remove some edges and vertices
     println!("Deleting vertex {}", vertex_set[0]);
@@ -196,7 +229,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     // Delete and edge
     let edge = graph.edges().next().unwrap();
     assert!(graph.remove_edge(edge));
+    assert!(graph.remove_edge(edge.inv()));
     println!("Removed edge {:?}", edge);
+    // Construct Cycle
+    println!("Building C{}", GRAPH_SIZE);
+    let start_vertex = graph.create_vertex();
+    let second_vertex = graph.create_vertex();
+    let _ = graph.try_add_edge((start_vertex, second_vertex));
+    let mut cur_vertex = second_vertex;
+    print!("Cycle: {}, {}, ", start_vertex, second_vertex);
+    for _ in 2..GRAPH_SIZE{
+        let new_vertex = graph.create_vertex();
+        let _ = graph.try_add_edge((cur_vertex, new_vertex));
+        cur_vertex = new_vertex;
+        print!("{}, ", cur_vertex);
+    }
+    println!();
+    let _ = graph.try_add_edge((cur_vertex, start_vertex));
+    // Find minimal path between start vertex and next vertex
+    let mut distance_from_start = Dijkstra::from_source(start_vertex, &graph, |_, _| Some(1))?;
+    let mut distance_from_second = Dijkstra::from_source(second_vertex, &graph, |_, _| Some(1))?;
+    // iterate dijkstras to end
+    while let Some(_) = distance_from_start.next() {}
+    while let Some(_) = distance_from_second.next() {}
+    // Get shortest path info
+    let start_to_second_dist = distance_from_start.distance_to(second_vertex).unwrap();
+    let start_to_second_path = distance_from_start.shortest_path_to(second_vertex).unwrap();
+    let second_to_start_dist = distance_from_second.distance_to(start_vertex).unwrap();
+    let second_to_start_path = distance_from_second.shortest_path_to(start_vertex).unwrap();
+    println!("Distance from start->second: {}, Distance from second->start: {}", start_to_second_dist, second_to_start_dist);
+    println!("Path from start->second: {:?}", start_to_second_path);
+    println!("Path from second->start: {:?}", second_to_start_path);
     // Convert to std form and display in visualizer
     let mut app = GraspApp::new();
     app.load(&graph);

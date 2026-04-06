@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use crate::graph::{labeled_graph::LabeledGraphMut, prelude::*};
 
 /*
@@ -259,6 +259,109 @@ where G::EdgeData: Clone, G::VertexData: Clone{
         }
     }
     map
+}
+
+pub struct SubgraphView<'a, G: GraphTrait>{
+    graph: &'a G,
+    vertices: Option<HashSet<VertexID>>,
+    edges: Option<HashSet<EdgeID>>,
+    directed: bool
+}
+impl<'a, G: GraphTrait> SubgraphView<'a, G>{
+    pub fn new(graph: &'a G, mut vertices: Option<HashSet<VertexID>>, mut edges: Option<HashSet<EdgeID>>, directed: bool) -> Self{
+        // Make sure edges and vertices only contain relevent elements
+        if let Some(vertices) = vertices.as_mut() {
+            vertices.retain(|v| graph.has_vertex(*v));
+            if let Some(edges) = edges.as_mut(){
+                edges.retain(|e| vertices.contains(&e.0) && vertices.contains(&e.1));
+            }
+        }
+        if let Some(edges) = edges.as_mut() {
+            edges.retain(|e| graph.has_edge(*e));
+        }
+        Self{graph, vertices, edges, directed}
+    }
+}
+impl<'a, G: GraphTrait> GraphTrait for SubgraphView<'a, G>{
+    fn vertex_count(&self) -> usize {
+        if let Some(vertices) = &self.vertices {
+            vertices.len()
+        } else {
+            self.graph.vertex_count()
+        }
+    }
+    
+    fn edge_count(&self) -> usize {
+        // Count edges from iterator impl since it is easiest
+        self.edges().count()
+    }
+    
+    fn has_vertex(&self, v: VertexID) -> bool {
+        if let Some(vertices) = &self.vertices {vertices.contains(&v)}
+        else {self.graph.has_vertex(v)}
+    }
+    
+    fn has_edge(&self, e: EdgeID) -> bool {
+        if let Some(edges) = &self.edges {
+            if !self.directed {edges.contains(&e) || edges.contains(&e.inv())}
+            else {edges.contains(&e)}
+        }else if let Some(vertices) = &self.vertices{
+            if !(vertices.contains(&e.0) && vertices.contains(&e.1)) {false}
+            else {self.graph.has_edge(e)}
+        } else {
+            self.graph.has_edge(e)
+        }
+    }
+    
+    fn vertices(&self) -> impl Iterator<Item=VertexID> {
+        self.graph.vertices().filter(|v| {
+            if let Some(vertices) = &self.vertices {
+                vertices.contains(&v)
+            }else {
+                true
+            }
+        })
+    }
+    
+    fn edges(&self) -> impl Iterator<Item=EdgeID> {
+        self.graph.edges().filter(|e| {
+            if let Some(edges) = &self.edges{
+                if self.directed {
+                    edges.contains(&e)
+                } else {
+                    edges.contains(&e) || edges.contains(&e.inv())
+                }
+            }else if let Some(vertices) = &self.vertices {
+                vertices.contains(&e.0) && vertices.contains(&e.1)
+            }else {
+                true
+            }
+        })
+    }
+    
+    fn neighbors(&self, v: VertexID) -> impl Set<Item = VertexID> {
+        self.graph.neighbors(v).filter(move |_, u| {
+            if let Some(edges) = &self.edges{
+                if self.directed {
+                    edges.contains(&(v, *u))
+                } else {
+                    edges.contains(&(v, *u)) || edges.contains(&(*u, v))
+                }
+            }else if let Some(vertices) = &self.vertices {
+                vertices.contains(&v) && vertices.contains(u)
+            }else {
+                true
+            }
+        })
+    }
+    
+    fn vertex_set(&self) -> impl Set<Item = VertexID> {
+        self.graph.vertex_set().filter(|_, v| {
+            if let Some(vertices) = &self.vertices {
+                vertices.contains(v)
+            } else {true}
+        })
+    }
 }
 
 #[cfg(test)]
