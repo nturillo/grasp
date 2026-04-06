@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Debug, mem::swap, usize};
+use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Debug, hash::Hash, mem::swap, usize};
 use crate::graph::prelude::*;
 use super::search_visitors::*;
 
@@ -422,24 +422,34 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
             let flip = flip_value ^ self.embedding[vertex].flipped;
             // push stack once for each dfs child (thus each child knows its parents flip state)
             for _ in 0..self.dfs_data[vertex].dfs_children.len() {flip_stack.push(flip);}
-            // If vertex is a root vertex, we need to merge all of its bicomps together.
-            if self.dfs_data[vertex].parent.is_none() {
-                // Luckily, root vtcs are never flipped and the flip stack should always be empty at a dfs root
-                let mut list = Vec::new();
-                for child in self.dfs_data[vertex].dfs_children.iter(){
-                    let start = self.embedding[*child].canonical_edges.0;
-                    let child_flip = flip ^ self.embedding[*child].flipped;
-                    list.extend(self.get_adjacency_list(start, child_flip).into_iter().map(|vtx| self.ids[vtx]));
+            // If the vertex has seperated dfs children, they are roots of bicomps that need to be merged
+            if let Some(start) = self.seperated_dfs_children[vertex].start {
+                // If vertex is not root vertex, there is external edges adjacency list to merge
+                let mut list = if self.dfs_data[vertex].parent.is_some(){
+                    let start = self.embedding[vertex].external_edges.0;
+                    self.get_adjacency_list(start, flip).into_iter().map(|vtx| self.ids[vtx]).collect()
+                } else {Vec::new()};
+                let a = self.embedding[start].canonical_edges.0;
+                let child_flip = flip ^ self.embedding[start].flipped;
+                list.extend(self.get_adjacency_list(a, child_flip).into_iter().map(|vtx| self.ids[vtx]));
+                let mut cur = self.seperated_dfs_children[start].next;
+                while cur != None{
+                    let child = cur.unwrap();
+                    let a = self.embedding[child].canonical_edges.0;
+                    let child_flip = flip ^ self.embedding[child].flipped;
+                    list.extend(self.get_adjacency_list(a, child_flip).into_iter().map(|vtx| self.ids[vtx]));
+                    cur = self.seperated_dfs_children[child].next;
                 }
                 adjacency_list.insert(self.ids[vertex], list);
                 continue;
             }
             // Otherwise just merge its adjacency list
             let start = self.embedding[vertex].external_edges.0;
-            adjacency_list.insert(self.ids[vertex], self.get_adjacency_list(start, flip).into_iter().map(|vtx| self.ids[vtx]).collect());
+            let adj_list = self.get_adjacency_list(start, flip).into_iter().map(|vtx| self.ids[vtx]).collect();
+            adjacency_list.insert(self.ids[vertex], adj_list);
         }
-        // Convert to planar embedding
-        PlanarEmbedding { circular_adjacency_lists: adjacency_list }
+        // Convert to DCEL Planar Embedding
+        PlanarEmbedding::from_circular_adjacency_list(adjacency_list)
     }
 
     /// Finds a kuratowski subgraph from a embedding. Assumes the core algorithm has been run until failure.
@@ -495,7 +505,409 @@ impl<'a, G: GraphTrait> DfsSimpleVisitor for GraphPlanarity<'a, G>{
 /// Simple type to hold planar embeddings
 #[derive(Debug, Default, Clone)]
 pub struct PlanarEmbedding{
-    pub circular_adjacency_lists: HashMap<VertexID, Vec<VertexID>>,
+    pub fake_vertices: HashSet<VertexID>,
+    // Map from vertex to set of half edges originating from it
+    pub vertex_map: HashMap<VertexID, HashSet<usize>>,
+    /// Map from vertex to group, or usize::MAX if singleton
+    pub vertex_group: HashMap<VertexID, usize>,
+    // List of halfedges in the embedding
+    pub half_edges: Vec<DCELHalfEdge>,
+    // Index to halfedge on the face, its length, its group (component), and whether the face is external
+    pub faces: HashMap<usize, (usize, usize, usize, bool)>,
+    // Set of faces per group(component)
+    pub groups: Vec<Vec<usize>>,
+    pub unused_id: VertexID
+}
+impl PlanarEmbedding{
+    /// Given a circular adjacency list, calculates the DCEL embedding structure. This is definitely not an optimal solution, but it works
+    pub fn from_circular_adjacency_list(list: HashMap<VertexID, Vec<VertexID>>) -> Self{
+        let mut embedding = Self::default();
+        embedding.vertex_group = list.keys().map(|v| (*v, usize::MAX)).collect();
+        let mut half_edge_index: HashMap<(usize, usize), usize> = HashMap::default();
+        for (u, adj_list) in list.iter(){
+            if *u >= embedding.unused_id {embedding.unused_id = *u+1;}
+            let mut adj_list_iter = adj_list.iter();
+            let Some(first_neighbor) = adj_list_iter.next() else {continue;};
+            let first_out_index = if let Some(i) = half_edge_index.get(&(*u, *first_neighbor)) {*i} else {
+                let half_edge = DCELHalfEdge{endpoints: (*u, *first_neighbor), face_trav: (0, 0), face: usize::MAX, twin: 0};
+                half_edge_index.insert((*u, *first_neighbor), embedding.half_edges.len());
+                embedding.half_edges.push(half_edge);
+                embedding.half_edges.len()-1
+            };
+            let first_in_index = if let Some(i) = half_edge_index.get(&(*first_neighbor, *u)) {*i} else {
+                let half_edge = DCELHalfEdge{endpoints: (*first_neighbor, *u), face_trav: (0, 0), face: usize::MAX, twin: 0};
+                half_edge_index.insert((*first_neighbor, *u), embedding.half_edges.len());
+                embedding.half_edges.push(half_edge);
+                embedding.half_edges.len()-1
+            };
+            embedding.half_edges[first_in_index].twin = first_out_index;
+            embedding.half_edges[first_out_index].twin = first_in_index;
+            let mut prev_in_index = first_in_index;
+            for v in adj_list_iter{
+                let out_index = if let Some(i) = half_edge_index.get(&(*u, *v)) {*i} else {
+                    let half_edge = DCELHalfEdge{endpoints: (*u, *v), face_trav: (0, 0), face: usize::MAX, twin: 0};
+                    half_edge_index.insert((*u, *v), embedding.half_edges.len());
+                    embedding.half_edges.push(half_edge);
+                    embedding.half_edges.len()-1
+                };
+                let in_index = if let Some(i) = half_edge_index.get(&(*v, *u)) {*i} else {
+                    let half_edge = DCELHalfEdge{endpoints: (*v, *u), face_trav: (0, 0), face: usize::MAX, twin: 0};
+                    half_edge_index.insert((*v, *u), embedding.half_edges.len());
+                    embedding.half_edges.push(half_edge);
+                    embedding.half_edges.len()-1
+                };
+                embedding.half_edges[out_index].twin = in_index;
+                embedding.half_edges[in_index].twin = out_index;
+                // prev_ins next = current out
+                embedding.half_edges[prev_in_index].face_trav.1 = out_index;
+                embedding.half_edges[out_index].face_trav.0 = prev_in_index;
+                // Update pointers
+                prev_in_index = in_index;
+            }
+            // adj list updates
+            embedding.half_edges[prev_in_index].face_trav.1 = first_out_index;
+            embedding.half_edges[first_out_index].face_trav.0 = prev_in_index;
+        }
+        // Calculate faces
+        let mut face_id = 0;
+        for i in 0..embedding.half_edges.len(){
+            // If we encounter an undiscovered face, trace it and add it to faces
+            if embedding.half_edges[i].face != usize::MAX{continue;}
+            let current_face = embedding.faces.len();
+            embedding.half_edges[i].face = current_face;
+            let mut face_size = 1;
+            let mut cur_edge = embedding.half_edges[i].face_trav.1;
+            while cur_edge != i {
+                face_size += 1;
+                embedding.half_edges[cur_edge].face = current_face;
+                cur_edge = embedding.half_edges[cur_edge].face_trav.1;
+            }
+            embedding.faces.insert(face_id, (i, face_size, usize::MAX, false));
+            face_id += 1;
+        }
+        // Determine face groups (connected components)
+        let mut component_id = 0;
+        for face_idx in 0..embedding.faces.len() {
+            // Skip if this face is already assigned to a component
+            if embedding.faces[&face_idx].2 != usize::MAX {
+                continue;
+            }
+
+            // BFS to find all faces in this connected component
+            let mut queue = VecDeque::new();
+            queue.push_back(face_idx);
+            embedding.faces.get_mut(&face_idx).unwrap().2 = component_id;
+            embedding.groups.push(vec![face_idx]);
+
+            while let Some(current_face) = queue.pop_front() {
+                let start_edge = embedding.faces[&current_face].0;
+                let mut edge = start_edge;
+
+                // Traverse all edges in this face
+                loop {
+                    // Get the twin edge - it belongs to an adjacent face
+                    let twin_edge = embedding.half_edges[edge].twin;
+                    let adjacent_face = embedding.half_edges[twin_edge].face;
+
+                    // If adjacent face is not yet assigned, assign it to this component
+                    if embedding.faces[&adjacent_face].2 == usize::MAX {
+                        embedding.faces.get_mut(&adjacent_face).unwrap().2 = component_id;
+                        embedding.groups[component_id].push(adjacent_face);
+                        queue.push_back(adjacent_face);
+                    }
+
+                    // Move to next edge in the face
+                    edge = embedding.half_edges[edge].face_trav.1;
+                    if edge == start_edge {
+                        break;
+                    }
+                }
+            }
+
+            // Move to next component
+            component_id += 1;
+        }
+        // Set largest face in group as external face
+        for group in embedding.groups.iter(){
+            let mut max = 0; let mut maxdex = 0;
+            for face in group.iter() {
+                if embedding.faces[face].1 > max {
+                    max = embedding.faces[face].1;
+                    maxdex = *face;
+                }
+            }
+            embedding.faces.get_mut(&maxdex).unwrap().3 = true;
+        }
+        // Setup vertex map
+        for (i, edge) in embedding.half_edges.iter().enumerate(){
+            embedding.vertex_map.entry(edge.endpoints.0).or_default().insert(i);
+            let group = embedding.faces[&edge.face].2;
+            *embedding.vertex_group.entry(edge.endpoints.0).or_default() = group;
+        }
+        embedding
+    }
+    
+    /// adds an edge into the graph by rebuilding from adjacency list
+    fn add_edge_from_face_entry(&mut self, v_next: usize, face: usize){
+        // Find vertices on face
+        let u_next = self.faces[&face].0;
+        let u = self.half_edges[u_next].endpoints.0;
+        let v = self.half_edges[v_next].endpoints.0;
+        let u_prev = self.half_edges[u_next].face_trav.0;
+        let v_prev = self.half_edges[v_next].face_trav.0;
+        let new_face = self.faces.len();
+        // Add edge
+        let uv = self.half_edges.len(); let vu = uv+1;
+        self.half_edges.push(DCELHalfEdge { endpoints: (u, v), face_trav: (u_prev, v_next), face, twin: vu });
+        self.half_edges.push(DCELHalfEdge { endpoints: (v, u), face_trav: (v_prev, u_next), face: new_face, twin: uv });
+        // Update vertex map
+        self.vertex_map.entry(u).or_default().insert(uv);
+        self.vertex_map.entry(v).or_default().insert(vu);
+        // update pointers
+        self.half_edges[u_prev].face_trav.1 = uv;
+        self.half_edges[v_next].face_trav.0 = uv;
+        self.half_edges[v_prev].face_trav.1 = vu;
+        self.half_edges[u_next].face_trav.0 = vu;
+        self.half_edges[u_next].face = new_face;
+        self.half_edges[v_prev].face = new_face;
+        // add face
+        let group = self.faces[&face].2;
+        self.faces.insert(new_face, (u_next, 3, group, false));
+        // set old face length and entry point
+        // Original face had N edges, new face has 'length' edges (including out_index)
+        // Old face gets: N - (length - 1) original edges + in_index = N - length + 2
+        let new_length = self.faces[&face].1 - 1;
+        self.faces.get_mut(&face).unwrap().1 = new_length;
+        self.faces.get_mut(&face).unwrap().0 = uv;
+        self.groups[group].push(new_face);
+    }
+    
+    /// adds a fake vertex to the graph any time edge.face == twin.face, to ensure both are not part of the same face
+    pub fn remove_thin_faces(&mut self) {
+        // Find edges where face == twin.face
+        let mut edge_set: HashSet<usize> = HashSet::default();
+        for (i, edge) in self.half_edges.iter().enumerate(){
+            if edge_set.contains(&i) {continue;}
+            if edge.face == self.half_edges[edge.twin].face {
+                edge_set.insert(edge.twin);
+            }
+        }
+        // Add fake vertices to the embeding, turning these lines into triangles
+        for edge_uv in edge_set.into_iter(){
+            let w = self.unused_id; self.unused_id += 1;
+            let (u, v) = self.half_edges[edge_uv].endpoints;
+            let uv_prev = self.half_edges[edge_uv].face_trav.0;
+            let uv_next = self.half_edges[edge_uv].face_trav.1;
+            let face = self.half_edges[edge_uv].face;
+            let new_face = self.faces.len();
+            // Add four new halfedges edges with the vertex
+            let wu = self.half_edges.len();
+            let uw = wu+1;
+            let wv = uw+1;
+            let vw = wv+1;
+            self.half_edges.push(DCELHalfEdge { endpoints: (w, u), face_trav: (vw, edge_uv), face: new_face, twin: uw });
+            self.half_edges.push(DCELHalfEdge { endpoints: (u, w), face_trav: (uv_prev, wv), face: face, twin: wu });
+            self.half_edges.push(DCELHalfEdge { endpoints: (w, v), face_trav: (uw, uv_next), face: face, twin: vw });
+            self.half_edges.push(DCELHalfEdge { endpoints: (v, w), face_trav: (edge_uv, wu), face: new_face, twin: wv });
+            // Setup face traversals
+            self.half_edges[uv_prev].face_trav.1 = uw;
+            self.half_edges[uv_next].face_trav.0 = wv;
+            self.half_edges[edge_uv].face_trav = (wu, vw);
+            // Add new face
+            self.half_edges[edge_uv].face = new_face;
+            let group = self.faces[&face].2;
+            self.faces.insert(new_face, (edge_uv, 3, group, false));
+            self.groups[group].push(new_face);
+            self.faces.get_mut(&face).unwrap().0 = uw;
+            self.faces.get_mut(&face).unwrap().1 += 1;  
+            // Setup vertex map
+            self.vertex_map.insert(w, HashSet::from([wu, wv]));
+            self.vertex_map.get_mut(&u).unwrap().insert(uw);
+            self.vertex_map.get_mut(&v).unwrap().insert(vw);
+            // add to fake vertices
+            self.fake_vertices.insert(w);
+        }
+    }
+
+    /// Adds edges to cut vertices
+    pub fn make_biconnected(&mut self) {
+        // Remove cut vertices
+        // Find vertices on external faces that are visited more than once
+        let mut cut_vertices: HashMap<usize, HashSet<usize>> = HashMap::default();
+        for (face_idx, (edge, _, _, external)) in self.faces.iter(){
+            if !*external {continue;}
+            // traverse face, keep track of visited nodes
+            let mut visited: HashSet<VertexID> = HashSet::default();
+            visited.insert(self.half_edges[*edge].endpoints.0);
+            let mut cur = self.half_edges[*edge].face_trav.1;
+            while cur != *edge {
+                if visited.contains(&self.half_edges[cur].endpoints.0) {
+                    cut_vertices.entry(*face_idx).or_default().insert(cur);
+                } else {
+                    visited.insert(self.half_edges[cur].endpoints.0);
+                }
+                cur = self.half_edges[cur].face_trav.1;
+            }
+        }
+        // For each cut vertex, add an edge to create a triangle, removing the cut vertex
+        for uv in cut_vertices.values().map(|set| set.iter()).flatten()
+        {
+            let wu = self.half_edges[*uv].face_trav.0;
+            let w = self.half_edges[wu].endpoints.0;
+            let v = self.half_edges[*uv].endpoints.1;
+            let face = self.half_edges[*uv].face;
+            let new_face = self.faces.len();
+            let v_next = self.half_edges[*uv].face_trav.1;
+            let w_prev = self.half_edges[wu].face_trav.0;
+            let wv = self.half_edges.len();
+            let vw = wv+1;
+            self.half_edges.push(DCELHalfEdge { endpoints: (w, v), face_trav: (w_prev, v_next), face, twin: vw });
+            self.half_edges.push(DCELHalfEdge { endpoints: (v, w), face_trav: (*uv, wu), face: new_face, twin: wv });
+            self.half_edges[*uv].face_trav.1 = vw;
+            self.half_edges[wu].face_trav.0 = vw;
+            self.half_edges[w_prev].face_trav.1 = wv;
+            self.half_edges[v_next].face_trav.0 = wv;
+            self.half_edges[*uv].face = new_face;
+            self.half_edges[wu].face = new_face;
+            let group = self.faces[&face].2;
+            self.faces.insert(new_face, (vw, 3, group, false));
+            self.groups[group].push(new_face);
+            self.vertex_map.get_mut(&v).unwrap().insert(vw);
+            self.vertex_map.get_mut(&w).unwrap().insert(wv);
+            // Update other faces length
+            self.faces.get_mut(&face).unwrap().1 -= 1;
+        }
+    }
+
+    /// adds edges to ensure each face is a triangle
+    pub fn triangularize(&mut self) {
+        // First ensure the graph is biconnected
+        self.remove_thin_faces();
+        self.make_biconnected();
+
+        // Go over all faces and split them by adding edges when they are not triangles
+        let pertinent_faces = self.faces.iter().filter_map(
+            |(index, (_, length, _, _))| {
+                if *length <= 3 {None}
+                else {Some(*index)}
+            }
+        ).collect::<Vec<usize>>();
+
+        for face in pertinent_faces.into_iter() {
+            // Collect all vertices in this face BEFORE adding any edges
+            let start_edge = self.faces[&face].0;
+            let start_node = self.half_edges[start_edge].endpoints.0;
+
+            let mut cur_edge = self.half_edges[start_edge].face_trav.1;
+            cur_edge = self.half_edges[cur_edge].face_trav.1;
+            while self.half_edges[cur_edge].endpoints.1 != start_node {
+                self.add_edge_from_face_entry(cur_edge, face);
+                cur_edge = self.half_edges[cur_edge].face_trav.1;
+            }
+        }
+    }
+
+    // Iterates the circular adjacency list of vertex
+    pub fn iterate_adjacent(&self, vertex: VertexID) -> Vec<VertexID>{
+        let Some(edges) = self.vertex_map.get(&vertex) else {return vec![];};
+        let Some(start_edge) = edges.iter().next() else {return vec![];};
+        let mut adjacent = Vec::with_capacity(edges.len());
+        adjacent.push(self.half_edges[*start_edge].endpoints.1);
+        let mut cur = self.half_edges[self.half_edges[*start_edge].twin].face_trav.1;
+        while cur != *start_edge {
+            adjacent.push(self.half_edges[cur].endpoints.1);
+            cur = self.half_edges[self.half_edges[cur].twin].face_trav.1;
+        }
+        adjacent
+    }
+
+    // Calculates the canonical order for a maximally planar graph
+    pub fn canonical_order(&self) -> HashMap<usize, Vec<VertexID>>{
+        let mut orders = HashMap::default();
+        for (_, (edge, _, group, external)) in self.faces.iter(){
+            // Only run for external faces and once per component
+            if !*external || orders.contains_key(group){continue;}
+            // Collect vertices in this component
+            let vertices: Vec<VertexID> = self.vertex_group.iter()
+                .filter(|(_, g)| **g==*group)
+                .map(|(&v, _)| v).collect();
+
+            // skip for small graphs
+            let n = vertices.len();
+            if n <= 3 {orders.insert(*group, vertices); continue;}
+
+            // Order starts with two consecutive external face vtcs
+            let (v1, v2) = self.half_edges[*edge].endpoints;
+            let vn = self.half_edges[self.half_edges[*edge].face_trav.0].endpoints.0;
+            let mut order = vec![0; vertices.len()];
+            order[0] = v1; order[1] = v2;
+
+            // Setup chord, out and mark sets
+            let mut chords: HashMap<VertexID, usize> = HashMap::default();
+            let mut out: HashSet<VertexID> = HashSet::default();
+            let mut mark: HashSet<VertexID> = HashSet::default();
+            for v in vertices.iter() {
+                chords.insert(*v, 0);
+            }
+            out.insert(v1); out.insert(v2); out.insert(vn);
+            // Get rest of ordering
+            for k in (3..vertices.len()).rev(){
+                // find v s.t. v != a, b, mark(v) false, out(v) true, chords(v) 0
+                let v = *vertices.iter().find(|v| {
+                    **v != v1 && **v != v2 && 
+                    !mark.contains(v) && 
+                    out.contains(v) && 
+                    *chords.get(*v).unwrap() == 0
+                }).unwrap();
+                order[k] = v; mark.insert(v); out.remove(&v);
+                // Iterate unmarked neighbors of v
+                let neighbors= self.iterate_adjacent(v);
+                for i in 0..neighbors.len(){
+                    // Only want unmarked and not out
+                    if mark.contains(&neighbors[i]) || out.contains(&neighbors[i]) {continue;}
+                    out.insert(neighbors[i]);
+                    let mut a = 0; let mut b = 0;
+                    for u in self.iterate_adjacent(neighbors[i]) {
+                        if mark.contains(&u) {continue;}
+                        if u == neighbors[(i+1)%neighbors.len()] {b = (i+1)%neighbors.len(); continue;}
+                        if u == neighbors[(i+neighbors.len()-1)%neighbors.len()] {
+                            a = (i+neighbors.len()-1)%neighbors.len(); continue;
+                        }
+                        if out.contains(&u) {
+                            *chords.get_mut(&neighbors[i]).unwrap() += 1;
+                            *chords.get_mut(&u).unwrap() += 1;
+                        }
+                    }
+                    if (a+neighbors.len() - b)%neighbors.len() == 1 {
+                        *chords.get_mut(&neighbors[a]).unwrap() -= 1;
+                        *chords.get_mut(&neighbors[b]).unwrap() -= 1;
+                    }
+                }
+            }
+            orders.insert(*group, order);
+        }
+        orders
+    }
+
+    pub fn calculate_euclidean_embedding(&mut self) -> HashMap<VertexID, (f32, f32)>{
+        // Ensure the embedding is internally triangular for each group, by adding fake vertices and edges.
+        self.triangularize();
+        // Calculate vertex positions
+        
+        HashMap::new()
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct DCELHalfEdge{
+    // Half edge vertex endpoints
+    endpoints: (usize, usize),
+    // Next and prev halfedges in face list
+    face_trav: (usize, usize),
+    // Index in face list
+    face: usize,
+    // Twin edge
+    twin: usize,
 }
 
 /// Simple type to hold kuratowski subgraph for non planar graphs
@@ -611,108 +1023,108 @@ mod test{
         assert!(GraphPlanarity::from_graph(&k5).compute_planarity());
         k5.add_edge((3, 4));
         assert!(!GraphPlanarity::from_graph(&k5).compute_planarity());
+        let mut p5 = SparseSimpleGraph::default();
+        p5.add_vertex(0); p5.add_vertex(1); p5.add_vertex(2); p5.add_vertex(3); p5.add_vertex(4);
+        p5.add_edge((0, 1));
+        p5.add_edge((1, 2));
+        p5.add_edge((2, 3));
+        p5.add_edge((3, 4));
+        assert!(GraphPlanarity::from_graph(&p5).compute_planarity());
     }
+
+    #[test]
+    fn test_triangularization(){
+        // Create a pentagon
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((0, 1));
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 4));
+        graph.add_edge((4, 0));
+
+        let mut planarity = GraphPlanarity::from_graph(&graph);
+        assert!(planarity.compute_planarity());
+        let result = planarity.get_planarity_structure();
+        assert!(result.is_ok());
+
+        let mut embedding = result.unwrap();
+        println!("Pentagon before triangularization:");
+        println!("Faces: {}", embedding.faces.len());
+        for (face_id, &(_start, size, _component, is_external)) in embedding.faces.iter() {
+            println!("  Face {}: size={}, external={}", face_id, size, is_external);
+        }
+
+        // Full triangularization including biconnectivity
+        embedding.triangularize();
+
+        println!("\nAfter triangularization:");
+        println!("Faces: {}", embedding.faces.len());
+        println!("Fake vertices: {}", embedding.fake_vertices.len());
+
+        let mut triangle_count = 0;
+        let mut non_triangle_count = 0;
+        for (face_id, &(_start, size, _component, is_external)) in embedding.faces.iter() {
+            println!("  Face {}: size={}, external={}", face_id, size, is_external);
+            if !is_external {
+                if size == 3 {
+                    triangle_count += 1;
+                } else {
+                    non_triangle_count += 1;
+                }
+            }
+        }
+
+        println!("Triangle faces: {}, Non-triangle internal faces: {}", triangle_count, non_triangle_count);
+        assert_eq!(non_triangle_count, 0, "All internal faces should be triangles");
+    }
+
+    #[test]
+    fn test_path_triangularization(){
+        // Create a pentagon
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((0, 1));
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 4));
+
+        let mut planarity = GraphPlanarity::from_graph(&graph);
+        assert!(planarity.compute_planarity());
+        let result = planarity.get_planarity_structure();
+        assert!(result.is_ok());
+
+        let mut embedding = result.unwrap();
+
+        println!("P5 before triangularization:");
+        println!("Faces: {}", embedding.faces.len());
+        for (face_id, &(_start, size, _component, is_external)) in embedding.faces.iter() {
+            println!("  Face {}: size={}, external={}", face_id, size, is_external);
+        }
+
+        // Full triangularization including biconnectivity
+        embedding.triangularize();
+
+        println!("\nAfter triangularization:");
+        println!("Faces: {}", embedding.faces.len());
+        println!("Fake vertices: {}", embedding.fake_vertices.len());
+
+        let mut triangle_count = 0;
+        let mut non_triangle_count = 0;
+        for (face_id, &(_start, size, _component, is_external)) in embedding.faces.iter() {
+            println!("  Face {}: size={}, external={}", face_id, size, is_external);
+            if !is_external {
+                if size == 3 {
+                    triangle_count += 1;
+                } else {
+                    non_triangle_count += 1;
+                }
+            }
+        }
+
+        println!("Triangle faces: {}, Non-triangle internal faces: {}", triangle_count, non_triangle_count);
+        assert_eq!(non_triangle_count, 0, "All internal faces should be triangles");
+
+        let order = embedding.canonical_order();
+        println!("Canonical Order: {:?}", order);
+    }
+
 }
-/*
-edge_data: [
-    0  HalfEdge { twin: 1, next: 16, neighbor: 4, short_circuit: false }, 
-    1  HalfEdge { twin: 0, next: 8, neighbor: 3, short_circuit: false }, 
-    2  HalfEdge { twin: 3, next: 9, neighbor: 3, short_circuit: false }, 
-    3  HalfEdge { twin: 2, next: 0, neighbor: 2, short_circuit: false }, 
-    4  HalfEdge { twin: 5, next: 11, neighbor: 2, short_circuit: false }, 
-    5  HalfEdge { twin: 4, next: 2, neighbor: 1, short_circuit: false }, 
-    6  HalfEdge { twin: 7, next: 17, neighbor: 1, short_circuit: false }, 
-    7  HalfEdge { twin: 6, next: 13, neighbor: 0, short_circuit: false }, 
-    8  HalfEdge { twin: 9, next: 12, neighbor: 2, short_circuit: false }, 
-    9  HalfEdge { twin: 8, next: 5, neighbor: 4, short_circuit: false }, 
-    10 HalfEdge { twin: 11, next: 3, neighbor: 1, short_circuit: false }, 
-    11 HalfEdge { twin: 10, next: 7, neighbor: 3, short_circuit: false }, 
-    12 HalfEdge { twin: 13, next: 14, neighbor: 1, short_circuit: false }, 
-    13 HalfEdge { twin: 12, next: 4, neighbor: 4, short_circuit: false }, 
-    14 HalfEdge { twin: 15, next: 1, neighbor: 0, short_circuit: false }, 
-    15 HalfEdge { twin: 14, next: 6, neighbor: 4, short_circuit: false }, 
-    16 HalfEdge { twin: 17, next: 10, neighbor: 0, short_circuit: false }, 
-    17 HalfEdge { twin: 16, next: 15, neighbor: 3, short_circuit: false }
-]
-
-GraphPlanarity { 
-    graph: SparseSimpleGraph { adjacency_list: {0: {1, 2, 3}, 3: {1, 2, 0}, 2: {0, 3, 1}, 1: {2, 3, 0}} }, 
-    vtx_map: {0: 0, 2: 2, 1: 1, 3: 3}, 
-    dfs_data: [
-        DfsData { lowpoint: 0, least_ancestor: 0, parent: None, dfs_children: [1], back_edges_to_descendents: [2, 3] }, 
-        DfsData { lowpoint: 0, least_ancestor: 1, parent: Some(0), dfs_children: [2], back_edges_to_descendents: [3] }, 
-        DfsData { lowpoint: 0, least_ancestor: 0, parent: Some(1), dfs_children: [3], back_edges_to_descendents: [] }, 
-        DfsData { lowpoint: 0, least_ancestor: 0, parent: Some(2), dfs_children: [], back_edges_to_descendents: [] }
-    ], 
-    seperated_dfs_children: [SeperatedDfsChildren { start: Some(1), end: Some(1), next: None, prev: None }, SeperatedDfsChildren { start: None, end: None, next: None, prev: None }, SeperatedDfsChildren { start: None, end: None, next: None, prev: None }, SeperatedDfsChildren { start: None, end: None, next: None, prev: None }], 
-    embedding: [
-        VertexEmbedding { external_edges: (0, 0), canonical_edges: (0, 0), canonical_child: None, flipped: false }, 
-        VertexEmbedding { external_edges: (5, 9), canonical_edges: (15, 4), canonical_child: Some(1), flipped: false }, 
-        VertexEmbedding { external_edges: (12, 0), canonical_edges: (11, 9), canonical_child: Some(1), flipped: true }, 
-        VertexEmbedding { external_edges: (14, 8), canonical_edges: (0, 0), canonical_child: Some(1), flipped: true }
-    ], pertinence: [VertexPertinence { pertinence: 18446744073709551615, pertinent_roots: [], visited: 18446744073709551615 }, VertexPertinence { pertinence: 18446744073709551615, pertinent_roots: [], visited: 0 }, VertexPertinence { pertinence: 4, pertinent_roots: [], visited: 0 }, VertexPertinence { pertinence: 4, pertinent_roots: [], visited: 0 }], 
-    ids: [0, 1, 2, 3], 
-    edge_data: [
-        HalfEdge { twin: 1, next: 12, neighbor: 3, short_circuit: false }, 
-        HalfEdge { twin: 0, next: 6, neighbor: 2, short_circuit: false }, 
-        HalfEdge { twin: 3, next: 7, neighbor: 2, short_circuit: false }, 
-        HalfEdge { twin: 2, next: 0, neighbor: 1, short_circuit: false }, 
-        HalfEdge { twin: 5, next: 15, neighbor: 1, short_circuit: false }, 
-        HalfEdge { twin: 4, next: 11, neighbor: 0, short_circuit: false }, 
-        HalfEdge { twin: 7, next: 8, neighbor: 1, short_circuit: false }, 
-        HalfEdge { twin: 6, next: 9, neighbor: 3, short_circuit: false }, 
-        HalfEdge { twin: 9, next: 14, neighbor: 1, short_circuit: true }, 
-        HalfEdge { twin: 8, next: 5, neighbor: 3, short_circuit: true }, 
-        HalfEdge { twin: 11, next: 3, neighbor: 1, short_circuit: true }, 
-        HalfEdge { twin: 10, next: 2, neighbor: 2, short_circuit: true }, 
-        HalfEdge { twin: 13, next: 10, neighbor: 0, short_circuit: false }, 
-        HalfEdge { twin: 12, next: 4, neighbor: 2, short_circuit: false }, 
-        HalfEdge { twin: 15, next: 1, neighbor: 0, short_circuit: false }, 
-        HalfEdge { twin: 14, next: 13, neighbor: 3, short_circuit: false }
-    ], 
-    vtx_count: 4, is_planar: Some(true), dfs_index: 4 }
-Ok(PlanarEmbedding { circular_adjacency_lists: {
-    0: [3, 2, 1], 
-    1: [0, 2, 3], 
-    2: [3, 1, 0], 
-    3: [0, 2, 1]
-    } })
-
-
-GraphPlanarity { 
-    graph: SparseSimpleGraph { adjacency_list: {2: {0, 1}, 1: {2, 0}, 0: {2, 1}} }, 
-    vtx_map: {2: 0, 0: 1, 1: 2}, 
-    dfs_data: [
-        DfsData { lowpoint: 0, least_ancestor: 0, parent: None, dfs_children: [1], back_edges_to_descendents: [2] }, 
-        DfsData { lowpoint: 0, least_ancestor: 1, parent: Some(0), dfs_children: [2], back_edges_to_descendents: [] }, 
-        DfsData { lowpoint: 0, least_ancestor: 0, parent: Some(1), dfs_children: [], back_edges_to_descendents: [] }
-    ], 
-    seperated_dfs_children: [
-        SeperatedDfsChildren { start: Some(1), end: Some(1), next: None, prev: None }, 
-        SeperatedDfsChildren { start: None, end: None, next: None, prev: None }, 
-        SeperatedDfsChildren { start: None, end: None, next: None, prev: None }
-    ], 
-    embedding: [
-        VertexEmbedding { external_edges: (0, 0), canonical_edges: (0, 0), canonical_child: None, flipped: false }, 
-        VertexEmbedding { external_edges: (3, 0), canonical_edges: (5, 2), canonical_child: Some(1), flipped: false }, 
-        VertexEmbedding { external_edges: (1, 4), canonical_edges: (0, 0), canonical_child: Some(1), flipped: true }
-    ], 
-    pertinence: [
-        VertexPertinence { pertinence: 18446744073709551615, pertinent_roots: [], visited: 18446744073709551615 }, 
-        VertexPertinence { pertinence: 18446744073709551615, pertinent_roots: [], visited: 0 }, 
-        VertexPertinence { pertinence: 3, pertinent_roots: [], visited: 0 }
-    ], 
-    ids: [2, 0, 1], 
-    edge_data: [
-        HalfEdge { twin: 1, next: 3, neighbor: 2, short_circuit: false }, 
-        HalfEdge { twin: 0, next: 4, neighbor: 1, short_circuit: false }, 
-        HalfEdge { twin: 3, next: 5, neighbor: 1, short_circuit: false }, 
-        HalfEdge { twin: 2, next: 0, neighbor: 0, short_circuit: false }, 
-        HalfEdge { twin: 5, next: 1, neighbor: 0, short_circuit: false }, 
-        HalfEdge { twin: 4, next: 2, neighbor: 2, short_circuit: false }
-    ], 
-    vtx_count: 3, is_planar: Some(true), dfs_index: 3 
-}
-Ok(PlanarEmbedding { circular_adjacency_lists: {2: [1, 0], 0: [2, 1], 1: [2, 0]} })
-*/
-
