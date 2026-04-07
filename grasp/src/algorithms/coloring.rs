@@ -46,41 +46,41 @@ pub fn dsatur<G: SimpleGraph>(g: &G) -> Vec<impl Set<Item = VertexID>> {
     res
 }
 
-/// Find the exact chromatic number of a simple graph via backtracking.
-pub fn chromatic_number_backtracking<G: SimpleGraph>(g: &G, upper_bound: usize) -> Result<Vec<impl Set<Item = VertexID>>, BoundError> {
+fn recurse<G: SimpleGraph>(g: &G, colors: &mut HashMap<VertexID, Option<usize>>, degree: &HashMap<VertexID, usize>, bound: usize) -> bool {
+    let v = g.vertices()
+        .filter(|u| colors[u].is_none())
+        .max_by_key(|u| {
+            let saturation = g.neighbors(*u).iter()
+                .filter_map(|n| colors[n])
+                .collect::<HashSet<_>>().len();
+            (saturation, degree[u])
+        });
+
+    if v.is_none() {return true;}
+    let v = v.unwrap();
+
+    let neighbor_colors: HashSet<usize> = g.neighbors(v).iter()
+        .filter_map(|u| colors[u])
+        .collect();
+
+    (0..bound).any(|i| {
+        if neighbor_colors.contains(&i) {return false;}
+        colors.insert(v, Some(i));
+        if !recurse(g, colors, degree, bound) {
+            colors.insert(v, None);
+            return false;
+        }
+        return true;
+    })
+}
+
+/// Find the exact chromatic number of a simple graph via backtracking with an upper bound.
+pub fn chromatic_number_upper_bound<G: SimpleGraph>(g: &G, upper_bound: usize) -> Result<Vec<impl Set<Item = VertexID>>, BoundError> {
     if upper_bound < 1 {return Err(BoundError);}
     if g.vertex_count() == 0 {return Ok(vec![])}
 
     let mut colors: HashMap<VertexID, Option<usize>> = g.vertices().map(|v| (v, None)).collect();
     let degree: HashMap<VertexID, usize> = g.vertices().map(|v| (v, g.neighbors(v).len())).collect();
-
-    fn recurse<G: SimpleGraph>(g: &G, colors: &mut HashMap<VertexID, Option<usize>>, degree: &HashMap<VertexID, usize>, upper_bound: usize) -> bool {
-        let v = g.vertices()
-            .filter(|u| colors[u].is_none())
-            .max_by_key(|u| {
-                let saturation = g.neighbors(*u).iter()
-                    .filter_map(|n| colors[n])
-                    .collect::<HashSet<_>>().len();
-                (saturation, degree[u])
-            });
-
-        if v.is_none() {return true;}
-        let v = v.unwrap();
-
-        let neighbor_colors: HashSet<usize> = g.neighbors(v).iter()
-            .filter_map(|u| colors[u])
-            .collect();
-
-        (0..upper_bound).any(|i| {
-            if neighbor_colors.contains(&i) {return false;}
-            colors.insert(v, Some(i));
-            if !recurse(g, colors, degree, upper_bound) {
-                colors.insert(v, None);
-                return false;
-            }
-            return true;
-        })
-    }
 
     if recurse(g, &mut colors, &degree, upper_bound) {
         let mut res: Vec<HashSet<VertexID>> = vec![Default::default(); upper_bound];
@@ -88,7 +88,49 @@ pub fn chromatic_number_backtracking<G: SimpleGraph>(g: &G, upper_bound: usize) 
             res[color.unwrap()].insert(vertex);
         }
 
-        Ok(match chromatic_number_backtracking(g, upper_bound - 1) {
+        Ok(match chromatic_number_upper_bound(g, upper_bound - 1) {
+            Ok(opt) => opt,
+            Err(_) => res
+        })
+    } else {
+        Err(BoundError)
+    }
+}
+
+/// Find the exact chromatic number of a simple graph via backtracking with a lower bound.
+/// WARNING: This algorithm will return the passed lower bound if it is higher than the chromatic number
+pub fn chromatic_number_lower_bound<G: SimpleGraph>(g: &G, lower_bound: usize) -> Vec<impl Set<Item = VertexID>> {
+    if g.vertex_count() == 0 {return vec![]}
+
+    let mut colors: HashMap<VertexID, Option<usize>> = g.vertices().map(|v| (v, None)).collect();
+    let degree: HashMap<VertexID, usize> = g.vertices().map(|v| (v, g.neighbors(v).len())).collect();
+
+    if recurse(g, &mut colors, &degree, lower_bound) {
+        let mut res: Vec<HashSet<VertexID>> = vec![Default::default(); lower_bound];
+        for (&vertex, &color) in colors.iter() {
+            res[color.unwrap()].insert(vertex);
+        }
+        res
+    } else {
+        chromatic_number_lower_bound(g, lower_bound + 1)
+    }
+}
+
+/// Find the exact chromatic number of a simple graph via backtracking with an upper and lower bound.
+pub fn chromatic_number_bounded<G: SimpleGraph>(g: &G, lower_bound: usize, upper_bound: usize) -> Result<Vec<impl Set<Item = VertexID>>, BoundError> {
+    if upper_bound < lower_bound {return Err(BoundError);}
+    if g.vertex_count() == 0 {return Ok(vec![])}
+
+    let mut colors: HashMap<VertexID, Option<usize>> = g.vertices().map(|v| (v, None)).collect();
+    let degree: HashMap<VertexID, usize> = g.vertices().map(|v| (v, g.neighbors(v).len())).collect();
+
+    if recurse(g, &mut colors, &degree, upper_bound) {
+        let mut res: Vec<HashSet<VertexID>> = vec![Default::default(); upper_bound];
+        for (&vertex, &color) in colors.iter() {
+            res[color.unwrap()].insert(vertex);
+        }
+
+        Ok(match chromatic_number_bounded(g, lower_bound, upper_bound - 1) {
             Ok(opt) => opt,
             Err(_) => res
         })
@@ -123,12 +165,12 @@ mod tests {
     }
 
     #[test]
-    fn backtracking_test() {
+    fn upper_backtracking_test() {
         let mut g = SparseSimpleGraph::default();
         g.add_edge((1,2));
         g.add_edge((2,3));
         g.add_edge((1,3));
-        let coloring = chromatic_number_backtracking(&g, 3);
+        let coloring = chromatic_number_upper_bound(&g, 3);
         pretty_assertions::assert_eq!(coloring.unwrap().len(), 3);
 
         let mut g = SparseSimpleGraph::default();
@@ -136,7 +178,7 @@ mod tests {
         g.add_edge((0,3));
         g.add_edge((1,2));
         g.add_edge((2,3));
-        let coloring = chromatic_number_backtracking(&g, 3);
+        let coloring = chromatic_number_upper_bound(&g, 3);
         pretty_assertions::assert_eq!(coloring.unwrap().len(), 2);
 
         let mut g = SparseSimpleGraph::default();
@@ -146,17 +188,93 @@ mod tests {
         g.add_edge((1,2));
         g.add_edge((1,3));
         g.add_edge((2,3));
-        let coloring = chromatic_number_backtracking(&g, 3);
+        let coloring = chromatic_number_upper_bound(&g, 3);
         pretty_assertions::assert_eq!(coloring.is_err(), true);
 
         let g = SparseSimpleGraph::default();
-        let coloring = chromatic_number_backtracking(&g, 1);
+        let coloring = chromatic_number_upper_bound(&g, 1);
         pretty_assertions::assert_eq!(coloring.unwrap().len(), 0);
 
         let mut g = SparseSimpleGraph::default();
         g.add_vertex(0);
         g.add_vertex(1);
-        let coloring = chromatic_number_backtracking(&g, 3);
+        let coloring = chromatic_number_upper_bound(&g, 3);
+        pretty_assertions::assert_eq!(coloring.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn lower_backtracking_test() {
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((1,2));
+        g.add_edge((2,3));
+        g.add_edge((1,3));
+        let coloring = chromatic_number_lower_bound(&g, 2);
+        pretty_assertions::assert_eq!(coloring.len(), 3);
+
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((0,1));
+        g.add_edge((0,3));
+        g.add_edge((1,2));
+        g.add_edge((2,3));
+        let coloring = chromatic_number_lower_bound(&g, 1);
+        pretty_assertions::assert_eq!(coloring.len(), 2);
+
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((0,1));
+        g.add_edge((0,2));
+        g.add_edge((0,3));
+        g.add_edge((1,2));
+        g.add_edge((1,3));
+        g.add_edge((2,3));
+        let coloring = chromatic_number_lower_bound(&g, 5);
+        pretty_assertions::assert_eq!(coloring.len(), 5);
+
+        let g = SparseSimpleGraph::default();
+        let coloring = chromatic_number_lower_bound(&g, 1);
+        pretty_assertions::assert_eq!(coloring.len(), 0);
+
+        let mut g = SparseSimpleGraph::default();
+        g.add_vertex(0);
+        g.add_vertex(1);
+        let coloring = chromatic_number_lower_bound(&g, 1);
+        pretty_assertions::assert_eq!(coloring.len(), 1);
+    }
+
+    #[test]
+    fn bounded_backtracking_test() {
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((1,2));
+        g.add_edge((2,3));
+        g.add_edge((1,3));
+        let coloring = chromatic_number_bounded(&g, 2, 5);
+        pretty_assertions::assert_eq!(coloring.unwrap().len(), 3);
+
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((0,1));
+        g.add_edge((0,3));
+        g.add_edge((1,2));
+        g.add_edge((2,3));
+        let coloring = chromatic_number_bounded(&g, 1, 3);
+        pretty_assertions::assert_eq!(coloring.unwrap().len(), 2);
+
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((0,1));
+        g.add_edge((0,2));
+        g.add_edge((0,3));
+        g.add_edge((1,2));
+        g.add_edge((1,3));
+        g.add_edge((2,3));
+        let coloring = chromatic_number_bounded(&g, 1, 3);
+        pretty_assertions::assert_eq!(coloring.is_err(), true);
+
+        let g = SparseSimpleGraph::default();
+        let coloring = chromatic_number_bounded(&g, 2, 5);
+        pretty_assertions::assert_eq!(coloring.unwrap().len(), 0);
+
+        let mut g = SparseSimpleGraph::default();
+        g.add_vertex(0);
+        g.add_vertex(1);
+        let coloring = chromatic_number_bounded(&g, 1, 3);
         pretty_assertions::assert_eq!(coloring.unwrap().len(), 1);
     }
 }
