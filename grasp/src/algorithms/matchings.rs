@@ -132,8 +132,8 @@ impl BlossomGraph {
         new_vertex
     }
     pub fn expand(&mut self) -> Option<(usize, SparseSimpleGraph, Vec<EdgeID>)> {
-        if let Some((new_vertex, blossom, removed_edges)) = self.contractions.last() {
-            self.current_graph.remove_vertex(*new_vertex);
+        if let Some((new_vertex, _blossom, removed_edges)) = self.contractions.last() {
+            let _ = self.current_graph.remove_vertex(*new_vertex);
             for e in removed_edges {
                 self.current_graph.add_edge(*e);
             }
@@ -156,8 +156,8 @@ impl BlossomGraph {
             new_index = contracted_path.len() - 1 - new_index;
         }
         path.extend_from_slice(&contracted_path[0..new_index]);
-        let mut left: VertexID;
-        let mut right: VertexID;
+        let left: VertexID;
+        let right: VertexID;
         if contracted_path.first() == Some(&new_vertex) || self.current_graph.has_edge((contracted_path[new_index-1], exposed_vertex)) {
             left = exposed_vertex;
             right = blossom.vertices().find(|&v| self.current_graph.has_edge((contracted_path[new_index+1], v))).unwrap();
