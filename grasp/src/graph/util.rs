@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::graph::{GraphTrait, VertexID, prelude::LabeledGraph, set::Set};
+use crate::graph::{EdgeID, GraphTrait, VertexID, prelude::LabeledGraph, set::Set};
 
 /// Tests if two graphs are equal, (Not Isomorphic)
 pub fn graphs_eq<G: GraphTrait>(graph_a: &G, graph_b: &G) -> bool{
@@ -61,6 +61,59 @@ pub fn get_components<G: GraphTrait>(graph: &G) -> Vec<impl Set<Item = VertexID>
         components.push(component);
     }
     components
+}
+
+/// The difference between two graphs, used for testing
+pub struct GraphDiff {
+    pub left_extra_vertices: Vec<VertexID>,
+    pub right_extra_vertices: Vec<VertexID>,
+    pub left_extra_edges: Vec<EdgeID>,
+    pub right_extra_edges: Vec<EdgeID>,
+}
+
+pub fn graph_diff(left_graph: &impl GraphTrait, right_graph: &impl GraphTrait) -> Option<GraphDiff> {
+    let mut left_extra_vertices= Vec::new();
+    let mut right_extra_vertices = Vec::new();
+    let mut left_extra_edges = Vec::new();
+    let mut right_extra_edges = Vec::new();
+
+    left_extra_vertices.extend(left_graph.vertices().filter(|v| !right_graph.has_vertex(*v)));
+    right_extra_vertices.extend(right_graph.vertices().filter(|v| !left_graph.has_vertex(*v)));
+    left_extra_edges.extend(left_graph.edges().filter(|e| !right_graph.has_edge(*e)));
+    right_extra_edges.extend(right_graph.edges().filter(|e| !left_graph.has_edge(*e)));
+
+    if left_extra_edges.is_empty() && right_extra_edges.is_empty() && left_extra_vertices.is_empty() && right_extra_vertices.is_empty() {
+        return None
+    } 
+    Some(GraphDiff {
+        left_extra_vertices,
+        right_extra_vertices,
+        left_extra_edges,
+        right_extra_edges,
+    })
+}
+
+#[macro_export]
+macro_rules! assert_graphs_eq {
+    ($expected:expr, $actual:expr) => {
+        if let Some(diff) = $crate::graph::util::graph_diff(&$expected, &$actual) {
+            panic!(
+                "Graphs are not equal!\n\
+                {} vs {}\n\
+                Extra vertices in left: {:?}\n\
+                Extra vertices in right: {:?}\n\
+                Extra edges in left: {:?}\n\
+                Extra edges in right: {:?}\n\
+                ",
+                stringify!($expected),
+                stringify!($actual),
+                diff.left_extra_vertices,
+                diff.right_extra_vertices,
+                diff.left_extra_edges,
+                diff.right_extra_edges,
+            );
+        }
+    };
 }
 
 /// Get the degeneracy of a graph, and set *out* to be the degeneracy ordering
