@@ -1,8 +1,8 @@
-use std::{collections::{HashMap, HashSet, VecDeque}, hash::Hash, vec};
+use std::{collections::{HashMap, HashSet, VecDeque}, vec};
 
 use graph_ops_macros::register;
 
-use crate::{algorithms::{algo_traits::AlgoTrait, search::BfsIter}, graph::{AnyVertexGraph, EdgeID, EdgeType, GraphMut, GraphTrait, VertexID, prelude::{DiGraph, DigraphProjection, HashMapLabeledDiGraph, HashMapLabeledSimpleGraph, LabeledGraph, LabeledGraphMut, SimpleGraph, SparseDiGraph}, set::Set}};
+use crate::{algorithms::{algo_traits::AlgoTrait}, graph::{AnyVertexGraph, EdgeID, EdgeType, GraphMut, GraphTrait, VertexID, prelude::{DiGraph, DigraphProjection, HashMapLabeledDiGraph, LabeledGraph, LabeledGraphMut, SimpleGraph, SparseDiGraph}, set::Set}};
 
 /// Determine if a simple graph is connected.
 pub fn is_connected<G: SimpleGraph>(g: &G) -> bool {
@@ -19,7 +19,7 @@ pub fn is_strongly_connected<G: DiGraph>(g: &G) -> bool {
     strongly_connected_components(g).len() == 1
 }
 
-#[register(name = "Strongly Connected Components", ret = VertexCluster, simple = "false", params = [])]
+#[register(name = "Strongly Connected Components", desc = "Colors each vertex in accordance to the component they belong to.", ret = VertexCluster, simple = "false", params = [])]
 /// Return the strongly connected components of a digraph.
 pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<impl Set<Item = VertexID>> {
     struct VertexWrapper {
@@ -76,8 +76,9 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<impl Set<Item = V
     comps
 }
 
+#[register(name = "Cut Vertices", desc = "Highlights the graph's cut vertices.", ret = VertexList, simple = "true", params = [])]
 /// Returns a simple graph's cut vertices.
-pub fn cut_vertices<G: SimpleGraph>(g: &G) -> HashSet<VertexID> {
+pub fn cut_vertices<G: SimpleGraph>(g: &G) -> impl Set<Item = VertexID> {
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -120,11 +121,12 @@ pub fn cut_vertices<G: SimpleGraph>(g: &G) -> HashSet<VertexID> {
         }
     }
 
-    points.iter().copied().collect()
+    points
 }
 
+#[register(name = "Bridges", desc = "Highlights the graph's bridges.", ret = EdgeList, simple = "true", params = [])]
 /// Returns a simple graph's bridges.
-pub fn bridges<G: SimpleGraph>(g: &G) -> HashSet<EdgeID> {
+pub fn bridges<G: SimpleGraph>(g: &G) -> impl Set<Item = EdgeID> {
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -162,7 +164,7 @@ pub fn bridges<G: SimpleGraph>(g: &G) -> HashSet<EdgeID> {
         }
     }
 
-    points.iter().copied().collect()
+    points
 }
 
 /// Returns if a simple graph is complete.
@@ -416,7 +418,7 @@ mod test {
         graph.add_edge((3, 4));
         graph.add_edge((4, 5));
         graph.add_edge((6, 1));
-        pretty_assertions::assert_eq!(HashSet::from([1, 3, 4]), cut_vertices(&graph));
+        pretty_assertions::assert_eq!(HashSet::from([1, 3, 4]), cut_vertices(&graph).iter().copied().collect());
     }
 
     #[test]
@@ -428,7 +430,7 @@ mod test {
         graph.add_edge((3, 4));
         graph.add_edge((4, 5));
         graph.add_edge((6, 1));
-        pretty_assertions::assert_eq!(HashSet::from([(1, 6), (3, 4), (4, 5)]), bridges(&graph));
+        pretty_assertions::assert_eq!(HashSet::from([(1, 6), (3, 4), (4, 5)]), bridges(&graph).iter().copied().collect());
     }
 
     #[test]

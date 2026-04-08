@@ -124,6 +124,12 @@ pub fn register(attr: TokenStream, item: TokenStream) -> TokenStream {
         } else {
             quote! { #fn_name(#graph, #(#arg_names),*).into_iter().map(|s| s.iter().cloned().collect()).collect() }
         }
+    } else if return_type == "VertexList" || return_type == "EdgeList" {
+        if is_self {
+            quote! { #graph.#fn_name(#(#arg_names),*).iter().cloned().collect() }
+        } else {
+            quote! { #fn_name(#graph, #(#arg_names),*).iter().cloned().collect() }
+        }
     } else {
         if is_self { quote! {#graph.#fn_name(#(#arg_names),*)} } else { quote! {#fn_name(#graph, #(#arg_names),*)} }
     };
