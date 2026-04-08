@@ -69,7 +69,10 @@ impl GraphTrait for Matching {
         self.vertices.iter().cloned()
     }
     fn edges(&self) -> impl Iterator<Item = EdgeID> {
-        self.edges.iter().map(|(v1, v2)| (*v1, *v2))
+        self.edges.iter().filter_map(|(v1, v2)| {
+            if *v1<*v2 {Some((*v1, *v2))}
+            else {None}
+        })
     }
     fn vertex_count(&self) -> usize {
         self.vertices.len()
@@ -94,6 +97,8 @@ impl GraphTrait for Matching {
         self.vertices.iter().cloned().collect::<HashSet<_>>()
     }
 }
+
+impl SimpleGraph for Matching{}
 
 /// Bespoke graph type for the blossom algorithm, which supports contracting and expanding blossoms.
 struct BlossomGraph {

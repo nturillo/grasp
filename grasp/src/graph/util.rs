@@ -1,6 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 
-use crate::graph::{GraphTrait, VertexID, prelude::LabeledGraph, set::Set};
+use crate::graph::{EdgeID, GraphTrait, VertexID, prelude::LabeledGraph, set::Set};
 
 /// Tests if two graphs are equal, (Not Isomorphic)
 pub fn graphs_eq<G: GraphTrait>(graph_a: &G, graph_b: &G) -> bool{
@@ -65,10 +65,10 @@ pub fn get_components<G: GraphTrait>(graph: &G) -> Vec<impl Set<Item = VertexID>
 
 /// The difference between two graphs, used for testing
 pub struct GraphDiff {
-    pub left_extra_vertices: Vec<usize>,
-    pub right_extra_vertices: Vec<usize>,
-    pub left_extra_edges: Vec<(usize, usize)>,
-    pub right_extra_edges: Vec<(usize, usize)>,
+    pub left_extra_vertices: Vec<VertexID>,
+    pub right_extra_vertices: Vec<VertexID>,
+    pub left_extra_edges: Vec<EdgeID>,
+    pub right_extra_edges: Vec<EdgeID>,
 }
 
 pub fn graph_diff(left_graph: &impl GraphTrait, right_graph: &impl GraphTrait) -> Option<GraphDiff> {
