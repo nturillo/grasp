@@ -1,9 +1,9 @@
 //! Adjacency list implementation of graph
-use crate::graph::prelude::*;
-use std::collections::{HashMap, HashSet};
+use crate::graph::{prelude::*, set::IteratorAsCow};
+use std::{borrow::Cow, collections::{HashMap, HashSet}};
 
 
-#[derive(Default, Debug, GraphOps, SimpleGraphOps)]
+#[derive(Default, Debug, GraphOps, SimpleGraphOps, Clone)]
 pub struct SparseSimpleGraph {
     adjacency_list: HashMap<usize, HashSet<usize>>
 }
@@ -14,7 +14,6 @@ impl GraphTrait for SparseSimpleGraph {
     fn edge_count(&self) -> usize {
         self.adjacency_list.values().map(|s| s.len()).sum::<usize>()/2
     }
-    
     fn vertices(&self) -> impl Iterator<Item=usize> {
         self.adjacency_list.keys().cloned()
     }
@@ -30,7 +29,6 @@ impl GraphTrait for SparseSimpleGraph {
         }
         edges.into_iter()
     }
-    
     fn has_vertex(&self, v: usize) -> bool {
         self.adjacency_list.contains_key(&v)
     }
@@ -43,7 +41,6 @@ impl GraphTrait for SparseSimpleGraph {
         }
         self.adjacency_list[&v1].contains(&v2)
     }
-    
     fn neighbors(&self, v: usize) -> impl Set<Item=usize> {
         self.adjacency_list.get(&v)
     }
@@ -63,6 +60,9 @@ impl GraphMut for SparseSimpleGraph{
         key
     }
     fn try_add_edge(&mut self, (u, v): EdgeID) -> Result<(), GraphError> {
+        if u == v {
+            return Err(GraphError::EdgeNotAddable((u,v), "No loops allowed in simple graph".to_string()));
+        }
         let (has_u, has_v) = (self.has_vertex(u), self.has_vertex(v));
         if !has_u && !has_v {return Err(GraphError::NeitherVertexInGraph(u, v));}
         else if !has_u {return Err(GraphError::VertexNotInGraph(u));}
@@ -124,9 +124,7 @@ impl GraphTrait for SparseDiGraph {
     }
     
     fn neighbors(&self, v: usize) -> impl Set<Item = usize> {
-        let out_set = self.out_adjacency.get(&v).unwrap();
-        let in_set = self.in_adjacency.get(&v).unwrap();
-        Set::union(out_set, in_set)
+        self.out_adjacency.get(&v).unwrap()
     }
     fn vertex_set(&self) -> impl Set<Item = usize> {
         &self.out_adjacency
@@ -214,8 +212,8 @@ impl<'a, K> Set for &'a HashMap<VertexID, K>{
     fn len(&self) -> usize {
         (*self).len()
     }
-    fn iter(&self) -> impl Iterator<Item = &Self::Item> {
-        self.keys()
+    fn iter(&self) -> impl Iterator<Item = Cow<'_, VertexID>> {
+        self.keys().cow_borrowed()
     }
 }
 

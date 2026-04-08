@@ -1,6 +1,9 @@
-use crate::serialization::error::*;
-use std::result::Result;
-use crate::graph::prelude::*;
+#[cfg(any(feature = "xml", feature = "serde"))]
+use {
+    crate::serialization::error::*,
+    std::result::Result,
+    crate::graph::prelude::*
+};
 
 
 #[cfg(feature = "xml")]

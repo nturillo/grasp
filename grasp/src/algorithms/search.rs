@@ -85,7 +85,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
     dist: HashMap<VertexID, N>,
     prev: HashMap<VertexID, VertexID>,
     heap: BinaryHeap<Reverse<(OrdNumber<N>, VertexID)>>,
-    finished: HashSet<VertexID>,
+    _finished: HashSet<VertexID>,
 }
 
 pub struct AStar<'a, G: GraphTrait, WF, HF, N>
@@ -127,7 +127,7 @@ impl<'a, G:GraphTrait, F:Frontier> Iterator for TraversalIter<'a, G, F> {
         
         for u in self.g.neighbors(v).iter()
         {
-            if self.visited.contains(u) {
+            if self.visited.contains(&u) {
                 continue;
             }
             self.visited.insert(*u);
@@ -159,7 +159,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
             dist,
             prev: HashMap::new(),
             heap,
-            finished: HashSet::new(),
+            _finished: HashSet::new(),
         })
     }
 }
@@ -201,7 +201,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
                 };
                 let alt: N = d_val + w;
 
-                let is_better = match self.dist.get(u) {
+                let is_better = match self.dist.get(&u) {
                     Some(&old) => alt < old,
                     None => true,
                 };
@@ -246,7 +246,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
     type Item = Result<(VertexID, N), GraphError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(Reverse((ord_f, v))) = self.heap.pop() {
+        while let Some(Reverse((_ord_f, v))) = self.heap.pop() {
             if self.finished.contains(&v) {
                 continue;
             }
@@ -274,7 +274,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
 
                 let tentative_g = g_v + w;
 
-                let is_better = match self.dist.get(u) {
+                let is_better = match self.dist.get(&u) {
                     Some(&old) => tentative_g < old,
                     None => true,
                 };

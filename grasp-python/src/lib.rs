@@ -72,7 +72,7 @@ impl PySparseGraph {
     }
 
     fn vertex_set(&self) -> Vec<usize> {
-        self.inner.vertex_set().iter().cloned().collect()
+        self.inner.vertex_set().iter().map(|c| *c).collect()
     }
 
     fn neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
@@ -80,7 +80,7 @@ impl PySparseGraph {
             return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
 
-        Ok(self.inner.neighbors(v).iter().cloned().collect())
+        Ok(self.inner.neighbors(v).iter().map(|c| *c).collect())
     }
 
     fn bfs(&self, source: usize) -> PyResult<Vec<usize>> {
@@ -126,7 +126,7 @@ impl PySparseGraph {
         Ok((distances, predecessors))
     }
 
-    fn astar(&self, py: Python, source: usize, target: usize, weights: std::collections::HashMap<(usize, usize), f64>, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
+    fn astar(&self, _py: Python, source: usize, target: usize, weights: std::collections::HashMap<(usize, usize), f64>, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
 
         let weight_fn = move |_g: &SparseSimpleGraph, edge: EdgeID| -> Option<f64> {
             weights.get(&edge)
@@ -167,7 +167,7 @@ impl PySparseGraph {
         Ok((path, cost))
     }
 
-    fn kruskal(&self, py: Python, weights: std::collections::HashMap<(usize, usize), f64>) -> PyResult<(Vec<(usize, usize)>, f64)> {
+    fn kruskal(&self, _py: Python, weights: std::collections::HashMap<(usize, usize), f64>) -> PyResult<(Vec<(usize, usize)>, f64)> {
         let mut parent: std::collections::HashMap<usize, usize> =
             self.inner.vertices().map(|v| (v, v)).collect();
 
@@ -348,7 +348,7 @@ impl PySparseDiGraph {
             return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
 
-        Ok(self.inner.neighbors(v).iter().cloned().collect())
+        Ok(self.inner.neighbors(v).iter().map(|c| *c).collect())
     }
 
     fn out_neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
@@ -356,7 +356,7 @@ impl PySparseDiGraph {
             return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
 
-        Ok(self.inner.out_neighbors(v).iter().cloned().collect())
+        Ok(self.inner.out_neighbors(v).iter().map(|c| *c).collect())
     }
 
     fn in_neighbors(&self, v: usize) -> PyResult<Vec<usize>> {
@@ -364,7 +364,7 @@ impl PySparseDiGraph {
             return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
 
-        Ok(self.inner.in_neighbors(v).iter().cloned().collect())
+        Ok(self.inner.in_neighbors(v).iter().map(|c| *c).collect())
     }
 
     fn to_simple(&self, py: Python) -> PyResult<PyObject> {
@@ -482,8 +482,9 @@ impl PyLabeledSimpleGraph {
     }
 
     fn dijkstra(&self, py: Python, source: usize) -> PyResult<(PyObject, PyObject)> {
-        let weight_fn = |g: &HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| {
-            g.get_edge_label(e).and_then(|obj| obj.extract::<f64>(py).ok())
+        let weight_fn = |g: &HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| -> Option<f64> {
+            g.get_edge_label(e)
+                .and_then(|obj| obj.extract::<f64>(py).ok())
         };
 
         let mut iter = self.inner.dijkstra_iter(source, weight_fn).map_err(graph_error_to_py)?;
@@ -509,8 +510,9 @@ impl PyLabeledSimpleGraph {
     }
 
     fn astar(&self, py: Python, source: usize, target: usize, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
-        let weight_fn = |g: &HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| {
-            g.get_edge_label(e).and_then(|obj| obj.extract::<f64>(py).ok())
+        let weight_fn = |g: &HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| -> Option<f64> {
+            g.get_edge_label(e)
+                .and_then(|obj| obj.extract::<f64>(py).ok())
         };
 
         let heuristic_fn = move |v: usize| -> f64 {
