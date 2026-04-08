@@ -1381,6 +1381,8 @@ name = "grasp"
 version = "0.1.0"
 dependencies = [
  "bimap",
+ "eframe",
+ "gdraw",
  "graph_ops_macros",
  "itertools",
  "pretty_assertions",

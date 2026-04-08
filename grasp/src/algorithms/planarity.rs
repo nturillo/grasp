@@ -1,9 +1,9 @@
-use std::{collections::{HashMap, HashSet, VecDeque}, fmt::Debug, hash::Hash, mem::swap, usize};
+use std::{collections::{HashMap, HashSet, VecDeque}, f32::consts::TAU, fmt::Debug, hash::Hash, mem::swap, usize};
 use crate::graph::prelude::*;
 use super::search_visitors::*;
 
 /// Struct used to calculate planarity and build planarity structures
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GraphPlanarity<'a, G: GraphTrait>{
     graph: &'a G,
     /// Maps graph vertex to dfs_index
@@ -190,10 +190,13 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
     /// For each child of reference, this proc is run twice, once for both directions. Returns false if non planarity detected
     fn walkdown_proc(&mut self, reference: usize, canon: usize, leave_root_on_first: bool, stack: &mut Vec<(usize, bool, bool)>) {
         let root: usize = self.dfs_data[canon].parent.unwrap();
+        //println!("Begin walkdown: {}, leave_root_on_first: {}", root, leave_root_on_first);
         let (mut vertex, mut in_on_first) = self.get_next_external_vertex_root(canon, !leave_root_on_first);
         while vertex != root{
+            //println!("Vertex: {}", vertex);
             // Found a backedge to embed
             if self.pertinence[vertex].pertinence == reference {
+                //println!("Embed: {}", vertex);
                 // Merge bicomps in stack
                 while let Some((merged_canon, iof, oof)) = stack.pop(){
                     // If we swapped directions, flip bicomp
@@ -206,6 +209,7 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
                 self.pertinence[vertex].pertinence = self.vtx_count;
             }
             if !self.pertinence[vertex].pertinent_roots.is_empty() {
+                //println!("Descend: {}", vertex);
                 // Traverse into pertinent bicomp to merge next backedge. Once the backedge in that bicomp is merged, \
                 // the bicomp will return to being 'canon' (as the bicomps were merged)
                 // Get next bicomp, start with internally active (back of list)
@@ -260,7 +264,16 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         //println!("Setting {} {} next to {} {}", reference, vertex, reference, self.edge_data[r_first].neighbor);
         self.edge_data.push(HalfEdge { twin: to_r, next: r_first, neighbor: vertex, short_circuit });
         
-        if in_on_first {
+        // If we are biconnecting a tree edge, just make it work with the canon edges
+        if self.embedding[vertex].external_edges.0 == self.embedding[vertex].external_edges.1 {
+            if left_root_on_first {
+                //println!("Setting {} second -> {}", vertex, reference);
+                self.embedding[vertex].external_edges.1 = to_r;
+            } else {
+                //println!("Setting {} first -> {}", vertex, reference);
+                self.embedding[vertex].external_edges.0 = to_r;
+            }
+        }else if in_on_first {
             //println!("Setting {} first -> {}", vertex, reference);
             self.embedding[vertex].external_edges.0 = to_r;
         } else {
@@ -332,7 +345,6 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         // Swap external edge pointers
         //println!("Swapping vertex {}'s external edges, {} {}", self.dfs_data[canon].parent.unwrap(), self.edge_data[*start].neighbor, self.edge_data[*end].neighbor);
         std::mem::swap(start, end);
-        // set sign of canon vtx to -1
         self.embedding[canon].flipped = true;
     }
     
@@ -411,8 +423,9 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         }
         list
     }
-    /// Builds the planar embedding. Should only be run after a successful run of the core algorithm
-    fn recover_planar_embedding(&self) -> PlanarEmbedding{
+        
+    pub fn get_circular_adjacency_list(&self) -> HashMap<VertexID, Vec<VertexID>>{
+        println!("{:?}", self);
         // Starting at top vtx, create clockwise adjacency lists. Keep a stack of booleans for flipping
         let mut flip_stack = vec![];
         let mut adjacency_list = HashMap::with_capacity(self.vtx_count);
@@ -448,8 +461,15 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
             let adj_list = self.get_adjacency_list(start, flip).into_iter().map(|vtx| self.ids[vtx]).collect();
             adjacency_list.insert(self.ids[vertex], adj_list);
         }
+        println!("{:?}", adjacency_list);
+        //panic!();
+        adjacency_list
+    }
+
+    /// Builds the planar embedding. Should only be run after a successful run of the core algorithm
+    fn recover_planar_embedding(&self) -> PlanarEmbedding{
         // Convert to DCEL Planar Embedding
-        PlanarEmbedding::from_circular_adjacency_list(adjacency_list)
+        PlanarEmbedding::from_circular_adjacency_list(self.get_circular_adjacency_list())
     }
 
     /// Finds a kuratowski subgraph from a embedding. Assumes the core algorithm has been run until failure.
@@ -501,7 +521,30 @@ impl<'a, G: GraphTrait> DfsSimpleVisitor for GraphPlanarity<'a, G>{
         self.dfs_data[ancestor].back_edges_to_descendents.push(vertex);
     }
 }
+impl<'a, G: GraphTrait> Debug for GraphPlanarity<'a, G>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Planarity{{")?;
+        writeln!(f, "Half Edges: ")?;
+        for i in 0..self.edge_data.len() {
+            let u = self.edge_data[i].neighbor;
+            let v = self.edge_data[self.edge_data[i].twin].neighbor;
+            let next = self.edge_data[i].next;
+            let u_next = self.edge_data[next].neighbor;
+            let v_next = self.edge_data[self.edge_data[next].twin].neighbor;
+            writeln!(f, "    {}: {} -> {}, twin: {}, next: {}: {} -> {}, short_circuit: {}", 
+                i, u, v, self.edge_data[i].twin, next, u_next, v_next, self.edge_data[i].short_circuit
+            )?;
+        }
+        writeln!(f, "Vertices: ")?;
+        for i in 0..self.dfs_data.len(){
+            let vertex = self.dfs_data[i].clone();
+            writeln!(f, "    {}: {}: {:?}", i, self.ids[i], vertex)?;
+            writeln!(f, "      {:?}", self.embedding[i])?;
+        }
 
+        Ok(())
+    }
+}
 /// Simple type to hold planar embeddings. Initially represents a DCEL, but can be expanded to get straight line embeddings
 #[derive(Debug, Default, Clone)]
 pub struct PlanarEmbedding{
@@ -811,7 +854,7 @@ impl PlanarEmbedding{
         for face in pertinent_faces.into_iter() {
             // Find 3 consecutive points on face where the first and last are not adjacent
             // Create triangle edge between them
-            let start_edge = self.faces[&face].0;
+            let mut start_edge = self.faces[&face].0;
 
             let mut cur_edge = start_edge;
             let mut next_edge = self.half_edges[start_edge].face_trav.1;
@@ -820,7 +863,12 @@ impl PlanarEmbedding{
                 if !self.vertex_adjacency[&self.half_edges[cur_edge].endpoints.0].contains(&self.half_edges[next_edge].endpoints.1) {
                     next_edge = self.half_edges[next_edge].face_trav.1;
                     self.add_edge_between(cur_edge);
-                    cur_edge = self.half_edges[next_edge].face_trav.0;
+                    if cur_edge == start_edge {
+                        cur_edge = self.half_edges[next_edge].face_trav.0;
+                        start_edge = cur_edge;
+                    }else {
+                        cur_edge = self.half_edges[next_edge].face_trav.0;
+                    }
                     continue;
                 }
                 // Otherwise just move forward, breaking when we finish
@@ -875,6 +923,7 @@ impl PlanarEmbedding{
             for v in vertices.iter() {chords.insert(*v, 0);}
             // Get rest of ordering
             for k in (3..vertices.len()).rev(){
+                //println!("k: {}, out: {:?}, chords: {:?}", k, out, chords.iter().filter(|(_, c)| **c>0).map(|(v, c)| (*v, *c)).collect::<Vec<(VertexID, usize)>>());
                 // find external unmarked vtx with no coords
                 let (index, &v) = out.iter().enumerate().find(|(_, v)| {
                     **v != v1 && **v != v2 && 
@@ -933,11 +982,114 @@ impl PlanarEmbedding{
         let orders = self.canonical_order();
         // Generate positions per component
         let mut positions = HashMap::with_capacity(self.vertex_adjacency.len());
-        for (group, canon) in orders.into_iter() {
-            
+        // Add singleton vertices first
+        let mut group_offset = 0;
+        let singletons: Vec<VertexID> = self.vertex_group.iter()
+            .filter(|(_, g)| **g == usize::MAX).map(|(v, _)| *v).collect();
+        if singletons.len() > 0 {group_offset += 1;}
+        let count = singletons.len() as f32;
+        for (i, vertex) in singletons.into_iter().enumerate(){
+            let theta = i as f32 * TAU/count;
+            positions.insert(vertex, (theta.cos()*0.8, theta.sin()*0.8));
+        }
+        // Run alg on each component
+        for (_, canon) in orders.into_iter() {
+            // Calculate position offset to ensure groups don't overlap
+            let n = group_offset as f32; let k = n.sqrt(); let t = n-k*k;
+            let x_offset = t;
+            let y_offset = 2.0*k-t;
+            group_offset += 1;
+            // Calculate vertex positions
+            let mut delta_x: HashMap<VertexID, isize> = HashMap::default();
+            let mut y: HashMap<VertexID, isize> = HashMap::default();
+            let mut left: HashMap<VertexID, VertexID> = HashMap::default();
+            let mut right: HashMap<VertexID, VertexID> = HashMap::default();
+            // External edge
+            let mut out: Vec<VertexID> = vec![canon[0], canon[2], canon[1]];
+            // Initial triangle
+            delta_x.insert(canon[0], 0);
+            y.insert(canon[0], 0);
+            delta_x.insert(canon[2], 1);
+            y.insert(canon[2], 1);
+            delta_x.insert(canon[1], 1);
+            y.insert(canon[1], 0);
+            right.insert(canon[0], canon[2]);
+            right.insert(canon[2], canon[1]);
+            // Rest of triangles
+            for k in 3..canon.len(){
+                //println!("k: {}, out: {:?}\ndelta_x: {:?}\ny: {:?}\nleft: {:?}\nright: {:?}", k, out, delta_x, y, left, right);
+                let adj = self.vertex_adjacency.get(&canon[k]).unwrap();
+                let mut cur = 0;
+                while !adj.contains(&out[cur]) {cur += 1;}
+                let wp = cur;
+                let wq = if adj.contains(&canon[1]) {out.len()-1} 
+                else {
+                    while cur+1 < out.len() && adj.contains(&out[cur+1]) {cur += 1;}
+                    cur
+                };
+                //println!("wp: {}, wq: {}", wp, wq);
+                *delta_x.get_mut(&out[wp+1]).unwrap() += 1;
+                *delta_x.get_mut(&out[wq]).unwrap() += 1;
+                let mut delta_sum = 0;
+                for i in (wp+1)..=wq {
+                    delta_sum += *delta_x.get(&out[i]).unwrap();
+                }
+                let vk_delta = (delta_sum + y[&out[wq]] - y[&out[wp]]) / 2;
+                delta_x.insert(canon[k], vk_delta);
+                y.insert(canon[k], (delta_sum + y[&out[wq]] + y[&out[wp]]) / 2);
+                right.insert(out[wp], canon[k]);
+                if wp+1 != wq {
+                    left.insert(canon[k], out[wp+1]);
+                }
+                right.insert(canon[k], out[wq]);
+                if wq-1 != wp {
+                    right.remove(&out[wq-1]);
+                }
+                delta_x.insert(out[wq], delta_sum-vk_delta);
+                if wp+1 != wq{
+                    *delta_x.get_mut(&out[wp+1]).unwrap() -= vk_delta;
+                }
+                // Update external edge
+                out.insert(wp+1, canon[k]);
+                for _ in (wp+1)..wq {
+                    out.remove(wp+2);
+                }
+            }
+            // compute x coords
+            let mut x: HashMap<VertexID, isize> = HashMap::default();
+            x.insert(canon[0], 0);
+            Self::accumulate_offset(canon[0], 0, &mut x, &delta_x, &left, &right);
+            // Rescale vertices into unit square and shift by group offset, put into positions
+            let width = (2*canon.len() - 4) as f32;
+            let height = (canon.len() - 2) as f32;
+            positions.extend(canon.into_iter().filter_map(|v| {
+                if self.fake_vertices.contains(&v) {return None;}
+                let x = *x.get(&v).unwrap() as f32;
+                let y = *y.get(&v).unwrap() as f32;
+                Some((v, (x/width + x_offset, y/height + y_offset)))
+            }));
         }
         positions.retain(|v, _| !self.fake_vertices.contains(v));
         positions
+    }
+
+    /// Recrusive function to calculate x offsets from delta_x in shift method
+    fn accumulate_offset(
+        vertex: VertexID, 
+        offset: isize, 
+        x: &mut HashMap<VertexID, isize>, 
+        delta_x: &HashMap<VertexID, isize>,
+        left: &HashMap<VertexID, VertexID>, 
+        right: &HashMap<VertexID, VertexID>
+    ) {
+        let cur_offset = offset+delta_x[&vertex];
+        x.insert(vertex, cur_offset);
+        if let Some(v_l) = left.get(&vertex).cloned() {
+            Self::accumulate_offset(v_l, cur_offset, x, delta_x, left, right);
+        }
+        if let Some(v_r) = right.get(&vertex).cloned() {
+            Self::accumulate_offset(v_r, cur_offset, x, delta_x, left, right);
+        }
     }
 }
 
@@ -1045,7 +1197,10 @@ struct HalfEdge{
 
 #[cfg(test)]
 mod test{
+    use std::f32::EPSILON;
+
     use crate::{algorithms::planarity::GraphPlanarity, graph::prelude::*};
+
     #[test]
     fn test_planarity(){
         let mut k33 = SparseSimpleGraph::default();
@@ -1196,5 +1351,144 @@ mod test{
 
         println!("Triangle faces: {}, Non-triangle internal faces: {}", triangle_count, non_triangle_count);
         assert_eq!(non_triangle_count, 0, "All internal faces should be triangles");
+    }
+
+    #[test]
+    fn test_k5_planarity(){
+        // Create a pentagon
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((0, 1));
+        graph.add_edge((0, 2));
+        graph.add_edge((0, 3));
+        graph.add_edge((0, 4));
+        graph.add_edge((1, 2));
+        graph.add_edge((1, 3));
+        graph.add_edge((1, 4));
+        graph.add_edge((2, 3));
+        graph.add_edge((2, 4));
+
+        let mut planarity = GraphPlanarity::from_graph(&graph);
+        assert!(planarity.compute_planarity());
+        let result = planarity.get_planarity_structure();
+        assert!(result.is_ok());
+
+        let mut embedding = result.unwrap();
+
+        println!("CircularAdjacency: {:?}", planarity.get_circular_adjacency_list());
+        println!("K5-1 before triangularization:");
+        println!("Faces: {}", embedding.faces.len());
+        for (face_id, &(_start, size, _component, is_external)) in embedding.faces.iter() {
+            println!("  Face {}: size={}, external={}", face_id, size, is_external);
+        }
+
+        // Full triangularization including biconnectivity
+        embedding.triangularize();
+
+        println!("\nAfter triangularization:");
+        println!("Faces: {}", embedding.faces.len());
+        println!("Fake vertices: {}", embedding.fake_vertices.len());
+
+        let mut triangle_count = 0;
+        let mut non_triangle_count = 0;
+        for (face_id, &(start, size, _component, is_external)) in embedding.faces.iter() {
+            print!("  Face {}: size={}, external={}", face_id, size, is_external);
+            if !is_external {
+                if size == 3 {
+                    triangle_count += 1;
+                } else {
+                    non_triangle_count += 1;
+                }
+            }
+            print!(", Vertices: {}", embedding.half_edges[start].endpoints.0);
+            let mut cur = embedding.half_edges[start].face_trav.1;
+            while cur != start {
+                print!(", {}", embedding.half_edges[cur].endpoints.0);
+                cur = embedding.half_edges[cur].face_trav.1;
+            }
+            println!();
+        }
+
+        println!("Vertices: {}", embedding.vertex_adjacency.len());
+        for adj in embedding.vertex_adjacency.iter() {
+            print!("  Vertex {}: ", *adj.0);
+            for adj in adj.1 {print!("{}, ", *adj);}
+            println!()
+        }
+
+        println!("Triangle faces: {}, Non-triangle internal faces: {}", triangle_count, non_triangle_count);
+        assert_eq!(non_triangle_count, 0, "All internal faces should be triangles");
+
+        let positions = embedding.calculate_euclidean_embedding();
+        let edges: Vec<EdgeID> = graph.edges().collect();
+        for i in 0..edges.len()-1 {
+            for j in i+1..edges.len(){
+                let (v_a, v_b) = edges[i];
+                let (u_a, u_b) = edges[j];
+                let (x1, y1) = positions[&v_a];
+                let (x2, y2) = positions[&v_b];
+                let (x3, y3) = positions[&u_a];
+                let (x4, y4) = positions[&u_b];
+                let denom = (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4);
+                if denom == 0.0 {
+                    // Cant intersect lines, unsure non colinear, or non overlapping
+                    println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), are vertical", x1, y1, x2, y2, x3, y3, x4, y4);
+                    if x1!=x3 {continue;}
+                    let (a1, b1) = (y1.min(y2), y1.max(y2));
+                    let (a2, b2) = (y3.min(y4), y3.max(y4));
+                    let start = a1.max(b1); let end = a2.min(b2);
+                    assert!(end-start < EPSILON);
+                    continue;
+                }
+                let x = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4)) / denom;
+                let y = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4)) / denom;
+                println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), intersect at ({}, {})", x1, y1, x2, y2, x3, y3, x4, y4, x, y);
+                // Insure intersection occurs out of one of the segment bounds
+                assert!(
+                    x-x1.max(x2)>-EPSILON || x - x1.min(x2)<EPSILON ||
+                    x-x3.max(x4)>-EPSILON || x - x3.min(x4)<EPSILON ||
+                    y-y1.max(y2)>-EPSILON || y - y1.min(y2)<EPSILON ||
+                    y-y3.max(y4)>-EPSILON || y - y3.min(y4)<EPSILON
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_straight_edge_embedding(){
+        // Create a pentagon
+        let mut graph = SparseSimpleGraph::default();
+        graph.add_edge((0, 1));
+        graph.add_edge((1, 2));
+        graph.add_edge((2, 3));
+        graph.add_edge((3, 4));
+
+        let mut planarity = GraphPlanarity::from_graph(&graph);
+        assert!(planarity.compute_planarity());
+        let result = planarity.get_planarity_structure();
+        assert!(result.is_ok());
+
+        let mut embedding = result.unwrap();
+
+        let positions = embedding.calculate_euclidean_embedding();
+
+        let edges: Vec<EdgeID> = graph.edges().collect();
+        for i in 0..edges.len()-1 {
+            for j in i+1..edges.len(){
+                let (v_a, v_b) = edges[i];
+                let (u_a, u_b) = edges[j];
+                let (x1, y1) = positions[&v_a];
+                let (x2, y2) = positions[&v_b];
+                let (x3, y3) = positions[&u_a];
+                let (x4, y4) = positions[&u_b];
+                let denom = (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4);
+                let x = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4)) / denom;
+                let y = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4)) / denom;
+                // Insure intersection occurs out of segment bounds
+                assert!(x-x1.max(x1)>-EPSILON || x - x1.min(x2)<EPSILON);
+                assert!(x-x3.max(x4)>-EPSILON || x - x3.min(x4)<EPSILON);
+                assert!(y-y1.max(y1)>-EPSILON || y - y1.min(y2)<EPSILON);
+                assert!(y-y3.max(y4)>-EPSILON || y - y3.min(y4)<EPSILON);
+            }
+        }
     }
 }

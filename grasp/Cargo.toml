@@ -14,3 +14,7 @@ itertools = "0.14.0"
 [features]
 serde = ["dep:serde"]
 xml = ["dep:quick-xml"]
+
+[dev-dependencies]
+gdraw = {path = "../gdraw"}
+eframe = "0.33.3"

@@ -18,7 +18,7 @@ use grasp::graph::graph_ops::GraphOps;
 
 pub struct GraspApp {
     pub style: Style,
-    graph: Graph,
+    pub graph: Graph,
     pub window_size: (f32, f32),
 }
 
