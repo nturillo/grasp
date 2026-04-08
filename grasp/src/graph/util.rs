@@ -168,11 +168,11 @@ pub fn degeneracy<G: GraphTrait>(graph: &G, out: &mut Vec<VertexID>) -> usize {
         k = k.max(min_degree);
         out.push(v);
 
-        for &u in graph.neighbors(v).difference_with(&removed).iter() {
+        for u in graph.neighbors(v).difference_with(&removed).iter() {
             let d = degree_map.get_mut(&u).unwrap();
             buckets[*d].remove(&u);
             *d -= 1;
-            buckets[*d].insert(u);
+            buckets[*d].insert(*u);
             min_degree = min_degree.min(*d);
         }
     }
