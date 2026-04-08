@@ -136,7 +136,6 @@ macro_rules! assert_graphs_eq {
         }
     };
 }
-<<<<<<< chromatic
 
 /// Get the degeneracy of a graph, and set *out* to be the degeneracy ordering
 pub fn degeneracy<G: GraphTrait>(graph: &G, out: &mut Vec<VertexID>) -> usize {
@@ -181,5 +180,3 @@ pub fn degeneracy<G: GraphTrait>(graph: &G, out: &mut Vec<VertexID>) -> usize {
     out.reverse();
     k
 }
-=======
->>>>>>> main
