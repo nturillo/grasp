@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::graph::{GraphTrait, VertexID, prelude::LabeledGraph, set::Set};
 
@@ -61,4 +61,48 @@ pub fn get_components<G: GraphTrait>(graph: &G) -> Vec<impl Set<Item = VertexID>
         components.push(component);
     }
     components
+}
+
+/// Get the degeneracy of a graph, and set *out* to be the degeneracy ordering
+pub fn degeneracy<G: GraphTrait>(graph: &G, out: &mut Vec<VertexID>) -> usize {
+    out.clear();
+    out.reserve(graph.vertex_count());
+
+    let mut degree_map: HashMap<VertexID, usize> = graph.vertices()
+        .map(|v| (v, degree(graph, v)))
+        .collect();
+
+    let max_degree = degree_map.values().copied().max().unwrap_or(0);
+    let mut buckets: Vec<HashSet<VertexID>> = vec![HashSet::new(); max_degree + 1];
+    for (&v, &d) in &degree_map {
+        buckets[d].insert(v);
+    }
+
+    let mut removed: HashSet<VertexID> = HashSet::with_capacity(graph.vertex_count());
+    let mut min_degree = 0;
+    let mut k = 0;
+
+    for _ in 0..graph.vertex_count() {
+        while buckets[min_degree].is_empty() {
+            min_degree += 1;
+        }
+
+        let v = *buckets[min_degree].iter().next().unwrap();
+        buckets[min_degree].remove(&v);
+        removed.insert(v);
+
+        k = k.max(min_degree);
+        out.push(v);
+
+        for &u in graph.neighbors(v).difference_with(&removed).iter() {
+            let d = degree_map.get_mut(&u).unwrap();
+            buckets[*d].remove(&u);
+            *d -= 1;
+            buckets[*d].insert(u);
+            min_degree = min_degree.min(*d);
+        }
+    }
+
+    out.reverse();
+    k
 }
