@@ -185,6 +185,15 @@ pub trait IteratorAsCow: Iterator + Sized {
     }
 }
 impl<I: Iterator> IteratorAsCow for I {}
+/// Extension trait for turning cow iterators into iterators of underlying type
+pub trait CowIteratorAsCloned<T>: Iterator + Sized{
+    fn clone_cow(self) -> Map<Self, fn(Self::Item)->T>;
+}
+impl<'a, V: Clone, I> CowIteratorAsCloned<V> for I where I: Iterator<Item = Cow<'a, V>>, V: 'a{
+    fn clone_cow(self) -> Map<Self, fn(Self::Item)->V> {
+        self.map(|cow| cow.into_owned())
+    }
+}
 
 impl<V: Eq+Hash+Clone> Set for HashSet<V>{
     type Item = V;

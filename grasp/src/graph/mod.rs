@@ -15,8 +15,9 @@ pub mod prelude{
         labeled_graph::*, 
         adjacency_list::{SparseSimpleGraph, SparseDiGraph}, 
         error::GraphError,
-        util::*, set::{Set, EmptySet},
+        util::*,
         graph_ops::{GraphOps, SimpleGraphOps},
+        set::{CowIteratorAsCloned, IteratorAsCow, Set, EmptySet}
     };
     pub use graph_ops_macros::{GraphOps, SimpleGraphOps};
 }
