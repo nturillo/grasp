@@ -5,6 +5,8 @@ pub mod graph_ops;
 pub mod util;
 pub mod set;
 pub mod directed;
+pub mod constructors;
+pub mod permutation;
 
 pub mod prelude{
     pub use super::{
@@ -13,8 +15,9 @@ pub mod prelude{
         labeled_graph::*, 
         adjacency_list::{SparseSimpleGraph, SparseDiGraph}, 
         error::GraphError,
-        util::*, set::{Set, EmptySet},
+        util::*,
         graph_ops::{GraphOps, SimpleGraphOps},
+        set::{CowIteratorAsCloned, IteratorAsCow, Set, EmptySet}
     };
     pub use graph_ops_macros::{GraphOps, SimpleGraphOps};
 }
@@ -151,7 +154,8 @@ mod test{
         let neighbors = HashSet::from_iter([1, 2]);
         let out_neighbors = HashSet::from_iter([1]);
         let in_neighbors = HashSet::from_iter([2]);
-        assert!(digraph.neighbors(0).set_eq(&neighbors));
+        assert!(digraph.neighbors(0).set_eq(&out_neighbors));
+        assert!(digraph.all_neighbors(0).set_eq(&neighbors));
         assert!(digraph.out_neighbors(0).set_eq(&out_neighbors));
         assert!(digraph.in_neighbors(0).set_eq(&in_neighbors));
     }

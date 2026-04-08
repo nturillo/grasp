@@ -125,7 +125,7 @@ impl BlossomGraph {
         let removed_edges = self.current_graph.edges().filter(|(u,v)| blossom.has_vertex(*u) || blossom.has_vertex(*v)).collect::<Vec<_>>();
         self.current_graph.add_vertex(new_vertex);
         for v in blossom.vertices() {
-            let neighbors = self.current_graph.neighbors(v).iter().cloned().collect::<Vec<_>>();
+            let neighbors = self.current_graph.neighbors(v).iter().clone_cow().collect::<Vec<_>>();
             for u in neighbors {
                 self.current_graph.add_edge((new_vertex, u));
             }
@@ -229,7 +229,7 @@ fn find_augmenting_path(graph: &mut BlossomGraph, matching: &Matching) -> Option
         if graph_distance(&forest, v, roots[&v]).unwrap() % 2 == 1 {
             continue;
         }
-        let neighbors = graph.neighbors(v).iter().cloned().collect::<Vec<_>>();
+        let neighbors = graph.neighbors(v).iter().clone_cow().collect::<Vec<_>>();
         for w in neighbors {
             let edge = (v, w);
             if edges_visited.contains(&edge) || edges_visited.contains(&(w, v)) {
