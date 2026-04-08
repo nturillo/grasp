@@ -4,16 +4,19 @@ use graph_ops_macros::register;
 
 use crate::{algorithms::{algo_traits::AlgoTrait}, graph::{AnyVertexGraph, EdgeID, EdgeType, GraphMut, GraphTrait, VertexID, prelude::{DiGraph, DigraphProjection, HashMapLabeledDiGraph, LabeledGraph, LabeledGraphMut, SimpleGraph, SparseDiGraph}, set::Set}};
 
+#[register(name = "Is Connected", desc = "Returns if the graph is connected.", ret = String, simple = "true", params = [])]
 /// Determine if a simple graph is connected.
 pub fn is_connected<G: SimpleGraph>(g: &G) -> bool {
     g.vertices().next().map_or(false, |vert| g.dfs_iter(vert).unwrap().count() == g.vertex_count())
 }
 
+#[register(name = "Is Weakly Connected", desc = "Returns if the graph is weakly connected.", ret = String, simple = "false", params = [])]
 /// Determine if a digraph is weakly connected.
 pub fn is_weakly_connected<G: DigraphProjection>(g: &G) -> bool {
     is_connected(&g.as_simple())
 }
 
+#[register(name = "Is Strongly Connected", desc = "Returns if the graph is strongly connected.", ret = String, simple = "false", params = [])]
 /// Determine if a digraph is strongly connected.
 pub fn is_strongly_connected<G: DiGraph>(g: &G) -> bool {
     strongly_connected_components(g).len() == 1
@@ -167,18 +170,21 @@ pub fn bridges<G: SimpleGraph>(g: &G) -> impl Set<Item = EdgeID> {
     points
 }
 
+#[register(name = "Is Complete", desc = "Returns if the graph is complete.", ret = String, simple = "true", params = [])]
 /// Returns if a simple graph is complete.
 pub fn simple_graph_is_complete<G: SimpleGraph>(g: &G) -> bool {
     let n = g.vertex_count();
     g.edge_count() == n * (n - 1) / 2
 }
 
+#[register(name = "Is Complete", desc = "Returns if the graph is complete.", ret = String, simple = "false", params = [])]
 /// Returns if a digraph is complete.
 pub fn digraph_is_complete<G: DiGraph>(g: &G) -> bool {
     let n = g.vertex_count();
     g.edge_count() == n * (n - 1)
 }
 
+#[register(name = "Edge Connectivity", desc = "Returns the graph's edge connectivity.", ret = String, simple = "true", params = [])]
 /// Returns a graph's edge connectivity.
 pub fn edge_connectivity<G: SimpleGraph>(g: &G) -> u32 {
     if g.vertex_count() < 2 { return 0; };
@@ -196,6 +202,7 @@ pub fn edge_connectivity<G: SimpleGraph>(g: &G) -> u32 {
     vertices[1..].iter().map(|&target| max_flow(&flow_graph, source, target)).min().unwrap_or(0)
 }
 
+#[register(name = "Vertex Connectivity", desc = "Returns the graph's vertex connectivity.", ret = String, simple = "true", params = [])]
 /// Returns a graph's vertex connectivity.
 pub fn vertex_connectivity<G: SimpleGraph>(g: &G) -> u32 {
     let mut min_flow = (g.vertex_count() - 1) as u32;

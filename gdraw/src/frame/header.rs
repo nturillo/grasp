@@ -133,6 +133,8 @@ pub fn tool_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
             let mut map = ModMap::new();
 
             for func in ALGORITHMS {
+                if func.simple == app.graph.directed {continue;}
+
                 let path = match func.module.split_once("algorithms::") {
                     None => {continue;}
                     Some((_, path)) => path,

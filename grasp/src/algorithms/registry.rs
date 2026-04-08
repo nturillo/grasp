@@ -121,4 +121,5 @@ pub struct FunctionData {
     pub return_type: &'static str,
     pub param_data: &'static [ &'static [ &'static str; 2 ]],
     pub desc: &'static str,
+    pub simple: bool,
 }
