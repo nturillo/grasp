@@ -47,7 +47,7 @@ impl GraspApp {
                 Ok(Box::new(GraspAppHandler::new(
                     cc,
                     &mut self.graph,
-                    self.style,
+                    self.style.clone(),
                 )))
             }),
         )

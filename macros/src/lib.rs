@@ -82,8 +82,8 @@ pub fn register(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     match return_type.as_str() {
-        "String" | "Vertex" | "VertexList" | "Edge" | "EdgeList" | "SimpleGraph" | "DiGraph" | "None" => (),
-        _ => { return new_error(format!("Expected one of [String, Vertex, VertexList, Edge, EdgeList, SimpleGraph, DiGraph, None], found {}", return_type)); }
+        "String" | "Vertex" | "VertexList" | "Edge" | "EdgeList" | "VertexCluster" | "SimpleGraph" | "DiGraph" | "None" => (),
+        _ => { return new_error(format!("Expected one of [String, Vertex, VertexList, Edge, EdgeList, VertexCluster, SimpleGraph, DiGraph, None], found {}", return_type)); }
     }
 
     let return_type_ident = format_ident!("{}", return_type);
@@ -117,8 +117,16 @@ pub fn register(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let graph = if simple { quote! { &graph.as_simple() }} else { quote! {graph} };
-    let call = if is_self { quote! {#graph.#fn_name(#(#arg_names),*)} } else { quote! {#fn_name(#graph, #(#arg_names),*)} };
     let ptr = if is_self { quote! {Self::#wrapped_name} } else { quote! {#wrapped_name} };
+    let call = if return_type == "VertexCluster" {
+        if is_self {
+            quote! { #graph.#fn_name(#(#arg_names),*).into_iter().map(|s| s.iter().cloned().collect()).collect() }
+        } else {
+            quote! { #fn_name(#graph, #(#arg_names),*).into_iter().map(|s| s.iter().cloned().collect()).collect() }
+        }
+    } else {
+        if is_self { quote! {#graph.#fn_name(#(#arg_names),*)} } else { quote! {#fn_name(#graph, #(#arg_names),*)} }
+    };
 
     let out = quote! {
         #input

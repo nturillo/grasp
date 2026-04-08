@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use eframe::egui::{self, Ui, widgets};
+use eframe::egui::{self, Color32, Ui, widgets};
 
 use crate::{app::GraspAppHandler, graph::layout::LayoutType};
 
@@ -79,6 +79,25 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
                     ui.label("Highlight Color");
                     ui.color_edit_button_srgba(&mut app.style.highlight_color);
                 });
+
+                ui.horizontal(|ui| {
+                    ui.label("Cluster Colors");
+                    ui.vertical(|ui| {
+                        for color in app.style.cluster_colors.iter_mut(){
+                            ui.color_edit_button_srgba(color);
+                        }
+
+                        ui.horizontal(|ui| {
+                            if ui.button("+").clicked() {
+                                app.style.cluster_colors.push(Color32::WHITE);
+                            }
+
+                            if !app.style.cluster_colors.len() > 2 && ui.button("-").clicked() {
+                                app.style.cluster_colors.pop();
+                            }
+                        });
+                    });
+                });
             });
         }
 
@@ -112,11 +131,6 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
                     .clamping(widgets::SliderClamping::Always),
             )
         });
-
-        ui.horizontal(|ui| {
-                    ui.label("Edge Color");
-                    ui.color_edit_button_srgba(&mut app.style.highlight_color);
-                });
     });
 
     ui.collapsing("Layout", |ui| {

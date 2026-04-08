@@ -1,6 +1,6 @@
 use eframe::egui::Color32;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Style {
     pub vertex_radius: f32,
     pub vertex_color: Color32,
@@ -8,6 +8,7 @@ pub struct Style {
     pub outline_thickness: f32,
     pub select_color: Color32,
     pub select_color_strength: f32,
+    pub cluster_colors: Vec<Color32>,
     pub highlight_color: Color32,
     pub edge_color: Color32,
     pub edge_highlight_color: Color32,
@@ -26,6 +27,7 @@ impl Default for Style {
             outline_thickness: 2.0,
             select_color: Color32::YELLOW,
             select_color_strength: 0.2,
+            cluster_colors: vec![Color32::GREEN, Color32::BLUE],
             highlight_color: Color32::RED,
             edge_color: Color32::BLACK,
             edge_highlight_color: Color32::RED,

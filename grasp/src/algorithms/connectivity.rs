@@ -1,5 +1,7 @@
 use std::{collections::{HashMap, HashSet, VecDeque}, hash::Hash, vec};
 
+use graph_ops_macros::register;
+
 use crate::{algorithms::{algo_traits::AlgoTrait, search::BfsIter}, graph::{AnyVertexGraph, EdgeID, EdgeType, GraphMut, GraphTrait, VertexID, prelude::{DiGraph, DigraphProjection, HashMapLabeledDiGraph, HashMapLabeledSimpleGraph, LabeledGraph, LabeledGraphMut, SimpleGraph, SparseDiGraph}, set::Set}};
 
 /// Determine if a simple graph is connected.
@@ -17,8 +19,9 @@ pub fn is_strongly_connected<G: DiGraph>(g: &G) -> bool {
     strongly_connected_components(g).len() == 1
 }
 
+#[register(name = "Strongly Connected Components", ret = VertexCluster, simple = "false", params = [])]
 /// Return the strongly connected components of a digraph.
-pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<HashSet<VertexID>> {
+pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<impl Set<Item = VertexID>> {
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -359,9 +362,9 @@ mod test {
         let v1: HashSet<VertexID> = HashSet::from([6]);
         let v2: HashSet<VertexID> = HashSet::from([1, 2, 3]);
         let v3: HashSet<VertexID> = HashSet::from([4, 5]);
-        pretty_assertions::assert_eq!(true, sscs.contains(&v1));
-        pretty_assertions::assert_eq!(true, sscs.contains(&v2));
-        pretty_assertions::assert_eq!(true, sscs.contains(&v3));
+        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().copied().collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v1));
+        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().copied().collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v2));
+        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().copied().collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v3));
     }
 
     #[test]

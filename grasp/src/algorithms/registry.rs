@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::graph::{EdgeID, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
 
 #[linkme::distributed_slice]
@@ -107,6 +109,7 @@ pub enum ReturnType {
     Edge(EdgeID),
     VertexList(Vec<VertexID>),
     EdgeList(Vec<EdgeID>),
+    VertexCluster(Vec<HashSet<VertexID>>),
     SimpleGraph(SparseSimpleGraph),
     DiGraph(SparseDiGraph),
 }

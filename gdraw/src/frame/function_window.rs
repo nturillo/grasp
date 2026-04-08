@@ -1,6 +1,6 @@
 use std::collections::{HashSet};
 
-use eframe::egui::{Align, Context, DragValue, Layout, Window};
+use eframe::egui::{Align, Color32, Context, DragValue, Layout, Rgba, Window};
 use grasp::{algorithms::registry::{ArgType, FunctionData, ReturnType}, graph::{EdgeID, VertexID}};
 
 use crate::{frame::style::Style, graph::{layout::apply, storage::Graph}};
@@ -128,6 +128,21 @@ impl FunctionWindow {
                                 ReturnType::VertexList(verts) => { graph.clear_highlights(); graph.highlight_set(&verts.iter().cloned().collect::<HashSet<VertexID>>(), style.highlight_color);},
                                 ReturnType::Edge(e) => { graph.clear_highlights(); graph.highlight_edges(&HashSet::from([e]), style.highlight_color);},
                                 ReturnType::EdgeList(edges) => { graph.clear_highlights(); graph.highlight_edges(&edges.iter().cloned().collect::<HashSet<EdgeID>>(), style.edge_highlight_color);},
+                                ReturnType::VertexCluster(clusters) => {
+                                    fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
+                                        Color32::from(Rgba::from(a) * (1.0 - t) + Rgba::from(b) * t)
+                                    }
+
+                                    let colors: Vec<Color32> = (0..clusters.len()).map(|i| {
+                                        let t = i as f32 * (style.cluster_colors.len() - 1) as f32 / (clusters.len() - 1).max(1) as f32;
+                                        let color_i = (t as usize).min(style.cluster_colors.len() - 2);
+                                        lerp(style.cluster_colors[color_i], style.cluster_colors[color_i + 1], t - color_i as f32)
+                                    }).collect();
+
+                                    for (i, cluster) in clusters.iter().enumerate() {
+                                        graph.highlight_set(&cluster.iter().copied().collect::<HashSet<VertexID>>(), colors[i]);
+                                    }
+                                },
                                 ReturnType::DiGraph(rgraph) => {*graph = Graph::from(&rgraph); apply(graph); graph.directed = true;},
                                 ReturnType::SimpleGraph(rgraph) => {*graph = Graph::from(&rgraph); apply(graph); graph.directed = false;},
                                 _ => (),
