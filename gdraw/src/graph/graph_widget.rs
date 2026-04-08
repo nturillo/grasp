@@ -1,4 +1,4 @@
-use eframe::egui::{Stroke, Ui, Vec2};
+use eframe::egui::{Align2, Color32, FontId, Stroke, Ui, Vec2};
 
 use crate::{
     frame::style::Style,
@@ -26,6 +26,10 @@ pub fn draw_vertex(ui: &mut Ui, vertex: &Vertex, graph: &Graph, style: &Style, s
         color,
         Stroke::new(style.outline_thickness / scale, style.outline_color),
     );
+
+    if style.display_ids {
+        ui.painter().text(screen_center.to_pos2(), Align2::CENTER_CENTER, vertex.id, FontId::monospace(style.vertex_radius / scale), Color32::BLACK);
+    }
 }
 
 pub fn draw_edge(ui: &mut Ui, edge: &Edge, graph: &Graph, style: &Style, start_vertex_center: Vec2, end_vertex_center: Vec2, scale: f32) {

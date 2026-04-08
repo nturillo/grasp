@@ -88,6 +88,7 @@ pub(crate) struct GraspAppHandler<'a> {
     pub style: Style,
 
     pub show_settings: bool,
+    pub show_metrics: bool,
     pub func_window: FunctionWindow,
     pub vertex_focused: Option<VertexID>,
 }
@@ -102,6 +103,7 @@ impl<'a> GraspAppHandler<'a> {
             style: style,
 
             show_settings: false,
+            show_metrics: false,
             func_window: Default::default(),
 
             vertex_focused: None,
@@ -125,6 +127,13 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 .collapsible(false)
                 .resizable(false)
                 .show(ctx, |ui| windows::settings_window(self, ui));
+        }
+
+        if self.show_metrics {
+            Window::new("Metrics")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| windows::metrics_window(self, ui));
         }
 
         if self.func_window.visible {

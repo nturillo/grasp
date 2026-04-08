@@ -27,6 +27,11 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
 
         if app.style.show_vertices {
             ui.horizontal(|ui| {
+                ui.label("Display IDs");
+                ui.checkbox(&mut app.style.display_ids, "");
+            });
+            
+            ui.horizontal(|ui| {
                 ui.label("Vertex Radius");
                 ui.add(
                     widgets::Slider::new(
@@ -211,6 +216,33 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
     ui.vertical_centered(|ui| {
         if ui.button("Close").clicked() {
             app.show_settings = false;
+        }
+    });
+}
+
+pub fn metrics_window(app: &mut GraspAppHandler, ui: &mut Ui) {
+    let v_count = app.graph.vertex_count();
+    let e_count = if app.graph.directed {app.graph.edge_count()} else {app.graph.simple_edge_count()};
+    
+    ui.label(format!("Vertices: {}", v_count));
+    ui.label(format!("Edges: {}", e_count));
+
+    ui.separator();
+
+    ui.label(format!("Directed: {}", app.graph.directed));
+
+    ui.separator();
+
+    if v_count > 1 {
+        let density = if app.graph.directed {1} else {2} as f32 * e_count as f32 / (v_count * (v_count - 1)) as f32;
+        ui.label(format!("Density: {}", density));
+    } else {
+        ui.label("Density: N/A");
+    }
+
+    ui.vertical_centered(|ui| {
+        if ui.button("Close").clicked() {
+            app.show_metrics = false;
         }
     });
 }

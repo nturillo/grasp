@@ -16,6 +16,7 @@ pub struct Style {
     pub edge_thickness: f32,
     pub arrow_size: f32,
     pub scroll_sensitivity: f32,
+    pub display_ids: bool,
 }
 
 impl Default for Style {
@@ -35,6 +36,7 @@ impl Default for Style {
             edge_thickness: 5.0,
             arrow_size: 50.0,
             scroll_sensitivity: 0.01,
+            display_ids: false,
         }
     }
 }

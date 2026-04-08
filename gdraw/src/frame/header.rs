@@ -69,6 +69,22 @@ pub fn view_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
         if ui.button("Reset Highlights").clicked() {
             app.graph.clear_highlights();
         }
+
+        ui.separator();
+
+        ui.horizontal(|ui| {
+            if !app.style.display_ids && ui.button("Show IDs").clicked() {
+                app.style.display_ids = true;
+            } else if app.style.display_ids && ui.button("Hide IDs").clicked() {
+                app.style.display_ids = false;
+            }
+        });
+
+        ui.separator();
+
+        if ui.button("Metrics").clicked() {
+            app.show_metrics = true;
+        }
     })
 }
 

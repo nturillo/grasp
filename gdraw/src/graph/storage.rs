@@ -1,6 +1,6 @@
 use crate::graph::layout::{PartialLayout};
 use eframe::egui::{Color32, Vec2};
-use grasp::graph::{AnyVertexGraph, EdgeID, GraphMut, GraphTrait, VertexID, adjacency_list::SparseDiGraph, set::Set};
+use grasp::graph::{AnyVertexGraph, EdgeID, GraphMut, GraphTrait, VertexID, adjacency_list::SparseDiGraph, prelude::DigraphProjection, set::Set};
 use std::{
     collections::HashMap,
 };
@@ -69,6 +69,18 @@ impl Clone for Graph {
 }
 
 impl Graph {
+    pub fn vertex_count(&self) -> usize {
+        self.base.vertex_count()
+    }
+
+    pub fn edge_count(&self) -> usize {
+        self.base.edge_count()
+    }
+
+    pub fn simple_edge_count(&self) -> usize {
+        self.base.as_simple().edge_count()
+    }
+
     pub fn create_vertex(&mut self, center: Vec2) {
         self.reset_partial_data();
         while self.base.vertices().any(|f| f == self.vertex_id) {

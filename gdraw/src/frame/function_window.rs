@@ -129,6 +129,8 @@ impl FunctionWindow {
                                 ReturnType::Edge(e) => { graph.clear_highlights(); graph.highlight_edges(&HashSet::from([e]), style.highlight_color);},
                                 ReturnType::EdgeList(edges) => { graph.clear_highlights(); graph.highlight_edges(&edges.iter().cloned().collect::<HashSet<EdgeID>>(), style.edge_highlight_color);},
                                 ReturnType::VertexCluster(clusters) => {
+                                    graph.clear_highlights();
+
                                     fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
                                         Color32::from(Rgba::from(a) * (1.0 - t) + Rgba::from(b) * t)
                                     }
