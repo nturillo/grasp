@@ -92,7 +92,7 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
                                 app.style.cluster_colors.push(Color32::WHITE);
                             }
 
-                            if !app.style.cluster_colors.len() > 2 && ui.button("-").clicked() {
+                            if app.style.cluster_colors.len() > 2 && ui.button("-").clicked() {
                                 app.style.cluster_colors.pop();
                             }
                         });

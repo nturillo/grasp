@@ -1,30 +1,14 @@
 use std::{collections::BTreeMap};
 
 use eframe::egui::{InnerResponse, Ui, ViewportCommand};
-use grasp::algorithms::registry::{ALGORITHMS, FunctionData};
+use grasp::{algorithms::registry::{ALGORITHMS, FunctionData}};
 
-use crate::{app::GraspAppHandler, graph::layout};
+use crate::{app::GraspAppHandler, graph::{layout, storage::Graph}};
 
 pub fn file_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option<()>> {
     ui.menu_button("File", |ui| {
-        if ui.button("New File").clicked() {
-            ui.close();
-        }
-
-        ui.separator();
-
-        if ui.button("Open File").clicked() {
-            ui.close();
-        }
-
-        ui.separator();
-
-        if ui.button("Save").clicked() {
-            ui.close();
-        }
-
-        if ui.button("Save As").clicked() {
-            ui.close();
+        if ui.button("New Graph").clicked() {
+            *app.graph = Graph::default();
         }
 
         ui.separator();
@@ -82,6 +66,9 @@ pub fn view_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
         if ui.button("Reset View").clicked() {
             app.sandbox.reset();
         }
+        if ui.button("Reset Highlights").clicked() {
+            app.graph.clear_highlights();
+        }
     })
 }
 
@@ -112,6 +99,7 @@ pub fn tool_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
             match val.value {
                 Some(func) => {
                     let button = ui.button(func.name);
+                    ui.separator();
 
                     if !func.desc.is_empty() {
                         if button.on_hover_text_at_pointer(func.desc).clicked() {
