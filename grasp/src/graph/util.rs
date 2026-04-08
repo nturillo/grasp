@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::graph::{EdgeID, GraphTrait, VertexID, prelude::LabeledGraph, set::Set};
 
@@ -39,28 +39,49 @@ pub fn degree<G: GraphTrait>(graph: &G, v: VertexID) -> usize{
 /// Gets a list of VertexID sets which correspond to each component of a graph
 pub fn get_components<G: GraphTrait>(graph: &G) -> Vec<impl Set<Item = VertexID>>{
     if graph.vertex_count()==0 {return Vec::new();}
-    let mut components = vec![];
+    let mut components: HashMap<usize, HashSet<usize>> = HashMap::default();
+    let mut component_map: HashMap<VertexID, usize> = HashMap::default();
     let mut unvisited: HashSet<VertexID> = graph.vertices().collect();
     let mut stack: VecDeque<VertexID> = VecDeque::default();
-    
+    let mut component_index = 0;
     while !unvisited.is_empty(){
         // get start vertex
         let root = *unvisited.iter().next().unwrap(); 
         unvisited.remove(&root); stack.push_back(root);
         let mut component = HashSet::default(); component.insert(root);
+        let mut intersected_components: HashSet<usize> = HashSet::default();
         // start building 
         while let Some(v) = stack.pop_front(){
             for neighbor in graph.neighbors(v).iter(){
-                if unvisited.contains(neighbor) {
-                    unvisited.remove(neighbor); 
+                if unvisited.contains(&neighbor) {
+                    unvisited.remove(&neighbor); 
                     stack.push_back(*neighbor);
                     component.insert(*neighbor);
+                } else if component_map.contains_key(&neighbor) {
+                    intersected_components.insert(*component_map.get(&neighbor).unwrap());
                 }
             }
         }
-        components.push(component);
+        // Merge intersected components or add new one
+        if intersected_components.is_empty() {
+            for v in component.iter(){component_map.insert(*v, component_index);}
+            components.insert(component_index, component);
+            component_index += 1;
+        } else {
+            let mut c_iter = intersected_components.into_iter();
+            let index = c_iter.next().unwrap();
+            while let Some(comp) = c_iter.next(){
+                let comp = components.remove(&comp).unwrap();
+                for v in comp.iter(){
+                    component_map.insert(*v, index);
+                }
+                components.get_mut(&index).unwrap().extend(comp);
+            }
+            for v in component.iter() {component_map.insert(*v, index);}
+            components.get_mut(&index).unwrap().extend(component);
+        }
     }
-    components
+    components.into_values().collect()
 }
 
 /// The difference between two graphs, used for testing
