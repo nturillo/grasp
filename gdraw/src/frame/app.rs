@@ -154,6 +154,7 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
             self.sandbox.draw_graph(ui, &self.graph, &self.style);
 
             if !Popup::is_any_open(ui.ctx()) {
+                let shift = ui.input(|input| input.modifiers.shift);
                 let mapped: Vec<(usize, Vec2)> = self.graph.vertex_labels.iter().map(|(id, v)| (*id, v.center)).collect();
                 if response.dragged() && self.vertex_focused.is_some() {
                     handle_vertex_response(self.graph, &self.sandbox, ui, self.vertex_focused.unwrap(), &mut self.dragged_vertex, &response);
@@ -164,19 +165,19 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 } else if !(response.dragged() && self.vertex_focused.is_some()) {
                     self.vertex_focused = None;
 
-                    if response.clicked()
+                    if response.clicked() && shift
                         && let Some(coords) = response.interact_pointer_pos()
                     {
                         self.sandbox
                             .create_vertex(coords.to_vec2(), &mut self.graph);
                         self.graph.selected_list = vec![self.graph.vertex_id];
                     }
-                    else if !ui.input(|input| input.modifiers.shift) && response.dragged() {
+                    else if !shift && response.dragged() {
                         self.sandbox.center -= self
                             .sandbox
                             .screen_dist_to_sandbox_dist(response.drag_delta());
                     }
-                    else if ui.input(|input| input.modifiers.shift) && response.dragged() {
+                    else if shift && response.dragged() {
                         let origin = response.interact_pointer_pos().unwrap();
                         let rect = Rect::from_two_pos((origin.to_vec2() - response.total_drag_delta().unwrap()).to_pos2(), origin);
                         ui.painter().rect(rect, 0.0, Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 110), Stroke::new(1.0, Color32::from_rgb(80, 150, 255)), egui::StrokeKind::Inside);

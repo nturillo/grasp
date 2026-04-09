@@ -12,13 +12,20 @@ fn vertex_primary_click(
 ) {
     let is_selected = graph.selected_list.contains(&vertex_id);
     let single_selection = graph.selected_list.len() == 1;
-    let shift_held = ui.input(|input| input.modifiers.shift);
+    let ctrl = ui.input(|input| input.modifiers.ctrl);
 
-    match (is_selected, shift_held, single_selection) {
-        (false, false, _) | (true, false, false) => graph.selected_list = vec![vertex_id],
-        (false, true, _) => graph.selected_list.push(vertex_id),
-        (true, false, true) => graph.selected_list = vec![],
-        (true, true, _) => graph.selected_list.retain(|&id| id != vertex_id),
+    if ui.input(|input| input.modifiers.shift) && !graph.selected_list.is_empty() && !is_selected {
+        graph.selected_list.iter().copied().collect::<Vec<VertexID>>().into_iter().for_each(|v| {
+            let pair = (v, vertex_id);
+            if graph.has_edge(pair) {graph.remove_edge(pair);} else {graph.create_edge(pair);}
+        });
+    } else {
+        match (is_selected, ctrl, single_selection) {
+            (false, false, _) | (true, false, false) => graph.selected_list = vec![vertex_id],
+            (false, true, _) => graph.selected_list.push(vertex_id),
+            (true, false, true) => graph.selected_list = vec![],
+            (true, true, _) => graph.selected_list.retain(|&id| id != vertex_id),
+        }
     }
 }
 
