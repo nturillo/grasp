@@ -57,7 +57,7 @@ pub fn from_dot<G: GraphTrait + BuildableGraph + AnyVertexGraph>(string: String)
 
 #[cfg(test)]
 mod tests {
-    use crate::graph::{GraphTrait, adjacency_list::SparseSimpleGraph};
+    use crate::graph::adjacency_list::SparseSimpleGraph;
     use crate::serialization::dot::*;
 
     #[test]

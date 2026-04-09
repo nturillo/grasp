@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::graph::{EdgeID, GraphTrait, VertexID, prelude::LabeledGraph, set::Set};
 
@@ -39,28 +39,49 @@ pub fn degree<G: GraphTrait>(graph: &G, v: VertexID) -> usize{
 /// Gets a list of VertexID sets which correspond to each component of a graph
 pub fn get_components<G: GraphTrait>(graph: &G) -> Vec<impl Set<Item = VertexID>>{
     if graph.vertex_count()==0 {return Vec::new();}
-    let mut components = vec![];
+    let mut components: HashMap<usize, HashSet<usize>> = HashMap::default();
+    let mut component_map: HashMap<VertexID, usize> = HashMap::default();
     let mut unvisited: HashSet<VertexID> = graph.vertices().collect();
     let mut stack: VecDeque<VertexID> = VecDeque::default();
-    
+    let mut component_index = 0;
     while !unvisited.is_empty(){
         // get start vertex
         let root = *unvisited.iter().next().unwrap(); 
         unvisited.remove(&root); stack.push_back(root);
         let mut component = HashSet::default(); component.insert(root);
+        let mut intersected_components: HashSet<usize> = HashSet::default();
         // start building 
         while let Some(v) = stack.pop_front(){
             for neighbor in graph.neighbors(v).iter(){
-                if unvisited.contains(neighbor) {
-                    unvisited.remove(neighbor); 
+                if unvisited.contains(&neighbor) {
+                    unvisited.remove(&neighbor); 
                     stack.push_back(*neighbor);
                     component.insert(*neighbor);
+                } else if component_map.contains_key(&neighbor) {
+                    intersected_components.insert(*component_map.get(&neighbor).unwrap());
                 }
             }
         }
-        components.push(component);
+        // Merge intersected components or add new one
+        if intersected_components.is_empty() {
+            for v in component.iter(){component_map.insert(*v, component_index);}
+            components.insert(component_index, component);
+            component_index += 1;
+        } else {
+            let mut c_iter = intersected_components.into_iter();
+            let index = c_iter.next().unwrap();
+            while let Some(comp) = c_iter.next(){
+                let comp = components.remove(&comp).unwrap();
+                for v in comp.iter(){
+                    component_map.insert(*v, index);
+                }
+                components.get_mut(&index).unwrap().extend(comp);
+            }
+            for v in component.iter() {component_map.insert(*v, index);}
+            components.get_mut(&index).unwrap().extend(component);
+        }
     }
-    components
+    components.into_values().collect()
 }
 
 /// The difference between two graphs, used for testing
@@ -114,4 +135,48 @@ macro_rules! assert_graphs_eq {
             );
         }
     };
+}
+
+/// Get the degeneracy of a graph, and set *out* to be the degeneracy ordering
+pub fn degeneracy<G: GraphTrait>(graph: &G, out: &mut Vec<VertexID>) -> usize {
+    out.clear();
+    out.reserve(graph.vertex_count());
+
+    let mut degree_map: HashMap<VertexID, usize> = graph.vertices()
+        .map(|v| (v, degree(graph, v)))
+        .collect();
+
+    let max_degree = degree_map.values().copied().max().unwrap_or(0);
+    let mut buckets: Vec<HashSet<VertexID>> = vec![HashSet::new(); max_degree + 1];
+    for (&v, &d) in &degree_map {
+        buckets[d].insert(v);
+    }
+
+    let mut removed: HashSet<VertexID> = HashSet::with_capacity(graph.vertex_count());
+    let mut min_degree = 0;
+    let mut k = 0;
+
+    for _ in 0..graph.vertex_count() {
+        while buckets[min_degree].is_empty() {
+            min_degree += 1;
+        }
+
+        let v = *buckets[min_degree].iter().next().unwrap();
+        buckets[min_degree].remove(&v);
+        removed.insert(v);
+
+        k = k.max(min_degree);
+        out.push(v);
+
+        for u in graph.neighbors(v).difference_with(&removed).iter() {
+            let d = degree_map.get_mut(&u).unwrap();
+            buckets[*d].remove(&u);
+            *d -= 1;
+            buckets[*d].insert(*u);
+            min_degree = min_degree.min(*d);
+        }
+    }
+
+    out.reverse();
+    k
 }

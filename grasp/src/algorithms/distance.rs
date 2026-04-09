@@ -15,7 +15,7 @@ pub fn graph_distance<G: SimpleGraph>(g: &G, u: VertexID, v: VertexID) -> Option
             return Some(distance);
         }
         for neighbor in g.neighbors(current).iter() {
-            if !visited.contains(neighbor) {
+            if !visited.contains(&neighbor) {
                 visited.insert(*neighbor);
                 queue.push_back((*neighbor, distance + 1));
             }
@@ -46,7 +46,7 @@ pub fn shortest_path<G: SimpleGraph>(g: &G, u: VertexID, v: VertexID) -> Option<
             return Some(path);
         }
         for neighbor in g.neighbors(current).iter() {
-            if !visited.contains(neighbor) {
+            if !visited.contains(&neighbor) {
                 visited.insert(*neighbor);
                 parent.insert(*neighbor, current);
                 queue.push_back(*neighbor);

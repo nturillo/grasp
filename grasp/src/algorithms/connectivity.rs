@@ -2,7 +2,10 @@ use std::{collections::{HashMap, HashSet, VecDeque}, vec};
 
 use graph_ops_macros::register;
 
-use crate::{algorithms::{algo_traits::AlgoTrait}, graph::{AnyVertexGraph, EdgeID, EdgeType, GraphMut, GraphTrait, VertexID, prelude::{DiGraph, DigraphProjection, HashMapLabeledDiGraph, LabeledGraph, LabeledGraphMut, SimpleGraph, SparseDiGraph}, set::Set}};
+use crate::{
+    algorithms::algo_traits::AlgoTrait, 
+    graph::prelude::*
+};
 
 #[register(name = "Is Connected", desc = "Returns if the graph is connected.", ret = String, simple = "true", params = [])]
 /// Determine if a simple graph is connected.
@@ -43,11 +46,11 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<impl Set<Item = V
         *index += 1;
         stack.push(vertex_id);
 
-        for &target_id in g.out_neighbors(vertex_id).iter() {
+        for target_id in g.out_neighbors(vertex_id).iter() {
             if let Some(target) = vertex_map.get(&target_id) {
                 if target.on_stack { low = low.min(target.disc); }
             } else {
-                visit(index, target_id, g, vertex_map, stack, comps);
+                visit(index, *target_id, g, vertex_map, stack, comps);
                 low = low.min(vertex_map.get(&target_id).unwrap().low);
             }
         }
@@ -98,12 +101,12 @@ pub fn cut_vertices<G: SimpleGraph>(g: &G) -> impl Set<Item = VertexID> {
         vertex_map.insert(vertex_id, VertexWrapper { disc: disc, low: low });
         *index += 1;
 
-        for &target_id in g.neighbors(vertex_id).iter() {
+        for target_id in g.neighbors(vertex_id).iter() {
             if let Some(target) = vertex_map.get(&target_id) {
-                if Some(target_id) != parent { low = low.min(target.disc); }
+                if Some(*target_id) != parent { low = low.min(target.disc); }
             } else {
                 children += 1;
-                visit(index, target_id, g, Some(vertex_id), vertex_map, points);
+                visit(index, *target_id, g, Some(vertex_id), vertex_map, points);
 
                 let target_low = vertex_map.get(&target_id).unwrap().low;
                 low = low.min(target_low);
@@ -145,16 +148,16 @@ pub fn bridges<G: SimpleGraph>(g: &G) -> impl Set<Item = EdgeID> {
         vertex_map.insert(vertex_id, VertexWrapper { disc: disc, low: low });
         *index += 1;
 
-        for &target_id in g.neighbors(vertex_id).iter() {
+        for target_id in g.neighbors(vertex_id).iter() {
             if let Some(target) = vertex_map.get(&target_id) {
-                if Some(target_id) != parent { low = low.min(target.disc); }
+                if Some(*target_id) != parent { low = low.min(target.disc); }
             } else {
-                visit(index, target_id, g, Some(vertex_id), vertex_map, points);
+                visit(index, *target_id, g, Some(vertex_id), vertex_map, points);
 
                 let target_low = vertex_map.get(&target_id).unwrap().low;
                 low = low.min(target_low);
 
-                if target_low > disc { points.insert((vertex_id.min(target_id), target_id.max(vertex_id))); }
+                if target_low > disc { points.insert((vertex_id.min(*target_id), (*target_id).max(vertex_id))); }
             }
         }
 
@@ -253,15 +256,15 @@ pub fn max_flow<G: LabeledGraph<EdgeData = u32> + DiGraph>(g: &G, source: Vertex
         while !queue.is_empty() {
             let cur = queue.pop_front().unwrap();
 
-            for &neighbor in g.out_neighbors(cur).iter() {
-                if !visited.contains(&neighbor) && g.get_edge_label((cur, neighbor)).is_some_and(|&cap| cap > 0) {
-                    parent.insert(neighbor, Some(cur));
-                    if neighbor == target {
+            for neighbor in g.out_neighbors(cur).iter() {
+                if !visited.contains(&neighbor) && g.get_edge_label((cur, *neighbor)).is_some_and(|&cap| cap > 0) {
+                    parent.insert(*neighbor, Some(cur));
+                    if *neighbor == target {
                         return true;
                     }
 
-                    queue.push_back(neighbor);
-                    visited.insert(neighbor);
+                    queue.push_back(*neighbor);
+                    visited.insert(*neighbor);
                 }
             }
         }
@@ -371,9 +374,9 @@ mod test {
         let v1: HashSet<VertexID> = HashSet::from([6]);
         let v2: HashSet<VertexID> = HashSet::from([1, 2, 3]);
         let v3: HashSet<VertexID> = HashSet::from([4, 5]);
-        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().copied().collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v1));
-        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().copied().collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v2));
-        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().copied().collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v3));
+        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().map(|v| v.into_owned()).collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v1));
+        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().map(|v| v.into_owned()).collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v2));
+        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().map(|v| v.into_owned()).collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v3));
     }
 
     #[test]
@@ -425,7 +428,7 @@ mod test {
         graph.add_edge((3, 4));
         graph.add_edge((4, 5));
         graph.add_edge((6, 1));
-        pretty_assertions::assert_eq!(HashSet::from([1, 3, 4]), cut_vertices(&graph).iter().copied().collect());
+        pretty_assertions::assert_eq!(HashSet::from([1, 3, 4]), cut_vertices(&graph).iter().map(|v| v.into_owned()).collect());
     }
 
     #[test]
@@ -437,7 +440,7 @@ mod test {
         graph.add_edge((3, 4));
         graph.add_edge((4, 5));
         graph.add_edge((6, 1));
-        pretty_assertions::assert_eq!(HashSet::from([(1, 6), (3, 4), (4, 5)]), bridges(&graph).iter().copied().collect());
+        pretty_assertions::assert_eq!(HashSet::from([(1, 6), (3, 4), (4, 5)]), bridges(&graph).iter().map(|v| v.into_owned()).collect());
     }
 
     #[test]

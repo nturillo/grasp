@@ -120,15 +120,15 @@ pub fn register(attr: TokenStream, item: TokenStream) -> TokenStream {
     let ptr = if is_self { quote! {Self::#wrapped_name} } else { quote! {#wrapped_name} };
     let call = if return_type == "VertexCluster" {
         if is_self {
-            quote! { #graph.#fn_name(#(#arg_names),*).into_iter().map(|s| s.iter().cloned().collect()).collect() }
+            quote! { #graph.#fn_name(#(#arg_names),*).into_iter().map(|s| s.iter().map(|v| v.into_owned()).collect()).collect() }
         } else {
-            quote! { #fn_name(#graph, #(#arg_names),*).into_iter().map(|s| s.iter().cloned().collect()).collect() }
+            quote! { #fn_name(#graph, #(#arg_names),*).into_iter().map(|s| s.iter().map(|v| v.into_owned()).collect()).collect() }
         }
     } else if return_type == "VertexList" || return_type == "EdgeList" {
         if is_self {
-            quote! { #graph.#fn_name(#(#arg_names),*).iter().cloned().collect() }
+            quote! { #graph.#fn_name(#(#arg_names),*).iter().map(|v| v.into_owned()).collect() }
         } else {
-            quote! { #fn_name(#graph, #(#arg_names),*).iter().cloned().collect() }
+            quote! { #fn_name(#graph, #(#arg_names),*).iter().map(|v| v.into_owned()).collect() }
         }
     } else if return_type == "String" {
         if is_self {

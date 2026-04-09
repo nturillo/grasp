@@ -15,12 +15,13 @@ use {
 use crate::{graph::{EdgeID, GraphTrait, VertexID}, serialization::error::FormattingError};
 use std::ops::Add;
 
+#[cfg(feature = "serde")]
 struct Parse<'a> {
         file: &'a str,
         index: usize,
         mark: usize,
     }
-
+#[cfg(feature = "serde")]
 impl<'a> Parse<'a> {
     fn new(file: &'a str) -> Self {
         Self {

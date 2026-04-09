@@ -156,14 +156,14 @@ impl Graph {
     }
 
     pub fn highlight_set<S: Set<Item = VertexID>>(&mut self, set: &S, color: Color32) {
-        set.iter().for_each(|&vertex| {
+        set.iter().for_each(|vertex| {
             self.vertex_labels.get_mut(&vertex)
             .map(|v| v.assign_color(color));
         });
     }
 
     pub fn highlight_edges<S: Set<Item = EdgeID>>(&mut self, set: &S, color: Color32) {
-        set.iter().for_each(|&edge| {
+        set.iter().for_each(|edge| {
             self.edge_labels.get_mut(&edge)
             .map(|e| e.assign_color(color));
 
