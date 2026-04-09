@@ -1,6 +1,7 @@
 use crate::{algorithms::connectivity::is_connected, graph::prelude::*};
 
-use std::collections::{HashMap, HashSet};
+use std::{arch::x86_64::_SIDD_NEGATIVE_POLARITY, collections::{HashMap, HashSet}, hash::Hash};
+use itertools::Itertools;
 
 pub fn compute_gonality<G>(g: &G) -> Result<usize, GraphError>
 where G: SimpleGraph {
@@ -9,6 +10,42 @@ where G: SimpleGraph {
     }
     // Placeholder implementation
     Ok(0)
+}
+
+fn gonality_le<G: SimpleGraph>(g: &G, n: i32) -> bool {
+    let vertices = g.vertices().collect::<Vec<_>>();
+    let cart_prod = vec![vertices; n as usize].into_iter().multi_cartesian_product();
+    
+    let mut player_A_wins = false;
+    for chip_placement in cart_prod {
+        let mut divisor = HashMap::new();
+        for v in chip_placement {
+            *divisor.entry(v).or_insert(0i32) += 1;
+        }
+        let mut chipless_vertices = Vec::new();
+        for v in g.vertices() {
+            if divisor.contains_key(&v) {
+                continue;
+            }
+            chipless_vertices.push(v);
+            divisor.insert(v, 0);
+        }
+        let mut player_B_wins = false;
+        for v in chipless_vertices {
+            let mut divisor_copy = divisor.clone();
+            *divisor_copy.get_mut(&v).unwrap() -= 1;
+            if !dhar(g, divisor_copy, v) {
+                player_B_wins = true;
+                break;
+            }
+        }
+        if !player_B_wins {
+            player_A_wins = true;
+            break;
+        }
+    }
+
+    player_A_wins
 }
 
 fn fire_vertex<G: SimpleGraph>(g: &G, divisor: &mut HashMap<VertexID, i32>, v: VertexID) {
@@ -86,5 +123,54 @@ mod tests {
         winning_strat.insert(4,-1);
         winning_strat.insert(5, 0);
         assert!(dhar(&g, winning_strat, 4));
+    }
+    
+    #[test]
+    fn cube_test() {
+        let mut cube = SparseSimpleGraph::empty();
+        cube.add_edge((0,1));
+        cube.add_edge((1,2));        
+        cube.add_edge((2,3));        
+        cube.add_edge((3,0));        
+        
+        cube.add_edge((4,5));
+        cube.add_edge((5,6));
+        cube.add_edge((6,7));
+        cube.add_edge((7,4));
+        
+        cube.add_edge((0,4));
+        cube.add_edge((1,5));
+        cube.add_edge((2,6));
+        cube.add_edge((3,7));
+        
+        assert!(!gonality_le(&cube, 0));
+        assert!(!gonality_le(&cube, 1));
+        assert!(!gonality_le(&cube, 2));
+        assert!(!gonality_le(&cube, 3));
+
+        assert!(gonality_le(&cube, 4));
+        assert!(gonality_le(&cube, 5));
+        assert!(gonality_le(&cube, 6));
+        assert!(gonality_le(&cube, 7));
+    }
+    
+    #[test]
+    fn tetrahedron_test() {
+        let mut tetra = SparseSimpleGraph::empty();
+        tetra.add_edge((0,1));
+        tetra.add_edge((1,2));
+        tetra.add_edge((2,0));
+        
+        tetra.add_edge((0,3));
+        tetra.add_edge((1,3));
+        tetra.add_edge((2,3));
+        
+        assert!(!gonality_le(&tetra, 0));
+        assert!(!gonality_le(&tetra, 1));
+        assert!(!gonality_le(&tetra, 2));
+
+        assert!(gonality_le(&tetra, 3));
+        assert!(gonality_le(&tetra, 4));
+        assert!(gonality_le(&tetra, 5));
     }
 }
