@@ -27,9 +27,14 @@ pub fn draw_vertex(ui: &mut Ui, vertex: &Vertex, graph: &Graph, style: &Style, s
         Stroke::new(style.outline_thickness / scale, style.outline_color),
     );
 
+    let mut prnt = String::new();
     if style.display_ids {
-        ui.painter().text(screen_center.to_pos2(), Align2::CENTER_CENTER, vertex.id, FontId::monospace(style.vertex_radius / scale), Color32::BLACK);
+        prnt = vertex.id.to_string();
+    } else if style.display_vertex_data && let Some(data) = &vertex.data && data != "()" {
+        prnt = data.clone();
     }
+
+    ui.painter().text(screen_center.to_pos2(), Align2::CENTER_CENTER, prnt, FontId::monospace(style.vertex_radius / scale), Color32::BLACK);
 }
 
 pub fn draw_edge(ui: &mut Ui, edge: &Edge, graph: &Graph, style: &Style, start_vertex_center: Vec2, end_vertex_center: Vec2, scale: f32) {

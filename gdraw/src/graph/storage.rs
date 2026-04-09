@@ -1,6 +1,6 @@
 use crate::graph::layout::{PartialLayout};
 use eframe::egui::{Color32, Vec2};
-use grasp::graph::{AnyVertexGraph, EdgeID, GraphMut, GraphTrait, VertexID, adjacency_list::SparseDiGraph, prelude::DigraphProjection, set::Set};
+use grasp::graph::{AnyVertexGraph, EdgeID, EdgeType, GraphMut, GraphTrait, VertexID, adjacency_list::SparseDiGraph, prelude::{DigraphProjection, LabeledGraph}, set::Set};
 use std::{
     collections::HashMap,
 };
@@ -13,6 +13,7 @@ pub struct Vertex {
     pub id: usize,
 
     pub color: Option<Color32>,
+    pub data: Option<String>,
 }
 
 impl Vertex {
@@ -29,6 +30,7 @@ impl Vertex {
 pub struct Edge {
     pub vertex_pair: EdgeID,
     pub color: Option<Color32>,
+    pub data: Option<String>,
 }
 
 impl Edge {
@@ -44,6 +46,7 @@ impl Edge {
         Self {
             vertex_pair: pair,
             color: None,
+            data: None,
         }
     }
 }
@@ -56,15 +59,16 @@ pub struct Graph {
     pub directed: bool,
     pub layout_config: LayoutConfig,
     pub vertex_id: VertexID,
+    pub is_labeled: bool,
 }
 impl Default for Graph {
     fn default() -> Self {
-        Self{base: SparseDiGraph::default(), vertex_labels: HashMap::default(), edge_labels: HashMap::default(), selected_list: Vec::default(), directed: false, layout_config: LayoutConfig::default(), vertex_id: 0}
+        Self{base: SparseDiGraph::default(), vertex_labels: HashMap::default(), edge_labels: HashMap::default(), selected_list: Vec::default(), directed: false, layout_config: LayoutConfig::default(), vertex_id: 0, is_labeled: false}
     }
 }
 impl Clone for Graph {
     fn clone(&self) -> Self {
-        Self { base: clone_graph(&self.base), vertex_labels: self.vertex_labels.clone(), edge_labels: self.edge_labels.clone(), selected_list: self.selected_list.clone(), directed: self.directed.clone(), layout_config: self.layout_config.clone(), vertex_id: 0 }
+        Self { base: clone_graph(&self.base), vertex_labels: self.vertex_labels.clone(), edge_labels: self.edge_labels.clone(), selected_list: self.selected_list.clone(), directed: self.directed.clone(), layout_config: self.layout_config.clone(), vertex_id: 0, is_labeled: self.is_labeled }
     }
 }
 
@@ -92,6 +96,7 @@ impl Graph {
                 center: center,
                 id: self.vertex_id,
                 color: Default::default(),
+                data: None,
             });
     }
 
@@ -110,6 +115,12 @@ impl Graph {
         self.reset_partial_data();
         self.base.add_edge(pair);
         self.edge_labels.insert(pair, Edge::new(pair));
+    }
+
+    pub fn insert_edge(&mut self, edge: Edge) {
+        self.reset_partial_data();
+        self.base.add_edge(edge.vertex_pair);
+        self.edge_labels.insert(edge.vertex_pair, edge);
     }
 
     pub fn has_edge(&self, pair: EdgeID) -> bool {
@@ -190,6 +201,7 @@ impl<G: GraphTrait + Default> From<&G> for Graph {
                 id: vertex_id,
                 center: Default::default(),
                 color: Default::default(),
+                data: None,
             });
         }
 
@@ -212,5 +224,31 @@ pub fn clone_graph(in_graph: &SparseDiGraph) -> SparseDiGraph {
         graph.add_edge(edge);
     }
 
+    graph
+}
+
+pub fn from_labeled<G: LabeledGraph + Default>(g: &G) -> Graph 
+where G::VertexData: std::fmt::Debug,
+    G::EdgeData: std::fmt::Debug, {
+    let mut graph = Graph::default();
+
+    for vertex_id in g.vertices() {
+        graph.insert_vertex(Vertex {
+            id: vertex_id,
+            center: Default::default(),
+            color: Default::default(),
+            data: Some(g.get_vertex_label(vertex_id).map_or(String::new(), |d| format!("{:?}", d))),
+        });
+    }
+
+    for edge in g.edges() {
+        graph.insert_edge(Edge {
+            vertex_pair: (edge.0, edge.1),
+            color: Default::default(),
+            data: Some(g.get_edge_label(edge).map_or(String::new(), |d| format!("{:?}", d))),
+        });
+    }
+
+    graph.is_labeled = true;
     graph
 }

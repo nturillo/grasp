@@ -73,11 +73,22 @@ pub fn view_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
         ui.separator();
 
         ui.horizontal(|ui| {
-            if !app.style.display_ids && ui.button("Show IDs").clicked() {
-                app.style.display_ids = true;
-            } else if app.style.display_ids && ui.button("Hide IDs").clicked() {
-                app.style.display_ids = false;
-            }
+            ui.menu_button("Vertex Labels", |ui| {
+                if ui.button("Show IDs").clicked() {
+                    app.style.display_ids = true;
+                    app.style.display_vertex_data = false;
+                }
+
+                if app.graph.is_labeled && ui.button("Show Data").clicked() {
+                    app.style.display_ids = false;
+                    app.style.display_vertex_data = true;
+                }
+
+                if ui.button("Hide").clicked() {
+                    app.style.display_ids = false;
+                    app.style.display_vertex_data = false;
+                }
+            });
         });
 
         ui.separator();

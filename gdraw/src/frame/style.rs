@@ -17,6 +17,7 @@ pub struct Style {
     pub arrow_size: f32,
     pub scroll_sensitivity: f32,
     pub display_ids: bool,
+    pub display_vertex_data: bool,
 }
 
 impl Default for Style {
@@ -37,6 +38,7 @@ impl Default for Style {
             arrow_size: 50.0,
             scroll_sensitivity: 0.01,
             display_ids: false,
+            display_vertex_data: true,
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::ops::RangeInclusive;
 
-use eframe::egui::{self, Color32, Ui, widgets};
+use eframe::egui::{self, Align, Color32, Layout, Ui, widgets};
 
 use crate::{app::GraspAppHandler, graph::layout::LayoutType};
 
@@ -26,9 +26,14 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
         });
 
         if app.style.show_vertices {
-            ui.horizontal(|ui| {
-                ui.label("Display IDs");
-                ui.checkbox(&mut app.style.display_ids, "");
+            ui.collapsing("Vertex Labels", |ui| {
+                if ui.checkbox(&mut app.style.display_ids, "Show IDs").clicked() && app.style.display_ids {
+                    app.style.display_vertex_data = false;
+                }
+
+                if ui.checkbox(&mut app.style.display_vertex_data, "Show Data").clicked() && app.style.display_vertex_data {
+                    app.style.display_ids = false;
+                }
             });
             
             ui.horizontal(|ui| {
@@ -244,5 +249,22 @@ pub fn metrics_window(app: &mut GraspAppHandler, ui: &mut Ui) {
         if ui.button("Close").clicked() {
             app.show_metrics = false;
         }
+    });
+}
+
+pub fn vertex_input_window(app: &mut GraspAppHandler, ui: &mut Ui) {
+    ui.text_edit_singleline(&mut app.label);
+    
+    ui.horizontal(|ui| {
+        if ui.button("Cancel").clicked() {
+            app.show_vertex_input = None;
+        }
+
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            if ui.button("Apply").clicked() && let Some(v) = app.show_vertex_input {
+                app.graph.vertex_labels.get_mut(&v).unwrap().data = Some(app.label.clone());
+                app.show_vertex_input = None;
+            }
+        });
     });
 }

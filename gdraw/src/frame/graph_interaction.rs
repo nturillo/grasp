@@ -66,7 +66,7 @@ fn vertex_context_try_get_pair(graph: &mut Graph, vertex_id: &usize) -> Option<(
     }
 }
 
-pub fn vertex_context(graph: &mut Graph, ui: &mut Ui, vertex_id: &usize) {
+pub fn vertex_context(graph: &mut Graph, ui: &mut Ui, vertex_id: &usize, open_vertex_input: &mut Option<VertexID>, label: &mut String) {
     let maybe_pair = vertex_context_try_get_pair(graph, vertex_id);
 
     if let Some(vertex_pair) = maybe_pair {
@@ -90,7 +90,14 @@ pub fn vertex_context(graph: &mut Graph, ui: &mut Ui, vertex_id: &usize) {
         graph.remove_selected();
     }
 
-    //ui.separator();
+    if graph.is_labeled {
+        ui.separator();
+
+        if ui.button("Edit Vertex Data").clicked() {
+            *open_vertex_input = Some(*vertex_id);
+            *label = graph.vertex_labels.get(vertex_id).unwrap().data.clone().unwrap_or_default();
+        }
+    }
 }
 
 pub fn handle_vertex_response(

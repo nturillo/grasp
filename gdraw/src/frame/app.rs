@@ -4,13 +4,13 @@ use crate::{
     },
     graph::{
         layout::{self, LayoutConfig},
-        storage::Graph,
+        storage::{Graph, from_labeled},
     },
 };
 use eframe::{egui::{
     self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Rect, Sense, Stroke, TopBottomPanel, Vec2, Window
 }};
-use grasp::graph::{GraphTrait, VertexID, prelude::{SparseDiGraph}, set::Set};
+use grasp::graph::{GraphTrait, VertexID, prelude::{LabeledGraph, SparseDiGraph}, set::Set};
 
 pub struct GraspApp {
     pub style: Style,
@@ -53,9 +53,18 @@ impl GraspApp {
         )
     }
 
-    /// Loads a graph from anything that implements [`grasp::graph::graph_traits::GraphTrait`]
+    /// Loads a graph from anything that implements [`grasp::graph::GraphTrait`]
     pub fn load<T: GraphTrait + Default>(&mut self, graph: &T) {
         self.graph = Graph::from(graph);
+        layout::apply(&mut self.graph);
+    }
+
+    /// Loads a graph from anything that implements [`grasp::graph::labeled_graph::LabeledGraph`] where the label types implement [`std::fmt::Debug`]
+    pub fn load_labeled<T: LabeledGraph + Default>(&mut self, graph: &T) 
+    where 
+        T::VertexData: std::fmt::Debug,
+        T::EdgeData: std::fmt::Debug, {
+        self.graph = from_labeled(graph);
         layout::apply(&mut self.graph);
     }
 
@@ -89,9 +98,11 @@ pub(crate) struct GraspAppHandler<'a> {
 
     pub show_settings: bool,
     pub show_metrics: bool,
+    pub show_vertex_input: Option<VertexID>,
     pub func_window: FunctionWindow,
     pub vertex_focused: Option<VertexID>,
     pub dragged_vertex: Option<VertexID>,
+    pub label: String,
 }
 
 impl<'a> GraspAppHandler<'a> {
@@ -105,10 +116,12 @@ impl<'a> GraspAppHandler<'a> {
 
             show_settings: false,
             show_metrics: false,
+            show_vertex_input: None,
             func_window: Default::default(),
 
             vertex_focused: None,
             dragged_vertex: None,
+            label: String::new(),
         }
     }
 }
@@ -136,6 +149,13 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 .collapsible(false)
                 .resizable(false)
                 .show(ctx, |ui| windows::metrics_window(self, ui));
+        }
+
+        if self.show_vertex_input.is_some() {
+            Window::new("Input Data")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| windows::vertex_input_window(self, ui));
         }
 
         if self.func_window.visible {
@@ -204,7 +224,7 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                         );
 
             if let Some(id) = self.vertex_focused {
-                response.context_menu(|ui| vertex_context(self.graph, ui, &id));
+                response.context_menu(|ui| vertex_context(self.graph, ui, &id, &mut self.show_vertex_input, &mut self.label));
                 response.on_hover_text_at_pointer(format!("id: {}", id));
             } else {
                 response.context_menu(|ui| {

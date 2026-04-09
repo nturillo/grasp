@@ -101,7 +101,7 @@ pub fn chromatic_number_upper_bound<G: SimpleGraph>(g: &G, upper_bound: usize) -
     }
 }
 
-#[register(name = "Chromatic Number", desc = "Colors each vertex via backtracking.", ret = VertexCluster, simple = "true", params = [("Lower Bound", UnsignedInteger)])]
+#[register(name = "Chromatic Number", desc = "Colors each vertex via backtracking.", ret = VertexCluster, simple = "true", params = [("Lower Bound", Unsigned)])]
 /// Find the exact chromatic number of a simple graph via backtracking with a lower bound. Returns a list of vertices grouped by color.
 ///
 /// WARNING: This algorithm will return the passed lower bound if it is higher than the chromatic number.
