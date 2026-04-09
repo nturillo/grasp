@@ -91,6 +91,7 @@ pub(crate) struct GraspAppHandler<'a> {
     pub show_metrics: bool,
     pub func_window: FunctionWindow,
     pub vertex_focused: Option<VertexID>,
+    pub dragged_vertex: Option<VertexID>,
 }
 
 impl<'a> GraspAppHandler<'a> {
@@ -107,6 +108,7 @@ impl<'a> GraspAppHandler<'a> {
             func_window: Default::default(),
 
             vertex_focused: None,
+            dragged_vertex: None,
         }
     }
 }
@@ -154,10 +156,10 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
             if !Popup::is_any_open(ui.ctx()) {
                 let mapped: Vec<(usize, Vec2)> = self.graph.vertex_labels.iter().map(|(id, v)| (*id, v.center)).collect();
                 if response.dragged() && self.vertex_focused.is_some() {
-                    handle_vertex_response(self.graph, &self.sandbox, ui, self.vertex_focused.unwrap(), &response);
+                    handle_vertex_response(self.graph, &self.sandbox, ui, self.vertex_focused.unwrap(), &mut self.dragged_vertex, &response);
                 }
                 if !(response.dragged() && self.vertex_focused.is_none()) && let Some((id, _)) = mapped.iter().rev().find(|(_, data)| if let Some(pos) = ctx.input(|input| input.pointer.hover_pos()) && (pos.to_vec2() - self.sandbox.sandbox_to_screen(*data)).length() <= (self.style.vertex_radius + self.style.outline_thickness) {true} else {false}) {
-                    handle_vertex_response(self.graph, &self.sandbox, ui, *id, &response);
+                    handle_vertex_response(self.graph, &self.sandbox, ui, *id, &mut self.dragged_vertex, &response);
                     self.vertex_focused = Some(*id);
                 } else if !(response.dragged() && self.vertex_focused.is_some()) {
                     self.vertex_focused = None;

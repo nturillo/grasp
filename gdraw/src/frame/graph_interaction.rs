@@ -91,6 +91,7 @@ pub fn handle_vertex_response(
     sandbox: &Sandbox,
     ui: &mut Ui,
     vertex_id: VertexID,
+    dragged_vertex: &mut Option<VertexID>,
     response: &Response,
 ) {
     if let Some(_) = graph.vertex_labels.get(&vertex_id) {
@@ -101,14 +102,16 @@ pub fn handle_vertex_response(
 
             if response.drag_started() {
                 graph.layout_config.common_partial_data.vertex_locks.push(vertex_id);
+                *dragged_vertex = Some(vertex_id);
             }
 
             if response.dragged() {
-                vertex_dragged(graph, sandbox, vertex_id, &response);
+                vertex_dragged(graph, sandbox, dragged_vertex.unwrap_or(vertex_id), &response);
             }
 
             if response.drag_stopped() {
                 graph.layout_config.common_partial_data.vertex_locks.retain(|&v| v != vertex_id);
+                *dragged_vertex = None;
             }
         }
     }
