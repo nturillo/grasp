@@ -8,15 +8,33 @@ where G: SimpleGraph {
     if !is_connected(g) {
         return Err(GraphError::DisconnectedGraph);
     }
-    // Placeholder implementation
-    Ok(0)
+    let mut upper_bound = g.vertices().count();
+    let mut lower_bound = 0usize;
+    
+    while upper_bound - lower_bound > 1 {
+        let mid = (upper_bound + lower_bound) / 2;
+        if gonality_le(g, mid) {
+            upper_bound = mid;
+        } else {
+            lower_bound = mid;
+        }
+    }
+    if gonality_le(g, lower_bound) {
+        Ok(lower_bound)
+    } else {
+        Ok(upper_bound)
+    }
 }
 
-fn gonality_le<G: SimpleGraph>(g: &G, n: i32) -> bool {
+fn gonality_le<G: SimpleGraph>(g: &G, n: usize) -> bool {
     let vertices = g.vertices().collect::<Vec<_>>();
-    let cart_prod = vec![vertices; n as usize].into_iter().multi_cartesian_product();
+    if n >= vertices.len() {
+        return true;
+    }
+
+    let cart_prod = vec![vertices; n].into_iter().multi_cartesian_product();
     
-    let mut player_A_wins = false;
+    let mut player_a_wins = false;
     for chip_placement in cart_prod {
         let mut divisor = HashMap::new();
         for v in chip_placement {
@@ -30,22 +48,22 @@ fn gonality_le<G: SimpleGraph>(g: &G, n: i32) -> bool {
             chipless_vertices.push(v);
             divisor.insert(v, 0);
         }
-        let mut player_B_wins = false;
+        let mut player_b_wins = false;
         for v in chipless_vertices {
             let mut divisor_copy = divisor.clone();
             *divisor_copy.get_mut(&v).unwrap() -= 1;
             if !dhar(g, divisor_copy, v) {
-                player_B_wins = true;
+                player_b_wins = true;
                 break;
             }
         }
-        if !player_B_wins {
-            player_A_wins = true;
+        if !player_b_wins {
+            player_a_wins = true;
             break;
         }
     }
 
-    player_A_wins
+    player_a_wins
 }
 
 fn fire_vertex<G: SimpleGraph>(g: &G, divisor: &mut HashMap<VertexID, i32>, v: VertexID) {
@@ -152,6 +170,8 @@ mod tests {
         assert!(gonality_le(&cube, 5));
         assert!(gonality_le(&cube, 6));
         assert!(gonality_le(&cube, 7));
+        
+        assert_eq!(compute_gonality(&cube), Ok(4))
     }
     
     #[test]
@@ -172,5 +192,7 @@ mod tests {
         assert!(gonality_le(&tetra, 3));
         assert!(gonality_le(&tetra, 4));
         assert!(gonality_le(&tetra, 5));
+        
+        assert_eq!(compute_gonality(&tetra), Ok(3));
     }
 }
