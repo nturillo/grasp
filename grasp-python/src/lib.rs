@@ -6,12 +6,12 @@ use pyo3::exceptions::PyValueError;
 use grasp::graph::prelude::*;
 use grasp::graph::labeled_graph::{HashMapLabeledSimpleGraph, HashMapLabeledDiGraph, LabeledGraph, LabeledGraphMut};
 use grasp::algorithms::algo_traits::{AlgoTrait};
-use grasp::algorithms::search::{ShortestPath};
 use grasp::algorithms::connectivity;
 use grasp::graph::constructors::*;
 use grasp::algorithms::matchings::maximum_matching;
 use grasp::algorithms::trees::kruskal_mst;
 use grasp::algorithms::coloring::*;
+use grasp::algorithms::gonality::compute_gonality;
 
 #[pyclass(name = "SparseGraph")]
 #[derive(Debug)]
@@ -249,6 +249,10 @@ impl PySparseGraph {
 
     fn clique_number(&self) -> usize {
         clique_number(&self.inner)
+    }
+
+    fn gonality(&self) -> PyResult<usize> {
+        compute_gonality(&self.inner).map_err(graph_error_to_py)
     }
 }
 
@@ -522,6 +526,10 @@ impl PyLabeledSimpleGraph {
 
     fn clique_number(&self) -> usize {
         clique_number(&self.inner)
+    }
+
+    fn gonality(&self) -> PyResult<usize> {
+        compute_gonality(&self.inner).map_err(graph_error_to_py)
     }
 }
 
