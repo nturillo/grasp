@@ -40,6 +40,7 @@ impl Sandbox {
                 / self.screen_rect.size()
     }
 
+    #[allow(dead_code)]
     pub fn sandbox_dist_to_screen_dist(&self, sandbox_dist: Vec2) -> Vec2 {
         sandbox_dist * self.screen_rect.size() / (self.size * self.scale)
     }

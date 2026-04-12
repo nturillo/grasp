@@ -1,5 +1,5 @@
 use eframe::egui::{Popup, Response, Ui};
-use grasp::graph::{EdgeID, EdgeType, VertexID};
+use grasp::graph::{EdgeID, VertexID};
 
 use crate::{
     frame::sandbox::Sandbox, graph::storage::Graph
