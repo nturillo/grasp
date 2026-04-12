@@ -18,3 +18,4 @@ xml = ["dep:quick-xml"]
 [dev-dependencies]
 gdraw = {path = "../gdraw"}
 eframe = "0.33.3"
+rusqlite = "0.39.0"
