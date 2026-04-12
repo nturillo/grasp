@@ -1,6 +1,6 @@
 use crate::graph::layout::{PartialLayout};
 use eframe::egui::{Color32, Vec2};
-use grasp::graph::{AnyVertexGraph, EdgeID, EdgeType, GraphMut, GraphTrait, VertexID, adjacency_list::SparseDiGraph, prelude::{DigraphProjection, LabeledGraph}, set::Set};
+use grasp::graph::{AnyVertexGraph, EdgeID, EdgeType, GraphMut, GraphTrait, VertexID, adjacency_list::SparseDiGraph, graph_ops::SubgraphView, prelude::{DigraphProjection, LabeledGraph}, set::Set};
 use std::{
     collections::HashMap,
 };
@@ -257,6 +257,32 @@ where G::VertexData: std::fmt::Debug,
             vertex_pair: (edge.0, edge.1),
             color: Default::default(),
             data: Some(g.get_edge_label(edge).map_or(String::new(), |d| format!("{:?}", d))),
+        });
+    }
+
+    graph.is_labeled = true;
+    graph
+}
+
+pub fn from_labeled_subgraph<G: LabeledGraph>(g: &SubgraphView<G>) -> Graph 
+where G::VertexData: std::fmt::Debug,
+    G::EdgeData: std::fmt::Debug, {
+    let mut graph = Graph::default();
+
+    for vertex_id in g.vertices() {
+        graph.insert_vertex(Vertex {
+            id: vertex_id,
+            center: Default::default(),
+            color: Default::default(),
+            data: Some(g.underlying().get_vertex_label(vertex_id).map_or(String::new(), |d| format!("{:?}", d))),
+        });
+    }
+
+    for edge in g.edges() {
+        graph.insert_edge(Edge {
+            vertex_pair: (edge.0, edge.1),
+            color: Default::default(),
+            data: Some(g.underlying().get_edge_label(edge).map_or(String::new(), |d| format!("{:?}", d))),
         });
     }
 

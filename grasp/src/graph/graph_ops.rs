@@ -281,6 +281,10 @@ impl<'a, G: GraphTrait> SubgraphView<'a, G>{
         }
         Self{graph, vertices, edges, directed}
     }
+
+    pub fn underlying(&self) -> &G {
+        self.graph
+    }
 }
 impl<'a, G: GraphTrait> GraphTrait for SubgraphView<'a, G>{
     fn vertex_count(&self) -> usize {

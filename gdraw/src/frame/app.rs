@@ -4,13 +4,13 @@ use crate::{
     },
     graph::{
         layout::{self, LayoutConfig},
-        storage::{Graph, from_labeled},
+        storage::Graph,
     },
 };
 use eframe::{egui::{
     self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Rect, Sense, Stroke, TopBottomPanel, Vec2, Window
 }};
-use grasp::graph::{EdgeID, GraphTrait, VertexID, prelude::{LabeledGraph, SparseDiGraph}, set::Set};
+use grasp::graph::{EdgeID, GraphTrait, VertexID, graph_ops::SubgraphView, prelude::{LabeledGraph, SparseDiGraph}, set::Set};
 
 pub struct GraspApp {
     pub style: Style,
@@ -64,7 +64,16 @@ impl GraspApp {
     where 
         T::VertexData: std::fmt::Debug,
         T::EdgeData: std::fmt::Debug, {
-        self.graph = from_labeled(graph);
+        self.graph = crate::graph::storage::from_labeled(graph);
+        layout::apply(&mut self.graph);
+    }
+
+    /// Loads a subgraph from anything that implements [`grasp::graph::labeled_graph::LabeledGraph`] where the label types implement [`std::fmt::Debug`]
+    pub fn load_labeled_subgraph<T: LabeledGraph>(&mut self, graph: &SubgraphView<T>) 
+    where 
+        T::VertexData: std::fmt::Debug,
+        T::EdgeData: std::fmt::Debug, {
+        self.graph = crate::graph::storage::from_labeled_subgraph(graph);
         layout::apply(&mut self.graph);
     }
 
