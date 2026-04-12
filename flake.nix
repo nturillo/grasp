@@ -12,12 +12,13 @@
 
   outputs = inputs: with inputs;
     flake-utils.lib.eachDefaultSystem (system: let
-      rt = fenix.packages.${system}.stable.withComponents [
+      rt = fenix.packages.${system}.latest.withComponents [
         "cargo"
         "clippy"
         "rust-src"
         "rustc"
         "rustfmt"
+        "rust-analyzer"
       ];
       pkgs = import nixpkgs {inherit system;};
     in {
@@ -32,7 +33,6 @@
           rt
           git
           mold
-          rust-analyzer
           python312
         ];
         buildInputs = with pkgs; [

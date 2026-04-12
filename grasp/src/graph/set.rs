@@ -1,5 +1,7 @@
 use std::{borrow::Cow, collections::HashSet, hash::Hash, iter::Map, marker::PhantomData, ops::Range};
 
+use bimap::BiHashMap;
+
 pub trait Set {
     type Item: Eq+Clone;
 
@@ -25,6 +27,11 @@ pub trait Set {
         Self: Sized, Self::Item: Clone, B: Eq+Clone, F: Fn(Cow<Self::Item>)->B, G: Fn(&B) -> Self::Item
     {
         SetBijection::new(self, map_to, map_from)
+    }
+    fn with_bimap(self, map: &'_ BiHashMap<Self::Item, Self::Item>) -> BiMappedSet<'_, Self> where 
+        Self: Sized, Self::Item: Hash
+    {
+        BiMappedSet::new(self, map)
     }
 
     fn union_with(self, other: impl Set<Item = Self::Item>) -> impl Set<Item = Self::Item> 
@@ -163,6 +170,27 @@ where
     }
     fn iter<'a>(&'a self) -> impl Iterator<Item = Cow<'a, Self::Item>> {
         self.set.iter().map(|a| Cow::Owned((self.map_to)(a)))
+    }
+}
+
+pub struct BiMappedSet<'a, S: Set>{
+    set: S,
+    /// Map from set item to mapped item
+    map: &'a BiHashMap<S::Item, S::Item>,
+}
+impl<'a, S: Set> BiMappedSet<'a, S>{
+    pub fn new(set: S, map: &'a BiHashMap<S::Item, S::Item>) -> Self{Self{set, map}}
+}
+impl<'m, S: Set> Set for BiMappedSet<'m, S>
+where S::Item: Hash,
+{
+    type Item = S::Item;
+    fn contains(&self, v: &Self::Item) -> bool {
+        let Some(item) = self.map.get_by_right(v) else {return false;};
+        self.set.contains(item)
+    }
+    fn iter<'a>(&'a self) -> impl Iterator<Item = Cow<'a, Self::Item>> {
+        self.set.iter().filter_map(|v| self.map.get_by_left(&v)).cow_borrowed()
     }
 }
 

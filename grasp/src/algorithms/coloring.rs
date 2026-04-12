@@ -150,7 +150,7 @@ pub fn chromatic_number_bounded<G: SimpleGraph>(g: &G, lower_bound: usize, upper
 #[register(name = "Clique Number", desc = "Get the clique number.", ret = String, simple = "true", params = [])]
 /// Find the clique number of a simple graph with the Bron-Kerbosch algorithm.
 pub fn clique_number<G: SimpleGraph>(g: &G) -> usize {
-    let mut p: HashSet<VertexID> = g.vertex_set().iter().map(|v| v.into_owned()).collect();
+    let mut p: HashSet<VertexID> = g.vertex_set().iter().map(|c| *c).collect();
     let mut x: HashSet<VertexID> = HashSet::new();
     let mut out: usize = 0;
 
@@ -170,7 +170,7 @@ pub fn clique_number<G: SimpleGraph>(g: &G) -> usize {
             r.insert(v);
 
             let neigh = g.neighbors(v);
-            out = out.max(bron_kerbosch(g, r, p.clone().intersection_with(&neigh).iter().map(|v| v.into_owned()).collect(), x.clone().intersection_with(&neigh).iter().map(|v| v.into_owned()).collect()));
+            out = out.max(bron_kerbosch(g, r, p.clone().intersection_with(&neigh).iter().map(|c| *c).collect(), x.clone().intersection_with(&neigh).iter().map(|c| *c).collect()));
 
             p.remove(&v);
             x.insert(v);
@@ -187,7 +187,7 @@ pub fn clique_number<G: SimpleGraph>(g: &G) -> usize {
         r.insert(v);
 
         let neigh = g.neighbors(v);
-        out = out.max(bron_kerbosch(g, r, p.clone().intersection_with(&neigh).iter().map(|v| v.into_owned()).collect(), x.clone().intersection_with(&neigh).iter().map(|v| v.into_owned()).collect()));
+        out = out.max(bron_kerbosch(g, r, p.clone().intersection_with(&neigh).iter().map(|c| *c).collect(), x.clone().intersection_with(&neigh).iter().map(|c| *c).collect()));
 
         p.remove(&v);
         x.insert(v);

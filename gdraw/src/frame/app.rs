@@ -14,7 +14,7 @@ use grasp::graph::{EdgeID, GraphTrait, VertexID, prelude::{LabeledGraph, SparseD
 
 pub struct GraspApp {
     pub style: Style,
-    graph: Graph,
+    pub graph: Graph,
     pub window_size: (f32, f32),
 }
 

@@ -1,11 +1,17 @@
+use std::collections::HashMap;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use pyo3::exceptions::PyValueError;
 
 use grasp::graph::prelude::*;
-use grasp::graph::labeled_graph::{HashMapLabeledSimpleGraph, LabeledGraph, LabeledGraphMut};
+use grasp::graph::labeled_graph::{HashMapLabeledSimpleGraph, HashMapLabeledDiGraph, LabeledGraph, LabeledGraphMut};
 use grasp::algorithms::algo_traits::{AlgoTrait};
-use grasp::algorithms::search::ShortestPath;
+use grasp::algorithms::connectivity;
+use grasp::graph::constructors::*;
+use grasp::algorithms::matchings::maximum_matching;
+use grasp::algorithms::trees::kruskal_mst;
+use grasp::algorithms::coloring::*;
+use grasp::algorithms::gonality::compute_gonality;
 
 #[pyclass(name = "SparseGraph")]
 #[derive(Debug)]
@@ -96,122 +102,27 @@ impl PySparseGraph {
             .map_err(graph_error_to_py)
     }
 
-    fn dijkstra(&self, source: usize, weights: std::collections::HashMap<(usize, usize), f64>) -> PyResult<(std::collections::HashMap<usize, f64>, std::collections::HashMap<usize, usize>)> {
-        let weight_fn = move |_g: &SparseSimpleGraph, edge: EdgeID| -> Option<f64> {
-            let (u, v) = edge;
+    fn dijkstra(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        self.inner.dijkstra(source).map_err(graph_error_to_py)
+    }
+
+    fn astar(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
+        self.inner.astar(source, target).map_err(graph_error_to_py)
+    }
+
+    fn kruskal(&self, weights: HashMap<(usize, usize), f64>) -> PyResult<(Vec<(usize, usize)>, f64)> {
+        let mst = kruskal_mst(&self.inner, |_, e| {
             weights
-                .get(&(u, v))
+                .get(&e)
                 .copied()
-                .or_else(|| weights.get(&(v, u)).copied())
-        };
+                .or_else(|| weights.get(&(e.1, e.0)).copied())
+        })
+        .map_err(graph_error_to_py)?;
 
-        let mut iter = self
-            .inner
-            .dijkstra_iter(source, weight_fn)
-            .map_err(graph_error_to_py)?;
+        let total: f64 = mst.iter().map(|(_, _, w)| *w).sum();
+        let edges = mst.into_iter().map(|(u, v, _)| (u, v)).collect();
 
-        let mut distances = std::collections::HashMap::new();
-
-        while let Some(result) = iter.next() {
-            let (v, d) = result.map_err(graph_error_to_py)?;
-            distances.insert(v, d);
-        }
-
-        let mut predecessors = std::collections::HashMap::new();
-        for (k, v) in iter.predecessors().iter() {
-            predecessors.insert(*k, *v);
-        }
-
-        Ok((distances, predecessors))
-    }
-
-    fn astar(&self, _py: Python, source: usize, target: usize, weights: std::collections::HashMap<(usize, usize), f64>, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
-
-        let weight_fn = move |_g: &SparseSimpleGraph, edge: EdgeID| -> Option<f64> {
-            weights.get(&edge)
-                .copied()
-                .or_else(|| weights.get(&(edge.1, edge.0)).copied())
-        };
-
-        let heuristic_fn = move |v: usize| -> f64 {
-            Python::with_gil(|py| {
-                heuristic.call1(py, (v,))
-                    .and_then(|res| res.extract::<f64>(py))
-                    .unwrap_or(0.0)
-            })
-        };
-
-        let mut iter = self.inner
-            .astar_iter(source, target, weight_fn, heuristic_fn)
-            .map_err(graph_error_to_py)?;
-
-        let mut last = None;
-
-        while let Some(res) = iter.next() {
-            last = Some(res.map_err(graph_error_to_py)?);
-        }
-
-        let (end, cost) = last.ok_or_else(|| PyValueError::new_err("No path found"))?;
-
-        let mut path = vec![end];
-        let mut current = end;
-
-        while let Some(&p) = iter.predecessors().get(&current) {
-            path.push(p);
-            current = p;
-        }
-
-        path.reverse();
-
-        Ok((path, cost))
-    }
-
-    fn kruskal(&self, _py: Python, weights: std::collections::HashMap<(usize, usize), f64>) -> PyResult<(Vec<(usize, usize)>, f64)> {
-        let mut parent: std::collections::HashMap<usize, usize> =
-            self.inner.vertices().map(|v| (v, v)).collect();
-
-        fn find(parent: &mut std::collections::HashMap<usize, usize>, x: usize) -> usize {
-            if parent[&x] != x {
-                let root = find(parent, parent[&x]);
-                parent.insert(x, root);
-            }
-            parent[&x]
-        }
-
-        fn union(parent: &mut std::collections::HashMap<usize, usize>, a: usize, b: usize) {
-            let pa = find(parent, a);
-            let pb = find(parent, b);
-            if pa != pb {
-                parent.insert(pa, pb);
-            }
-        }
-
-        let mut edges: Vec<_> = self.inner.edges().collect();
-
-        edges.sort_by(|&(u1,v1), &(u2,v2)| {
-            let w1 = weights.get(&(u1,v1)).or(weights.get(&(v1,u1))).unwrap_or(&f64::INFINITY);
-            let w2 = weights.get(&(u2,v2)).or(weights.get(&(v2,u2))).unwrap_or(&f64::INFINITY);
-            w1.partial_cmp(w2).unwrap()
-        });
-
-        let mut mst = Vec::new();
-        let mut total = 0.0;
-
-        for (u, v) in edges {
-            if find(&mut parent, u) != find(&mut parent, v) {
-                union(&mut parent, u, v);
-
-                let w = weights.get(&(u,v))
-                    .or(weights.get(&(v,u)))
-                    .copied()
-                    .unwrap_or(0.0);
-
-                mst.push((u,v));
-                total += w;
-            }
-        }
-
-        Ok((mst, total))
+        Ok((edges, total))
     }
 
     fn subgraph_vertex(&self, vertices: Vec<usize>, py: Python) -> PyResult<PyObject> {
@@ -276,8 +187,72 @@ impl PySparseGraph {
         Ok((product_obj, dict_map.into_py(py)))
     }
 
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("PySparseGraph(vertices={}, edges={})", self.inner.vertex_count(), self.inner.edge_count()))
+    fn is_connected(&self) -> bool {
+        connectivity::is_connected(&self.inner)
+    }
+
+    fn cut_vertices(&self) -> Vec<usize> {
+        connectivity::cut_vertices(&self.inner).into_iter().collect()
+    }
+
+    fn bridges(&self) -> Vec<(usize, usize)> {
+        connectivity::bridges(&self.inner).into_iter().collect()
+    }
+
+    fn edge_connectivity(&self) -> u32 {
+        connectivity::edge_connectivity(&self.inner)
+    }
+
+    fn vertex_connectivity(&self) -> u32 {
+        connectivity::vertex_connectivity(&self.inner)
+    }
+
+    fn is_complete(&self) -> bool {
+        connectivity::simple_graph_is_complete(&self.inner)
+    }
+
+    fn maximum_matching(&self) -> Vec<(usize, usize)> {
+        let matching = maximum_matching(&self.inner);
+        matching.edges().collect()
+    }
+
+    fn dsatur_coloring(&self) -> Vec<Vec<usize>> {
+        let coloring = dsatur(&self.inner);
+        coloring.into_iter()
+            .map(|set| set.iter().map(|v| v.into_owned()).collect::<Vec<usize>>())
+            .collect()
+    }
+
+    /// Returns the chromatic number via backtracking with an upper bound.
+    fn chromatic_number_upper(&self, upper_bound: usize) -> PyResult<Vec<Vec<usize>>> {
+        chromatic_number_upper_bound(&self.inner, upper_bound)
+            .map(|coloring| coloring.into_iter()
+                .map(|set| set.iter().map(|v| v.into_owned()).collect::<Vec<usize>>())
+                .collect())
+            .map_err(|_| PyValueError::new_err("Could not find chromatic number within bounds"))
+    }
+
+    fn chromatic_number_lower_bound(&self, lower_bound: usize) -> Vec<Vec<usize>> {
+        chromatic_number_lower_bound(&self.inner, lower_bound)
+            .into_iter()
+            .map(|set| set.iter().map(|v| v.into_owned()).collect::<Vec<usize>>())
+            .collect::<Vec<Vec<usize>>>()
+    }
+
+    fn chromatic_number_bounded(&self, lower_bound: usize, upper_bound: usize) -> PyResult<Vec<Vec<usize>>> {
+        chromatic_number_bounded(&self.inner, lower_bound, upper_bound)
+            .map(|coloring| coloring.into_iter()
+                .map(|set| set.iter().map(|v| v.into_owned()).collect::<Vec<usize>>())
+                .collect())
+            .map_err(|_| PyValueError::new_err("Could not find chromatic number within bounds"))
+    }
+
+    fn clique_number(&self) -> usize {
+        clique_number(&self.inner)
+    }
+
+    fn gonality(&self) -> PyResult<usize> {
+        compute_gonality(&self.inner).map_err(graph_error_to_py)
     }
 }
 
@@ -360,16 +335,43 @@ impl PySparseDiGraph {
         let obj = Py::new(py, PySparseGraph { inner: simple })?;
         Ok(obj.into_py(py))
     }
+
+    fn dijkstra(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        self.inner.dijkstra(source).map_err(graph_error_to_py)
+    }
+
+    fn astar(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
+        self.inner.astar(source, target).map_err(graph_error_to_py)
+    }
+
+    fn is_weakly_connected(&self) -> bool {
+        connectivity::is_weakly_connected(&self.inner)
+    }
+
+    fn is_strongly_connected(&self) -> bool {
+        connectivity::is_strongly_connected(&self.inner)
+    }
+
+    fn strongly_connected_components(&self) -> Vec<Vec<usize>> {
+        connectivity::strongly_connected_components(&self.inner)
+            .into_iter()
+            .map(|scc| scc.into_iter().collect())
+            .collect()
+    }
+
+    fn is_complete(&self) -> bool {
+        connectivity::digraph_is_complete(&self.inner)
+    }
 }
 
-#[pyclass(name = "LabeledGraph")]
+#[pyclass(name = "LabeledSimpleGraph")]
 #[derive(Debug)]
-pub struct PyLabeledGraph {
+pub struct PyLabeledSimpleGraph {
     inner: HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>,
 }
 
 #[pymethods]
-impl PyLabeledGraph {
+impl PyLabeledSimpleGraph {
     #[new]
     fn new() -> Self {
         Self {
@@ -397,7 +399,6 @@ impl PyLabeledGraph {
         if !self.inner.has_vertex(v) {
             return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
         }
-
         self.inner.set_vertex_label(v, label.clone_ref(py));
         Ok(())
     }
@@ -410,7 +411,6 @@ impl PyLabeledGraph {
         if !self.inner.has_edge((u, v)) {
             return Err(PyValueError::new_err(format!("Edge ({},{}) not in graph", u, v)));
         }
-
         self.inner.set_edge_label((u, v), label.clone_ref(py));
         Ok(())
     }
@@ -421,21 +421,17 @@ impl PyLabeledGraph {
 
     fn vertex_labels(&self, py: Python) -> PyResult<PyObject> {
         let dict = PyDict::new_bound(py);
-
         for (v, label) in self.inner.vertex_labels() {
             dict.set_item(v, label.clone_ref(py))?;
         }
-
         Ok(dict.into_py(py))
     }
 
     fn edge_labels(&self, py: Python) -> PyResult<PyObject> {
         let dict = PyDict::new_bound(py);
-
         for ((u, v), label) in self.inner.edge_labels() {
             dict.set_item((u, v), label.clone_ref(py))?;
         }
-
         Ok(dict.into_py(py))
     }
 
@@ -447,127 +443,287 @@ impl PyLabeledGraph {
         Ok(self.inner.remove_edge_label((u, v)).map(|obj| obj.clone_ref(py)))
     }
 
-    fn dijkstra(&self, py: Python, source: usize) -> PyResult<(PyObject, PyObject)> {
-        let weight_fn = |g: &HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| -> Option<f64> {
-            g.get_edge_label(e)
-                .and_then(|obj| obj.extract::<f64>(py).ok())
-        };
-
-        let mut iter = self.inner
-            .dijkstra_iter(source, weight_fn)
-            .map_err(graph_error_to_py)?;
-
-        let mut dist = std::collections::HashMap::new();
-
-        while let Some(res) = iter.next() {
-            let (v, d) = res.map_err(graph_error_to_py)?;
-            dist.insert(v, d);
-        }
-
-        let mut prev = std::collections::HashMap::new();
-        for (k, v) in iter.predecessors() {
-            prev.insert(*k, *v);
-        }
-
-        let py_dist = PyDict::new_bound(py);
-        for (k, v) in dist {
-            py_dist.set_item(k, v)?;
-        }
-
-        let py_prev = PyDict::new_bound(py);
-        for (k, v) in prev {
-            py_prev.set_item(k, v)?;
-        }
-
-        Ok((py_dist.into_py(py), py_prev.into_py(py)))
+    fn dijkstra(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        self.inner.dijkstra(source).map_err(graph_error_to_py)
     }
 
-    fn astar(&self, py: Python, source: usize, target: usize, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
-        let weight_fn = |g: &HashMapLabeledSimpleGraph<SparseSimpleGraph, PyObject, PyObject>, e: EdgeID| -> Option<f64> {
-            g.get_edge_label(e)
-                .and_then(|obj| obj.extract::<f64>(py).ok())
-        };
-
-        let heuristic_fn = move |v: usize| -> f64 {
-            Python::with_gil(|py| {
-                heuristic.call1(py, (v,))
-                    .and_then(|res| res.extract::<f64>(py))
-                    .unwrap_or(0.0)
-            })
-        };
-
-        let mut iter = self.inner
-            .astar_iter(source, target, weight_fn, heuristic_fn)
-            .map_err(graph_error_to_py)?;
-
-        let mut last = None;
-
-        while let Some(res) = iter.next() {
-            last = Some(res.map_err(graph_error_to_py)?);
-        }
-
-        let (end, cost) = last.ok_or_else(|| PyValueError::new_err("No path found"))?;
-
-        let mut path = vec![end];
-        let mut current = end;
-
-        while let Some(&p) = iter.predecessors().get(&current) {
-            path.push(p);
-            current = p;
-        }
-
-        path.reverse();
-
-        Ok((path, cost))
+    fn astar(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
+        self.inner.astar(source, target).map_err(graph_error_to_py)
     }
 
-    fn kruskal(&self, py: Python, weights: std::collections::HashMap<(usize, usize), f64>) -> PyResult<(Vec<(usize, usize)>, f64)> {
-        let mut parent: std::collections::HashMap<usize, usize> =
-            self.inner.vertices().map(|v| (v, v)).collect();
+    fn kruskal(&self, py: Python) -> PyResult<(Vec<(usize, usize)>, f64)> {
+        let mst = kruskal_mst(&self.inner, |g, e| {
+            g.get_edge_label(e)
+                .and_then(|obj| obj.extract::<f64>(py).ok())
+        })
+        .map_err(graph_error_to_py)?;
 
-        fn find(parent: &mut std::collections::HashMap<usize, usize>, x: usize) -> usize {
-            if parent[&x] != x {
-                let root = find(parent, parent[&x]);
-                parent.insert(x, root);
-            }
-            parent[&x]
-        }
+        let total: f64 = mst.iter().map(|(_, _, w)| *w).sum();
+        let edges = mst.into_iter().map(|(u, v, _)| (u, v)).collect();
 
-        fn union(parent: &mut std::collections::HashMap<usize, usize>, a: usize, b: usize) {
-            let pa = find(parent, a);
-            let pb = find(parent, b);
-            if pa != pb {
-                parent.insert(pa, pb);
-            }
-        }
+        Ok((edges, total))
+    }
 
-        let mut edges: Vec<_> = self.inner.edges().collect();
+    fn is_connected(&self) -> bool {
+        connectivity::is_connected(&self.inner)
+    }
 
-        edges.sort_by(|&(u1,v1), &(u2,v2)| {
-            let w1 = weights.get(&(u1,v1)).or(weights.get(&(v1,u1))).unwrap_or(&f64::INFINITY);
-            let w2 = weights.get(&(u2,v2)).or(weights.get(&(v2,u2))).unwrap_or(&f64::INFINITY);
-            w1.partial_cmp(w2).unwrap()
-        });
+    fn cut_vertices(&self) -> Vec<usize> {
+        connectivity::cut_vertices(&self.inner).into_iter().collect()
+    }
 
-        let mut mst = Vec::new();
-        let mut total = 0.0;
+    fn bridges(&self) -> Vec<(usize, usize)> {
+        connectivity::bridges(&self.inner).into_iter().collect()
+    }
 
-        for (u, v) in edges {
-            if find(&mut parent, u) != find(&mut parent, v) {
-                union(&mut parent, u, v);
+    fn edge_connectivity(&self) -> u32 {
+        connectivity::edge_connectivity(&self.inner)
+    }
 
-                let w = self.inner.get_edge_label((u,v))
-                    .and_then(|obj| obj.extract::<f64>(py).ok())
-                    .unwrap_or(f64::INFINITY);
+    fn vertex_connectivity(&self) -> u32 {
+        connectivity::vertex_connectivity(&self.inner)
+    }
 
-                mst.push((u,v));
-                total += w;
-            }
-        }
+    fn is_complete(&self) -> bool {
+        connectivity::simple_graph_is_complete(&self.inner)
+    }
 
-        Ok((mst, total))
+    fn maximum_matching(&self) -> Vec<(usize, usize)> {
+        let matching = maximum_matching(&self.inner);
+        matching.edges().collect()
+    }
+
+    fn dsatur_coloring(&self) -> Vec<Vec<usize>> {
+        let coloring = dsatur(&self.inner);
+        coloring.into_iter()
+            .map(|set| set.iter().map(|v| v.into_owned()).collect::<Vec<usize>>())
+            .collect()
+    }
+
+    /// Returns the chromatic number via backtracking with an upper bound.
+    fn chromatic_number_upper(&self, upper_bound: usize) -> PyResult<Vec<Vec<usize>>> {
+        chromatic_number_upper_bound(&self.inner, upper_bound)
+            .map(|coloring| coloring.into_iter()
+                .map(|set| set.iter().map(|v| v.into_owned()).collect::<Vec<usize>>())
+                .collect())
+            .map_err(|_| PyValueError::new_err("Could not find chromatic number within bounds"))
+    }
+
+    fn chromatic_number_lower_bound(&self, lower_bound: usize) -> Vec<Vec<usize>> {
+        chromatic_number_lower_bound(&self.inner, lower_bound)
+            .into_iter()
+            .map(|set| set.iter().map(|v| v.into_owned()).collect::<Vec<usize>>())
+            .collect::<Vec<Vec<usize>>>()
+    }
+
+    fn chromatic_number_bounded(&self, lower_bound: usize, upper_bound: usize) -> PyResult<Vec<Vec<usize>>> {
+        chromatic_number_bounded(&self.inner, lower_bound, upper_bound)
+            .map(|coloring| coloring.into_iter()
+                .map(|set| set.iter().map(|v| v.into_owned()).collect::<Vec<usize>>())
+                .collect())
+            .map_err(|_| PyValueError::new_err("Could not find chromatic number within bounds"))
+    }
+
+    fn clique_number(&self) -> usize {
+        clique_number(&self.inner)
+    }
+
+    fn gonality(&self) -> PyResult<usize> {
+        compute_gonality(&self.inner).map_err(graph_error_to_py)
     }
 }
+
+#[pyclass(name = "LabeledDiGraph")]
+#[derive(Debug)]
+pub struct PyLabeledDiGraph {
+    inner: HashMapLabeledDiGraph<SparseDiGraph, PyObject, PyObject>,
+}
+
+#[pymethods]
+impl PyLabeledDiGraph {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: HashMapLabeledDiGraph::default(),
+        }
+    }
+
+    fn add_vertex(&mut self, v: usize) {
+        self.inner.add_vertex(v);
+    }
+
+    fn add_edge(&mut self, u: usize, v: usize) {
+        self.inner.add_edge((u, v));
+    }
+
+    fn vertices(&self) -> Vec<usize> {
+        self.inner.vertices().collect()
+    }
+
+    fn edges(&self) -> Vec<(usize, usize)> {
+        self.inner.edges().collect()
+    }
+
+    fn set_vertex_label(&mut self, py: Python, v: usize, label: PyObject) -> PyResult<()> {
+        if !self.inner.has_vertex(v) {
+            return Err(PyValueError::new_err(format!("Vertex {} not in graph", v)));
+        }
+        self.inner.set_vertex_label(v, label.clone_ref(py));
+        Ok(())
+    }
+
+    fn get_vertex_label(&self, py: Python, v: usize) -> PyResult<Option<PyObject>> {
+        Ok(self.inner.get_vertex_label(v).map(|obj| obj.clone_ref(py)))
+    }
+
+    fn set_edge_label(&mut self, py: Python, u: usize, v: usize, label: PyObject) -> PyResult<()> {
+        if !self.inner.has_edge((u, v)) {
+            return Err(PyValueError::new_err(format!("Edge ({},{}) not in graph", u, v)));
+        }
+        self.inner.set_edge_label((u, v), label.clone_ref(py));
+        Ok(())
+    }
+
+    fn get_edge_label(&self, py: Python, u: usize, v: usize) -> PyResult<Option<PyObject>> {
+        Ok(self.inner.get_edge_label((u, v)).map(|obj| obj.clone_ref(py)))
+    }
+
+    fn vertex_labels(&self, py: Python) -> PyResult<PyObject> {
+        let dict = PyDict::new_bound(py);
+        for (v, label) in self.inner.vertex_labels() {
+            dict.set_item(v, label.clone_ref(py))?;
+        }
+        Ok(dict.into_py(py))
+    }
+
+    fn edge_labels(&self, py: Python) -> PyResult<PyObject> {
+        let dict = PyDict::new_bound(py);
+        for ((u, v), label) in self.inner.edge_labels() {
+            dict.set_item((u, v), label.clone_ref(py))?;
+        }
+        Ok(dict.into_py(py))
+    }
+
+    fn remove_vertex_label(&mut self, py: Python, v: usize) -> PyResult<Option<PyObject>> {
+        Ok(self.inner.remove_vertex_label(v).map(|obj| obj.clone_ref(py)))
+    }
+
+    fn remove_edge_label(&mut self, py: Python, u: usize, v: usize) -> PyResult<Option<PyObject>> {
+        Ok(self.inner.remove_edge_label((u, v)).map(|obj| obj.clone_ref(py)))
+    }
+
+    fn dijkstra(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        self.inner.dijkstra(source).map_err(graph_error_to_py)
+    }
+
+    fn astar(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
+        self.inner.astar(source, target).map_err(graph_error_to_py)
+    }
+
+    fn is_weakly_connected(&self) -> bool {
+        connectivity::is_weakly_connected(&self.inner.graph)
+    }
+
+    fn is_strongly_connected(&self) -> bool {
+        connectivity::is_strongly_connected(&self.inner)
+    }
+
+    fn strongly_connected_components(&self) -> Vec<Vec<usize>> {
+        connectivity::strongly_connected_components(&self.inner)
+            .into_iter()
+            .map(|scc| scc.into_iter().collect())
+            .collect()
+    }
+
+    fn is_complete(&self) -> bool {
+        connectivity::digraph_is_complete(&self.inner)
+    }
+}
+
+#[pyfunction]
+fn simple_complete_graph(size: usize) -> PySparseGraph {
+    PySparseGraph {
+        inner: build_complete_graph::<SparseSimpleGraph>(size),
+    }
+}
+
+#[pyfunction]
+fn simple_cycle_graph(size: usize) -> PySparseGraph {
+    PySparseGraph {
+        inner: build_cycle::<SparseSimpleGraph>(size),
+    }
+}
+
+#[pyfunction]
+fn simple_path_graph(size: usize) -> PySparseGraph {
+    PySparseGraph {
+        inner: build_path::<SparseSimpleGraph>(size),
+    }
+}
+
+#[pyfunction]
+fn simple_binary_tree(layers: usize) -> PySparseGraph {
+    PySparseGraph {
+        inner: build_binary_tree::<SparseSimpleGraph>(layers),
+    }
+}
+
+#[pyfunction]
+fn simple_bowtie_graph() -> PySparseGraph {
+    PySparseGraph {
+        inner: build_bowtie::<SparseSimpleGraph>(),
+    }
+}
+
+#[pyfunction]
+fn simple_partite_graph(groups: Vec<usize>) -> PySparseGraph {
+    PySparseGraph {
+        inner: build_partite_graph::<SparseSimpleGraph>(groups),
+    }
+}
+
+#[pyfunction]
+fn directional_complete_graph(size: usize) -> PySparseDiGraph {
+    PySparseDiGraph {
+        inner: build_complete_graph::<SparseDiGraph>(size),
+    }
+}
+
+#[pyfunction]
+fn directional_cycle_graph(size: usize) -> PySparseDiGraph {
+    PySparseDiGraph {
+        inner: build_cycle::<SparseDiGraph>(size),
+    }
+}
+
+#[pyfunction]
+fn directional_path_graph(size: usize) -> PySparseDiGraph {
+    PySparseDiGraph {
+        inner: build_path::<SparseDiGraph>(size),
+    }
+}
+
+#[pyfunction]
+fn directional_binary_tree(layers: usize) -> PySparseDiGraph {
+    PySparseDiGraph {
+        inner: build_binary_tree::<SparseDiGraph>(layers),
+    }
+}
+
+#[pyfunction]
+fn directional_bowtie_graph() -> PySparseDiGraph {
+    PySparseDiGraph {
+        inner: build_bowtie::<SparseDiGraph>(),
+    }
+}
+
+#[pyfunction]
+fn directional_partite_graph(groups: Vec<usize>) -> PySparseDiGraph {
+    PySparseDiGraph {
+        inner: build_partite_graph::<SparseDiGraph>(groups),
+    }
+}
+
 
 fn graph_error_to_py(err: GraphError) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(format!("{err:?}"))
@@ -578,6 +734,22 @@ fn graph_error_to_py(err: GraphError) -> PyErr {
 fn grasp_lib(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySparseGraph>()?;
     m.add_class::<PySparseDiGraph>()?;
-    m.add_class::<PyLabeledGraph>()?;
+    m.add_class::<PyLabeledSimpleGraph>()?;
+    m.add_class::<PyLabeledDiGraph>()?;
+    
+    m.add_function(wrap_pyfunction!(simple_complete_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(simple_cycle_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(simple_path_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(simple_binary_tree, m)?)?;
+    m.add_function(wrap_pyfunction!(simple_bowtie_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(simple_partite_graph, m)?)?;
+
+    m.add_function(wrap_pyfunction!(directional_complete_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(directional_cycle_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(directional_path_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(directional_binary_tree, m)?)?;
+    m.add_function(wrap_pyfunction!(directional_bowtie_graph, m)?)?;
+    m.add_function(wrap_pyfunction!(directional_partite_graph, m)?)?;
+
     Ok(())
 }
