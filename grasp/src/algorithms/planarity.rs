@@ -1481,13 +1481,26 @@ mod test{
                 let (x3, y3) = positions[&u_a];
                 let (x4, y4) = positions[&u_b];
                 let denom = (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4);
+                if denom == 0.0 {
+                    // Cant intersect lines, unsure non colinear, or non overlapping
+                    println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), are vertical", x1, y1, x2, y2, x3, y3, x4, y4);
+                    if x1!=x3 {continue;}
+                    let (a1, b1) = (y1.min(y2), y1.max(y2));
+                    let (a2, b2) = (y3.min(y4), y3.max(y4));
+                    let start = a1.max(b1); let end = a2.min(b2);
+                    assert!(end-start < EPSILON);
+                    continue;
+                }
                 let x = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4)) / denom;
                 let y = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4)) / denom;
-                // Insure intersection occurs out of segment bounds
-                assert!(x-x1.max(x1)>-EPSILON || x - x1.min(x2)<EPSILON);
-                assert!(x-x3.max(x4)>-EPSILON || x - x3.min(x4)<EPSILON);
-                assert!(y-y1.max(y1)>-EPSILON || y - y1.min(y2)<EPSILON);
-                assert!(y-y3.max(y4)>-EPSILON || y - y3.min(y4)<EPSILON);
+                println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), intersect at ({}, {})", x1, y1, x2, y2, x3, y3, x4, y4, x, y);
+                // Insure intersection occurs out of one of the segment bounds
+                assert!(
+                    x-x1.max(x2)>-EPSILON || x - x1.min(x2)<EPSILON ||
+                    x-x3.max(x4)>-EPSILON || x - x3.min(x4)<EPSILON ||
+                    y-y1.max(y2)>-EPSILON || y - y1.min(y2)<EPSILON ||
+                    y-y3.max(y4)>-EPSILON || y - y3.min(y4)<EPSILON
+                );
             }
         }
     }
