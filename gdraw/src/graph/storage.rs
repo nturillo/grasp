@@ -127,6 +127,17 @@ impl Graph {
         self.base.has_edge(pair) || (!self.directed && self.base.has_edge((pair.1, pair.0)))
     }
 
+    pub fn has_directed_edge(&self, pair: EdgeID) -> bool {
+        self.base.has_edge(pair)
+    }
+
+    pub fn verify_and_get_undirected_edge(&self, pair: EdgeID) -> Option<EdgeID> {
+        let simple_pair: (usize, usize) = if pair.0 < pair.1 {pair} else {pair.inv()};
+        if self.base.has_edge(simple_pair) {Some(simple_pair)}
+        else if self.base.has_edge(simple_pair.inv()) {Some(simple_pair.inv())}
+        else {None}
+    }
+
     pub fn remove_vertex(&mut self, vertex_id: VertexID) -> Option<Vertex> {
         self.reset_partial_data();
         match self.vertex_labels.remove(&vertex_id) {

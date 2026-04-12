@@ -91,6 +91,14 @@ pub fn view_menu(app: &mut GraspAppHandler, ui: &mut Ui) -> InnerResponse<Option
             });
         });
 
+        if app.graph.is_labeled && !app.style.display_edge_data && ui.button("Show Edge Data").clicked() {
+            app.style.display_edge_data = true;
+        }
+
+        if app.graph.is_labeled && app.style.display_edge_data && ui.button("Hide Edge Data").clicked() {
+            app.style.display_edge_data = false;
+        }
+
         ui.separator();
 
         if ui.button("Metrics").clicked() {

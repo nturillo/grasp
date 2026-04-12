@@ -25,6 +25,11 @@ pub fn settings_window(app: &mut GraspAppHandler, ui: &mut Ui) {
             ui.checkbox(&mut app.style.show_vertices, "");
         });
 
+        ui.horizontal(|ui| {
+            ui.label("Show Edge Data");
+            ui.checkbox(&mut app.style.display_edge_data, "");
+        });
+
         if app.style.show_vertices {
             ui.collapsing("Vertex Labels", |ui| {
                 if ui.checkbox(&mut app.style.display_ids, "Show IDs").clicked() && app.style.display_ids {
@@ -264,6 +269,23 @@ pub fn vertex_input_window(app: &mut GraspAppHandler, ui: &mut Ui) {
             if ui.button("Apply").clicked() && let Some(v) = app.show_vertex_input {
                 app.graph.vertex_labels.get_mut(&v).unwrap().data = Some(app.label.clone());
                 app.show_vertex_input = None;
+            }
+        });
+    });
+}
+
+pub fn edge_input_window(app: &mut GraspAppHandler, ui: &mut Ui) {
+    ui.text_edit_singleline(&mut app.label);
+    
+    ui.horizontal(|ui| {
+        if ui.button("Cancel").clicked() {
+            app.show_edge_input = None;
+        }
+
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            if ui.button("Apply").clicked() && let Some(e) = app.show_edge_input {
+                app.graph.edge_labels.get_mut(&e).unwrap().data = Some(app.label.clone());
+                app.show_edge_input = None;
             }
         });
     });

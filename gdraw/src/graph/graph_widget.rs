@@ -74,4 +74,11 @@ pub fn draw_edge(ui: &mut Ui, edge: &Edge, graph: &Graph, style: &Style, start_v
             Stroke::new(thickness, color),
         );
     }
+
+    if style.display_edge_data {
+        let midpoint = (start_vertex_center + end_vertex_center) / 2.0;
+        let offset = Vec2::new(-dir_vector.y, dir_vector.x);
+
+        ui.painter().text((midpoint + offset * style.vertex_radius / scale).to_pos2(), Align2::CENTER_CENTER, edge.data.clone().unwrap_or_default(), FontId::monospace(style.vertex_radius / scale), Color32::BLACK);
+    }
 }

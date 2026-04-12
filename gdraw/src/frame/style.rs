@@ -18,6 +18,7 @@ pub struct Style {
     pub scroll_sensitivity: f32,
     pub display_ids: bool,
     pub display_vertex_data: bool,
+    pub display_edge_data: bool,
 }
 
 impl Default for Style {
@@ -39,6 +40,7 @@ impl Default for Style {
             scroll_sensitivity: 0.01,
             display_ids: false,
             display_vertex_data: true,
+            display_edge_data: true,
         }
     }
 }

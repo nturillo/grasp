@@ -10,7 +10,7 @@ use crate::{
 use eframe::{egui::{
     self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Rect, Sense, Stroke, TopBottomPanel, Vec2, Window
 }};
-use grasp::graph::{GraphTrait, {VertexID, prelude::{LabeledGraph, SparseDiGraph}, set::Set}};
+use grasp::graph::{EdgeID, GraphTrait, VertexID, prelude::{LabeledGraph, SparseDiGraph}, set::Set};
 
 pub struct GraspApp {
     pub style: Style,
@@ -99,6 +99,7 @@ pub(crate) struct GraspAppHandler<'a> {
     pub show_settings: bool,
     pub show_metrics: bool,
     pub show_vertex_input: Option<VertexID>,
+    pub show_edge_input: Option<EdgeID>,
     pub func_window: FunctionWindow,
     pub vertex_focused: Option<VertexID>,
     pub dragged_vertex: Option<VertexID>,
@@ -117,6 +118,7 @@ impl<'a> GraspAppHandler<'a> {
             show_settings: false,
             show_metrics: false,
             show_vertex_input: None,
+            show_edge_input: None,
             func_window: Default::default(),
 
             vertex_focused: None,
@@ -156,6 +158,13 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                 .collapsible(false)
                 .resizable(false)
                 .show(ctx, |ui| windows::vertex_input_window(self, ui));
+        }
+
+        if self.show_edge_input.is_some() {
+            Window::new("Input Data")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| windows::edge_input_window(self, ui));
         }
 
         if self.func_window.visible {
@@ -224,7 +233,7 @@ impl<'a> eframe::App for GraspAppHandler<'a> {
                         );
 
             if let Some(id) = self.vertex_focused {
-                response.context_menu(|ui| vertex_context(self.graph, ui, &id, &mut self.show_vertex_input, &mut self.label));
+                response.context_menu(|ui| vertex_context(self.graph, ui, &id, &mut self.show_vertex_input, &mut self.show_edge_input, &mut self.label));
                 response.on_hover_text_at_pointer(format!("id: {}", id));
             } else {
                 response.context_menu(|ui| {

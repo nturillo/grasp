@@ -1,5 +1,5 @@
 use eframe::egui::{Popup, Response, Ui};
-use grasp::graph::VertexID;
+use grasp::graph::{EdgeID, EdgeType, VertexID};
 
 use crate::{
     frame::sandbox::Sandbox, graph::storage::Graph
@@ -66,11 +66,12 @@ fn vertex_context_try_get_pair(graph: &mut Graph, vertex_id: &usize) -> Option<(
     }
 }
 
-pub fn vertex_context(graph: &mut Graph, ui: &mut Ui, vertex_id: &usize, open_vertex_input: &mut Option<VertexID>, label: &mut String) {
+pub fn vertex_context(graph: &mut Graph, ui: &mut Ui, vertex_id: &usize, open_vertex_input: &mut Option<VertexID>, open_edge_input: &mut Option<EdgeID>, label: &mut String) {
     let maybe_pair = vertex_context_try_get_pair(graph, vertex_id);
 
-    if let Some(vertex_pair) = maybe_pair {
+    if let Some(mut vertex_pair) = maybe_pair {
         let is_edge = graph.has_edge(vertex_pair);
+        if is_edge && !graph.directed {vertex_pair = graph.verify_and_get_undirected_edge(vertex_pair).unwrap()}
 
         if !is_edge && ui.button("Connect").clicked() {
             graph.create_edge(vertex_pair);
@@ -79,6 +80,13 @@ pub fn vertex_context(graph: &mut Graph, ui: &mut Ui, vertex_id: &usize, open_ve
         }
 
         ui.separator();
+
+        if is_edge && graph.is_labeled && ui.button("Edit Edge Data").clicked() {
+            *open_edge_input = Some(vertex_pair);
+            *label = graph.edge_labels.get(&vertex_pair).unwrap().data.clone().unwrap_or_default();
+
+            ui.separator();
+        }
     }
 
     if ui.button("Remove Vertex").clicked() {
