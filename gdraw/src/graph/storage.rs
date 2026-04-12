@@ -192,7 +192,7 @@ impl Graph {
 
 }
 
-impl<G: GraphTrait + Default> From<&G> for Graph {
+impl<G: GraphTrait> From<&G> for Graph {
     fn from(provider: &G) -> Self {
         let mut graph = Graph::default();
 
@@ -227,7 +227,7 @@ pub fn clone_graph(in_graph: &SparseDiGraph) -> SparseDiGraph {
     graph
 }
 
-pub fn from_labeled<G: LabeledGraph + Default>(g: &G) -> Graph 
+pub fn from_labeled<G: LabeledGraph>(g: &G) -> Graph 
 where G::VertexData: std::fmt::Debug,
     G::EdgeData: std::fmt::Debug, {
     let mut graph = Graph::default();

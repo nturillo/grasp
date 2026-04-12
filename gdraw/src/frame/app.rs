@@ -10,7 +10,7 @@ use crate::{
 use eframe::{egui::{
     self, CentralPanel, Color32, Context, Id, MenuBar, Popup, Rect, Sense, Stroke, TopBottomPanel, Vec2, Window
 }};
-use grasp::graph::{GraphTrait, VertexID, prelude::{LabeledGraph, SparseDiGraph}, set::Set};
+use grasp::graph::{GraphTrait, {VertexID, prelude::{LabeledGraph, SparseDiGraph}, set::Set}};
 
 pub struct GraspApp {
     pub style: Style,
@@ -54,13 +54,13 @@ impl GraspApp {
     }
 
     /// Loads a graph from anything that implements [`grasp::graph::GraphTrait`]
-    pub fn load<T: GraphTrait + Default>(&mut self, graph: &T) {
+    pub fn load<T: GraphTrait>(&mut self, graph: &T) {
         self.graph = Graph::from(graph);
         layout::apply(&mut self.graph);
     }
 
     /// Loads a graph from anything that implements [`grasp::graph::labeled_graph::LabeledGraph`] where the label types implement [`std::fmt::Debug`]
-    pub fn load_labeled<T: LabeledGraph + Default>(&mut self, graph: &T) 
+    pub fn load_labeled<T: LabeledGraph>(&mut self, graph: &T) 
     where 
         T::VertexData: std::fmt::Debug,
         T::EdgeData: std::fmt::Debug, {
