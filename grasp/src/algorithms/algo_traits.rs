@@ -63,7 +63,7 @@ pub trait AlgoTrait: GraphTrait {
     N: Number + One + PartialOrd + Default + Copy + 'a;
 
 
-    fn dijkstra<'a, N>(&'a self, source: VertexID) -> Result<(HashMap<VertexID, N>, HashMap<VertexID, VertexID>), GraphError>
+    fn dijkstra_unweighted<'a, N>(&'a self, source: VertexID) -> Result<(HashMap<VertexID, N>, HashMap<VertexID, VertexID>), GraphError>
     where Self: Sized,
     N: Number + One + PartialOrd + Default + Copy + 'a {
         let mut iter = self.dijkstra_iter(source, |_, _| None::<N>)?;
@@ -77,7 +77,7 @@ pub trait AlgoTrait: GraphTrait {
         Ok((dist, iter.predecessors().clone()))
     }
 
-    fn astar<'a, N>(&'a self, source: VertexID, target: VertexID) -> Result<(Vec<VertexID>, N), GraphError>
+    fn astar_unweighted<'a, N>(&'a self, source: VertexID, target: VertexID) -> Result<(Vec<VertexID>, N), GraphError>
     where Self: Sized,
     N: Number + One + PartialOrd + Default + Copy + 'a {
         let mut iter = self.astar_iter(
@@ -87,12 +87,16 @@ pub trait AlgoTrait: GraphTrait {
             |_| N::default(),
         )?;
 
-        let mut last = None;
+        let mut found = None;
         while let Some(step) = iter.next() {
-            last = Some(step?);
+            let (v, cost) = step?;
+            if v == target {
+                found = Some((v, cost));
+                break;
+            }
         }
 
-        let (end, cost) = last.ok_or(GraphError::VertexNotInGraph(target))?;
+        let (end, cost) = found.ok_or(GraphError::VertexNotInGraph(target))?;
         let path = iter.shortest_path_to(end).unwrap_or_else(|| vec![end]);
 
         Ok((path, cost))
@@ -126,5 +130,120 @@ impl<G:GraphTrait> AlgoTrait for G {
     HF: Fn(VertexID) -> N + 'a,
     N: Number + One + PartialOrd + Default + Copy + 'a {
         AStar::from_source(source, target, self, weight, heuristic)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::prelude::*;
+    use crate::algorithms::search::ShortestPath;
+
+    #[test]
+    fn unweighted_dijkstra_simple_graph() {
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((0, 1));
+        g.add_edge((1, 2));
+        g.add_edge((2, 3));
+
+        let (dist, prev) = g.dijkstra_unweighted::<i32>(0).unwrap();
+
+        assert_eq!(dist.get(&0), Some(&0));
+        assert_eq!(dist.get(&1), Some(&1));
+        assert_eq!(dist.get(&2), Some(&2));
+        assert_eq!(dist.get(&3), Some(&3));
+
+        assert_eq!(prev.get(&1), Some(&0));
+        assert_eq!(prev.get(&2), Some(&1));
+        assert_eq!(prev.get(&3), Some(&2));
+    }
+
+    #[test]
+    fn unweighted_astar_simple_graph() {
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((0, 1));
+        g.add_edge((1, 2));
+        g.add_edge((2, 3));
+
+        let (path, cost) = g.astar_unweighted::<i32>(0, 3).unwrap();
+
+        assert_eq!(cost, 3);
+        assert_eq!(path, vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn weighted_dijkstra_simple_graph() {
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((0, 1));
+        g.add_edge((1, 2));
+        g.add_edge((2, 3));
+        g.add_edge((0, 3));
+        g.add_edge((1, 3));
+
+        let weight = |_g: &SparseSimpleGraph, (u, v): EdgeID| -> Option<i32> {
+            match (u.min(v), u.max(v)) {
+                (0, 1) => Some(1),
+                (1, 2) => Some(2),
+                (2, 3) => Some(1),
+                (0, 3) => Some(10),
+                (1, 3) => Some(6),
+                _ => None,
+            }
+        };
+
+        let mut iter = g.dijkstra_iter(0, weight).unwrap();
+        while let Some(step) = iter.next() {
+            step.unwrap();
+        }
+
+        assert_eq!(iter.distance_to(0), Some(0));
+        assert_eq!(iter.distance_to(1), Some(1));
+        assert_eq!(iter.distance_to(2), Some(3));
+        assert_eq!(iter.distance_to(3), Some(4));
+        assert_eq!(iter.shortest_path_to(3), Some(vec![0, 1, 2, 3]));
+    }
+
+    #[test]
+    fn weighted_astar_simple_graph() {
+        let mut g = SparseSimpleGraph::default();
+        g.add_edge((0, 1));
+        g.add_edge((1, 2));
+        g.add_edge((2, 3));
+        g.add_edge((0, 3));
+        g.add_edge((1, 3));
+
+        let weight = |_g: &SparseSimpleGraph, (u, v): EdgeID| -> Option<i32> {
+            match (u.min(v), u.max(v)) {
+                (0, 1) => Some(1),
+                (1, 2) => Some(2),
+                (2, 3) => Some(1),
+                (0, 3) => Some(10),
+                (1, 3) => Some(6),
+                _ => None,
+            }
+        };
+
+        let heuristic = |v: VertexID| -> i32 {
+            match v {
+                0 => 3,
+                1 => 2,
+                2 => 1,
+                3 => 0,
+                _ => 0,
+            }
+        };
+
+        let mut iter = g.astar_iter(0, 3, weight, heuristic).unwrap();
+
+        let mut last = None;
+        while let Some(step) = iter.next() {
+            last = Some(step.unwrap());
+        }
+
+        let (end, cost) = last.unwrap();
+        let path = iter.shortest_path_to(end).unwrap();
+
+        assert_eq!(cost, 4);
+        assert_eq!(path, vec![0, 1, 2, 3]);
     }
 }
