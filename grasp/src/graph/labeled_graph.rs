@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use crate::graph::prelude::*;
 
 /// Graphs that allow accessing labels of vertices and edges
@@ -43,6 +42,11 @@ pub struct HashMapLabeledDiGraph<G, V=(), E=()> where G: DiGraph {
     pub graph: G,
     pub vertex_labels: HashMap<VertexID, V>,
     pub edge_labels: HashMap<EdgeID, E>
+}
+impl<G: DiGraph, V, E> HashMapLabeledDiGraph<G, V, E>{
+    pub fn from_graph(graph: G) -> Self{
+        Self{graph, vertex_labels: HashMap::default(), edge_labels: HashMap::default()}
+    }
 }
 
 impl<G: DiGraph, V, E> DiGraph for HashMapLabeledDiGraph<G, V, E>{

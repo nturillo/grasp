@@ -120,7 +120,7 @@ impl Graph {
     }
 }
 
-impl<G: GraphOps> From<&G> for Graph {
+impl<G: GraphTrait> From<&G> for Graph {
     fn from(provider: &G) -> Self {
         let mut graph = Graph::default();
 
