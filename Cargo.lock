@@ -1506,8 +1506,8 @@ name = "grasp"
 version = "0.1.0"
 dependencies = [
  "bimap",
- "eframe",
  "bytemuck",
+ "eframe",
  "futures",
  "gdraw",
  "graph_ops_macros",

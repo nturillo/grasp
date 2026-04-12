@@ -15,7 +15,7 @@ graph_ops_macros = {path = "../macros"}
 itertools = "0.14.0"
 
 [features]
-default = ["serde", "xml", "wgpu"]
+default = ["serde", "xml"]
 serde = ["dep:serde"]
 xml = ["dep:quick-xml"]
 wgpu = ["dep:wgpu", "dep:bytemuck", "dep:futures"]

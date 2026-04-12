@@ -287,6 +287,7 @@ fn to_csr_format(graph: &impl GraphTrait) -> (HashMap<VertexID, usize>, Vec<u32>
 #[cfg(all(test, feature="wgpu"))]
 mod test{
     use futures::executor::block_on;
+    use wgpu::{Backend, BackendOptions, Backends, DeviceDescriptor, InstanceDescriptor, InstanceFlags, MemoryBudgetThresholds};
 
     use crate::{algorithms::isomorphism::GPUIsomorphismDevice, graph::{AnyVertexGraph, GraphMut, constructors::build_cycle, prelude::{SparseDiGraph, SparseSimpleGraph}}};
 
@@ -306,6 +307,7 @@ mod test{
         graph_b.add_edge((3, 2));
         graph_b.add_edge((4, 3));
         graph_b.add_edge((0, 4));
+
         let isomorphism = block_on(GPUIsomorphismDevice::new());
         assert!(isomorphism.is_ok());
         let isomorphism = isomorphism.unwrap();
