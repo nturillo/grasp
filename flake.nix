@@ -36,7 +36,8 @@
           python312
         ];
         buildInputs = with pkgs; [
-          libxcb libxkbcommon openssl libGL
+          libxcb libxkbcommon openssl 
+          libGL vulkan-loader
           libx11 libxi libxcursor libxrandr # To use the x11 feature
           sqlite
           rt
