@@ -1,5 +1,5 @@
 use crate::graph::prelude::*;
-use crate::algorithms::algo_traits::Number;
+use crate::algorithms::algo_traits::{Number, One};
 
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 use std::cmp::Reverse;
@@ -14,7 +14,7 @@ pub trait Frontier {
 }
 
 pub trait ShortestPath<N>
-where N: Number + PartialOrd + Default + Copy + Clone, {
+where N: Number + One + PartialOrd + Default + Copy + Clone, {
     fn dist(&self) -> &HashMap<VertexID, N>;
     fn prev(&self) -> &HashMap<VertexID, VertexID>;
 
@@ -67,7 +67,7 @@ impl Frontier for Vec<VertexID> {
         self.pop()
     }
 }
-pub struct TraversalIter<'a, G: SimpleGraph, F: Frontier> {
+pub struct TraversalIter<'a, G: GraphTrait, F: Frontier> {
     g: &'a G,
     frontier: F,
     visited: HashSet<VertexID>
@@ -79,7 +79,7 @@ use crate::algorithms::algo_traits::OrdNumber;
 
 pub struct Dijkstra<'a, G: GraphTrait, WF, N>
 where WF: Fn(&G, EdgeID) -> Option<N> + 'a,
-N: Number + PartialOrd + Default + Copy + 'a, {
+N: Number + One + PartialOrd + Default + Copy + 'a, {
     g: &'a G,
     weight: WF,
     dist: HashMap<VertexID, N>,
@@ -91,7 +91,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
 pub struct AStar<'a, G: GraphTrait, WF, HF, N>
 where WF: Fn(&G, EdgeID) -> Option<N> + 'a,
 HF: Fn(VertexID) -> N + 'a,
-N: Number + PartialOrd + Default + Copy + 'a, {
+N: Number + One + PartialOrd + Default + Copy + 'a, {
     g: &'a G,
     weight: WF,
     heuristic: HF,
@@ -102,7 +102,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
     target: VertexID,
 }
 
-impl<'a, G:SimpleGraph, F:Frontier> TraversalIter<'a, G, F> {
+impl<'a, G:GraphTrait, F:Frontier> TraversalIter<'a, G, F> {
     pub fn from_source(source: VertexID, g: &'a G) -> Result<Self, GraphError> {
         if !g.has_vertex(source) {
             return Err(GraphError::VertexNotInGraph(source));
@@ -120,7 +120,7 @@ impl<'a, G:SimpleGraph, F:Frontier> TraversalIter<'a, G, F> {
     }
 }
 
-impl<'a, G:SimpleGraph, F:Frontier> Iterator for TraversalIter<'a, G, F> {
+impl<'a, G:GraphTrait, F:Frontier> Iterator for TraversalIter<'a, G, F> {
     type Item = VertexID;
     fn next(&mut self) -> Option<Self::Item> {
         let v = self.frontier.pop()?;
@@ -140,7 +140,7 @@ impl<'a, G:SimpleGraph, F:Frontier> Iterator for TraversalIter<'a, G, F> {
 
 impl<'a, G: GraphTrait, WF, N> Dijkstra<'a, G, WF, N>
 where WF: Fn(&G, EdgeID) -> Option<N> + 'a,
-N: Number + PartialOrd + Default + Copy + 'a, {
+N: Number + One + PartialOrd + Default + Copy + 'a, {
     pub fn from_source(source: VertexID, g: &'a G, weight: WF) -> Result<Self, GraphError> {
         if !g.has_vertex(source) {
             return Err(GraphError::VertexNotInGraph(source));
@@ -166,7 +166,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
 
 impl<'a, G: GraphTrait, WF, N> Iterator for Dijkstra<'a, G, WF, N>
 where WF: Fn(&G, EdgeID) -> Option<N> + 'a,
-N: Number + PartialOrd + Default + Copy + 'a, {
+N: Number + One + PartialOrd + Default + Copy + 'a, {
     type Item = Result<(VertexID, N), GraphError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -195,10 +195,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
                     return Some(Err(GraphError::EdgeNotInGraph(edge)));
                 }
 
-                let w: N = match (self.weight)(self.g, edge) {
-                    Some(val) => val,
-                    None => continue,
-                };
+                let w = (self.weight)(self.g, edge).unwrap_or_else(N::one);
                 let alt: N = d_val + w;
 
                 let is_better = match self.dist.get(&u) {
@@ -221,7 +218,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
 impl<'a, G: GraphTrait, WF, HF, N> AStar<'a, G, WF, HF, N>
 where WF: Fn(&G, EdgeID) -> Option<N> + 'a,
 HF: Fn(VertexID) -> N + 'a,
-N: Number + PartialOrd + Default + Copy + 'a, {
+N: Number + One + PartialOrd + Default + Copy + 'a, {
     pub fn from_source(source: VertexID, target: VertexID, g: &'a G, weight: WF, heuristic: HF) -> Result<Self, GraphError> {
         if !g.has_vertex(source) {
             return Err(GraphError::VertexNotInGraph(source));
@@ -242,7 +239,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
 impl<'a, G: GraphTrait, WF, HF, N> Iterator for AStar<'a, G, WF, HF, N>
 where WF: Fn(&G, EdgeID) -> Option<N> + 'a,
 HF: Fn(VertexID) -> N + 'a,
-N: Number + PartialOrd + Default + Copy + 'a, {
+N: Number + One + PartialOrd + Default + Copy + 'a, {
     type Item = Result<(VertexID, N), GraphError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -267,10 +264,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
                     return Some(Err(GraphError::EdgeNotInGraph(edge)));
                 }
 
-                let w = match (self.weight)(self.g, edge) {
-                    Some(val) => val,
-                    None => continue,
-                };
+                let w = (self.weight)(self.g, edge).unwrap_or_else(N::one);
 
                 let tentative_g = g_v + w;
 
@@ -297,7 +291,7 @@ N: Number + PartialOrd + Default + Copy + 'a, {
 impl<'a, G, WF, N> ShortestPath<N> for Dijkstra<'a, G, WF, N>
 where G: GraphTrait,
 WF: Fn(&G, EdgeID) -> Option<N>,
-N: Number + PartialOrd + Default + Copy, {
+N: Number + One + PartialOrd + Default + Copy, {
     fn dist(&self) -> &HashMap<VertexID, N> {
         &self.dist
     }
@@ -311,7 +305,7 @@ impl<'a, G, WF, HF, N> ShortestPath<N> for AStar<'a, G, WF, HF, N>
 where G: GraphTrait,
 WF: Fn(&G, EdgeID) -> Option<N>,
 HF: Fn(VertexID) -> N,
-N: Number + PartialOrd + Default + Copy, {
+N: Number + One + PartialOrd + Default + Copy, {
     fn dist(&self) -> &HashMap<VertexID, N> {
         &self.dist
     }
