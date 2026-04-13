@@ -202,11 +202,11 @@ impl PySparseGraph {
     }
 
     fn cut_vertices(&self) -> Vec<usize> {
-        connectivity::cut_vertices(&self.inner).into_iter().collect()
+        connectivity::cut_vertices(&self.inner).iter().clone_cow().collect()
     }
 
     fn bridges(&self) -> Vec<(usize, usize)> {
-        connectivity::bridges(&self.inner).into_iter().collect()
+        connectivity::bridges(&self.inner).iter().clone_cow().collect()
     }
 
     fn edge_connectivity(&self) -> u32 {
@@ -389,7 +389,7 @@ impl PySparseDiGraph {
     fn strongly_connected_components(&self) -> Vec<Vec<usize>> {
         connectivity::strongly_connected_components(&self.inner)
             .into_iter()
-            .map(|scc| scc.into_iter().collect())
+            .map(|scc| scc.iter().clone_cow().collect())
             .collect()
     }
 
@@ -511,11 +511,11 @@ impl PyLabeledSimpleGraph {
     }
 
     fn cut_vertices(&self) -> Vec<usize> {
-        connectivity::cut_vertices(&self.inner).into_iter().collect()
+        connectivity::cut_vertices(&self.inner).iter().clone_cow().collect()
     }
 
     fn bridges(&self) -> Vec<(usize, usize)> {
-        connectivity::bridges(&self.inner).into_iter().collect()
+        connectivity::bridges(&self.inner).iter().clone_cow().collect()
     }
 
     fn edge_connectivity(&self) -> u32 {
@@ -697,7 +697,7 @@ impl PyLabeledDiGraph {
     fn strongly_connected_components(&self) -> Vec<Vec<usize>> {
         connectivity::strongly_connected_components(&self.inner)
             .into_iter()
-            .map(|scc| scc.into_iter().collect())
+            .map(|scc| scc.iter().clone_cow().collect())
             .collect()
     }
 
