@@ -9,3 +9,5 @@ pub mod trees;
 pub mod gonality;
 pub mod matchings;
 pub mod planarity;
+#[cfg(feature = "wgpu")]
+pub mod isomorphism;

@@ -8,10 +8,12 @@ use grasp::graph::labeled_graph::{HashMapLabeledSimpleGraph, HashMapLabeledDiGra
 use grasp::algorithms::algo_traits::{AlgoTrait};
 use grasp::algorithms::connectivity;
 use grasp::graph::constructors::*;
+use grasp::algorithms::search::ShortestPath;
 use grasp::algorithms::matchings::maximum_matching;
 use grasp::algorithms::trees::kruskal_mst;
 use grasp::algorithms::coloring::*;
 use grasp::algorithms::gonality::compute_gonality;
+use grasp::algorithms::planarity::{GraphPlanarity, KuratowskiSubgraph};
 
 #[pyclass(name = "SparseGraph")]
 #[derive(Debug)]
@@ -102,12 +104,20 @@ impl PySparseGraph {
             .map_err(graph_error_to_py)
     }
 
-    fn dijkstra(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
-        self.inner.dijkstra(source).map_err(graph_error_to_py)
+    fn dijkstra_unweighted(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        self.inner.dijkstra_unweighted(source).map_err(graph_error_to_py)
     }
 
-    fn astar(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
-        self.inner.astar(source, target).map_err(graph_error_to_py)
+    fn astar_unweighted(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
+        self.inner.astar_unweighted(source, target).map_err(graph_error_to_py)
+    }
+
+    fn dijkstra_weighted(&self, py: Python, source: usize, weight_fn: PyObject) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        weighted_dijkstra_py(&self.inner, py, source, weight_fn)
+    }
+
+    fn astar_weighted(&self, py: Python, source: usize, target: usize, weight_fn: PyObject, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
+        weighted_astar_py(&self.inner, py, source, target, weight_fn, heuristic)
     }
 
     fn kruskal(&self, weights: HashMap<(usize, usize), f64>) -> PyResult<(Vec<(usize, usize)>, f64)> {
@@ -254,6 +264,22 @@ impl PySparseGraph {
     fn gonality(&self) -> PyResult<usize> {
         compute_gonality(&self.inner).map_err(graph_error_to_py)
     }
+
+    fn is_planar(&self) -> bool {
+        GraphPlanarity::from_graph(&self.inner).compute_planarity()
+    }
+
+    fn planarity_structure(&self, py: Python) -> PyResult<PyObject> {
+        planarity_structure_to_py(&self.inner, py)
+    }
+
+    fn planar_embedding(&self, py: Python) -> PyResult<PyObject> {
+        planar_embedding_to_py(&self.inner, py)
+    }
+
+    fn kuratowski_subgraph(&self) -> PyResult<Vec<(usize, usize)>> {
+        kuratowski_subgraph_to_py(&self.inner)
+    }
 }
 
 #[pyclass(name = "SparseDiGraph")]
@@ -336,12 +362,20 @@ impl PySparseDiGraph {
         Ok(obj.into_py(py))
     }
 
-    fn dijkstra(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
-        self.inner.dijkstra(source).map_err(graph_error_to_py)
+    fn dijkstra_unweighted(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        self.inner.dijkstra_unweighted(source).map_err(graph_error_to_py)
     }
 
-    fn astar(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
-        self.inner.astar(source, target).map_err(graph_error_to_py)
+    fn astar_unweighted(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
+        self.inner.astar_unweighted(source, target).map_err(graph_error_to_py)
+    }
+
+    fn dijkstra_weighted(&self, py: Python, source: usize, weight_fn: PyObject) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        weighted_dijkstra_py(&self.inner, py, source, weight_fn)
+    }
+
+    fn astar_weighted(&self, py: Python, source: usize, target: usize, weight_fn: PyObject, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
+        weighted_astar_py(&self.inner, py, source, target, weight_fn, heuristic)
     }
 
     fn is_weakly_connected(&self) -> bool {
@@ -443,12 +477,20 @@ impl PyLabeledSimpleGraph {
         Ok(self.inner.remove_edge_label((u, v)).map(|obj| obj.clone_ref(py)))
     }
 
-    fn dijkstra(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
-        self.inner.dijkstra(source).map_err(graph_error_to_py)
+    fn dijkstra_unweighted(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        self.inner.dijkstra_unweighted(source).map_err(graph_error_to_py)
     }
 
-    fn astar(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
-        self.inner.astar(source, target).map_err(graph_error_to_py)
+    fn astar_unweighted(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
+        self.inner.astar_unweighted(source, target).map_err(graph_error_to_py)
+    }
+
+    fn dijkstra_weighted(&self, py: Python, source: usize, weight_fn: PyObject) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        weighted_dijkstra_py(&self.inner, py, source, weight_fn)
+    }
+
+    fn astar_weighted(&self, py: Python, source: usize, target: usize, weight_fn: PyObject, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
+        weighted_astar_py(&self.inner, py, source, target, weight_fn, heuristic)
     }
 
     fn kruskal(&self, py: Python) -> PyResult<(Vec<(usize, usize)>, f64)> {
@@ -531,6 +573,22 @@ impl PyLabeledSimpleGraph {
     fn gonality(&self) -> PyResult<usize> {
         compute_gonality(&self.inner).map_err(graph_error_to_py)
     }
+
+    fn is_planar(&self) -> bool {
+        GraphPlanarity::from_graph(&self.inner).compute_planarity()
+    }
+
+    fn planarity_structure(&self, py: Python) -> PyResult<PyObject> {
+        planarity_structure_to_py(&self.inner, py)
+    }
+
+    fn planar_embedding(&self, py: Python) -> PyResult<PyObject> {
+        planar_embedding_to_py(&self.inner, py)
+    }
+
+    fn kuratowski_subgraph(&self) -> PyResult<Vec<(usize, usize)>> {
+        kuratowski_subgraph_to_py(&self.inner)
+    }
 }
 
 #[pyclass(name = "LabeledDiGraph")]
@@ -612,12 +670,20 @@ impl PyLabeledDiGraph {
         Ok(self.inner.remove_edge_label((u, v)).map(|obj| obj.clone_ref(py)))
     }
 
-    fn dijkstra(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
-        self.inner.dijkstra(source).map_err(graph_error_to_py)
+    fn dijkstra_unweighted(&self, source: usize) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        self.inner.dijkstra_unweighted(source).map_err(graph_error_to_py)
     }
 
-    fn astar(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
-        self.inner.astar(source, target).map_err(graph_error_to_py)
+    fn astar_unweighted(&self, source: usize, target: usize) -> PyResult<(Vec<usize>, f64)> {
+        self.inner.astar_unweighted(source, target).map_err(graph_error_to_py)
+    }
+
+    fn dijkstra_weighted(&self, py: Python, source: usize, weight_fn: PyObject) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)> {
+        weighted_dijkstra_py(&self.inner, py, source, weight_fn)
+    }
+
+    fn astar_weighted(&self, py: Python, source: usize, target: usize, weight_fn: PyObject, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)> {
+        weighted_astar_py(&self.inner, py, source, target, weight_fn, heuristic)
     }
 
     fn is_weakly_connected(&self) -> bool {
@@ -727,6 +793,122 @@ fn directional_partite_graph(groups: Vec<usize>) -> PySparseDiGraph {
 
 fn graph_error_to_py(err: GraphError) -> PyErr {
     pyo3::exceptions::PyValueError::new_err(format!("{err:?}"))
+}
+
+fn weighted_dijkstra_py<G>(graph: &G, py: Python<'_>, source: usize, weight_fn: PyObject) -> PyResult<(HashMap<usize, f64>, HashMap<usize, usize>)>
+where G: AlgoTrait {
+    let weight = move |_g: &G, edge: EdgeID| -> Option<f64> {
+        weight_fn
+            .call1(py, (edge.0, edge.1))
+            .ok()
+            .and_then(|obj| obj.extract::<f64>(py).ok())
+    };
+
+    let mut iter = graph.dijkstra_iter(source, weight).map_err(graph_error_to_py)?;
+
+    let mut dist = HashMap::new();
+    while let Some(step) = iter.next() {
+        let (v, d) = step.map_err(graph_error_to_py)?;
+        dist.insert(v, d);
+    }
+
+    let prev = iter.predecessors().clone();
+    Ok((dist, prev))
+}
+
+fn weighted_astar_py<G>(graph: &G, py: Python<'_>, source: usize, target: usize, weight_fn: PyObject, heuristic: PyObject) -> PyResult<(Vec<usize>, f64)>
+where G: AlgoTrait {
+    let weight = move |_g: &G, edge: EdgeID| -> Option<f64> {
+        weight_fn
+            .call1(py, (edge.0, edge.1))
+            .ok()
+            .and_then(|obj| obj.extract::<f64>(py).ok())
+    };
+
+    let heuristic_fn = move |v: usize| -> f64 {
+        heuristic
+            .call1(py, (v,))
+            .ok()
+            .and_then(|obj| obj.extract::<f64>(py).ok())
+            .unwrap_or(0.0)
+    };
+
+    let mut iter = graph
+        .astar_iter(source, target, weight, heuristic_fn)
+        .map_err(graph_error_to_py)?;
+
+    let mut found = None;
+    while let Some(step) = iter.next() {
+        let (v, cost) = step.map_err(graph_error_to_py)?;
+        if v == target {
+            found = Some((v, cost));
+            break;
+        }
+    }
+
+    let (end, cost) = found.ok_or_else(|| PyValueError::new_err("No path found"))?;
+
+    let mut path = vec![end];
+    let mut current = end;
+    while let Some(&p) = iter.predecessors().get(&current) {
+        path.push(p);
+        current = p;
+    }
+    path.reverse();
+
+    Ok((path, cost))
+}
+
+fn planarity_structure_to_py<G: SimpleGraph>(graph: &G, py: Python<'_>) -> PyResult<PyObject> {
+    let mut planarity = GraphPlanarity::from_graph(graph);
+
+    let out = PyDict::new_bound(py);
+
+    match planarity.get_planarity_structure() {
+        Ok(mut embedding) => {
+            let positions = embedding.calculate_euclidean_embedding();
+            let pos_dict = PyDict::new_bound(py);
+
+            for (v, (x, y)) in positions {
+                pos_dict.set_item(v, (x, y))?;
+            }
+
+            out.set_item("planar", true)?;
+            out.set_item("embedding", pos_dict)?;
+            Ok(out.into_py(py))
+        }
+        Err(KuratowskiSubgraph { edge_set }) => {
+            let edges: Vec<(usize, usize)> = edge_set.into_iter().collect();
+
+            out.set_item("planar", false)?;
+            out.set_item("kuratowski_edges", edges)?;
+            Ok(out.into_py(py))
+        }
+    }
+}
+
+fn planar_embedding_to_py<G: SimpleGraph>(graph: &G, py: Python<'_>) -> PyResult<PyObject> {
+    let mut planarity = GraphPlanarity::from_graph(graph);
+    let mut embedding = planarity
+        .get_planarity_structure()
+        .map_err(|_| PyValueError::new_err("Graph is not planar"))?;
+
+    let positions = embedding.calculate_euclidean_embedding();
+    let pos_dict = PyDict::new_bound(py);
+
+    for (v, (x, y)) in positions {
+        pos_dict.set_item(v, (x, y))?;
+    }
+
+    Ok(pos_dict.into_py(py))
+}
+
+fn kuratowski_subgraph_to_py<G: SimpleGraph>(graph: &G) -> PyResult<Vec<(usize, usize)>> {
+    let mut planarity = GraphPlanarity::from_graph(graph);
+    match planarity.get_planarity_structure() {
+        Ok(_) => Err(PyValueError::new_err("Graph is planar")),
+        Err(KuratowskiSubgraph { edge_set }) => Ok(edge_set.into_iter().collect()),
+    }
 }
 
 #[pymodule]
