@@ -30,7 +30,7 @@ impl Default for Style {
             outline_thickness: 2.0,
             select_color: Color32::YELLOW,
             select_color_strength: 0.2,
-            cluster_colors: vec![Color32::GREEN, Color32::BLUE],
+            cluster_colors: vec![Color32::GREEN, Color32::BLUE, Color32::RED],
             highlight_color: Color32::RED,
             edge_color: Color32::BLACK,
             edge_highlight_color: Color32::RED,
