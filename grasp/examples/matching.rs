@@ -12,7 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
 
     let mut app = GraspApp::new();
     app.load(&graph);
-    for (id, vertex) in app.graph.vertex_list.iter_mut() {
+    for (id, vertex) in app.graph.vertex_labels.iter_mut() {
         let (x, y) = positions[*id];
         vertex.center = Vec2 { x, y };
     }
@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     println!("Maximal matching found of size {}", matching.vertex_count());
     let mut app2 = GraspApp::new();
     app2.load(&matching);
-    for (id, vertex) in app2.graph.vertex_list.iter_mut() {
+    for (id, vertex) in app2.graph.vertex_labels.iter_mut() {
         let (x, y) = positions[*id];
         vertex.center = Vec2 { x, y };
     }
