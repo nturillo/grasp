@@ -43,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     ), true);
     // Display graph with mst highlight
     let mut app = GraspApp::new();
-    app.load(&mst);
+    app.load_labeled_subgraph(&mst);
     // TODO: Highlight mst in app
     // TODO: Show labels in app
     app.start()?;

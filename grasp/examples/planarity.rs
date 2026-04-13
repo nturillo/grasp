@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
 
     let mut app = GraspApp::new();
     app.load(&graph);
-    for (id, vertex) in app.graph.vertex_list.iter_mut() {
+    for (id, vertex) in app.graph.vertex_labels.iter_mut() {
         let (x, y) = positions.get(id).cloned().unwrap();
         vertex.center = Vec2 { x, y };
     }

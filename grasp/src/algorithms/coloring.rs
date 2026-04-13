@@ -1,6 +1,9 @@
 use std::{collections::{HashMap, HashSet}, error::Error, fmt::Display};
 
+use graph_ops_macros::register;
+
 use crate::graph::{VertexID, prelude::SimpleGraph, set::{Set}, util::degeneracy};
+use crate::graph::directed::DigraphProjection;
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct BoundError;
@@ -11,6 +14,7 @@ impl Display for BoundError{
 }
 impl Error for BoundError{}
 
+#[register(name = "DSatur", desc = "Colors each vertex with the DSatur algorithm.", ret = VertexCluster, simple = "true", params = [])]
 // Applies DSatur on a simple graph.
 pub fn dsatur<G: SimpleGraph>(g: &G) -> Vec<impl Set<Item = VertexID>> {
     let mut colors: HashMap<VertexID, Option<usize>> = g.vertices().map(|v| (v, None)).collect();
@@ -97,6 +101,7 @@ pub fn chromatic_number_upper_bound<G: SimpleGraph>(g: &G, upper_bound: usize) -
     }
 }
 
+#[register(name = "Chromatic Number", desc = "Colors each vertex via backtracking.", ret = VertexCluster, simple = "true", params = [("Lower Bound", Unsigned)])]
 /// Find the exact chromatic number of a simple graph via backtracking with a lower bound. Returns a list of vertices grouped by color.
 ///
 /// WARNING: This algorithm will return the passed lower bound if it is higher than the chromatic number.
@@ -142,6 +147,7 @@ pub fn chromatic_number_bounded<G: SimpleGraph>(g: &G, lower_bound: usize, upper
     }
 }
 
+#[register(name = "Clique Number", desc = "Get the clique number.", ret = String, simple = "true", params = [])]
 /// Find the clique number of a simple graph with the Bron-Kerbosch algorithm.
 pub fn clique_number<G: SimpleGraph>(g: &G) -> usize {
     let mut p: HashSet<VertexID> = g.vertex_set().iter().map(|c| *c).collect();

@@ -20,11 +20,20 @@ fn main() {
     butterfly.add_edge((9, 1));
     butterfly.add_edge((9, 10));
 
-    let mut app = GraspApp::default();
+    let mut app = GraspApp::new();
+
 
     app.load(&butterfly);
-
     let _ = app.start();
 
     println!("App closed, now main continues");
+
+    type TestGraph = HashMapLabeledDiGraph<SparseDiGraph, String, f32>;
+    let mut triangle = TestGraph::default();
+        triangle.add_edge((1, 0));triangle.add_edge((2, 1));triangle.add_edge((0, 2));
+        triangle.set_edge_labels([((1, 0), 1.5), ((2, 1), 2.0), ((0, 2), 3.0)]);
+        triangle.set_vertex_labels([(0, "A".to_string()), (1, "B".to_string()), (2, "C".to_string())]);
+
+    app.load_labeled(&triangle);
+    let _ = app.start();
 }

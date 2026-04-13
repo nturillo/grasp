@@ -11,4 +11,5 @@ members = [
 default-members = [
     "grasp",
     "gdraw",
+    "macros",
 ]

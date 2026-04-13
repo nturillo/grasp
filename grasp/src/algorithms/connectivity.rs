@@ -1,27 +1,33 @@
 use std::{collections::{HashMap, HashSet, VecDeque}, vec};
 
+use graph_ops_macros::register;
+
 use crate::{
     algorithms::algo_traits::AlgoTrait, 
     graph::prelude::*
 };
 
+#[register(name = "Is Connected", desc = "Returns if the graph is connected.", ret = String, simple = "true", params = [])]
 /// Determine if a simple graph is connected.
 pub fn is_connected<G: SimpleGraph>(g: &G) -> bool {
     g.vertices().next().map_or(false, |vert| g.dfs_iter(vert).unwrap().count() == g.vertex_count())
 }
 
+#[register(name = "Is Weakly Connected", desc = "Returns if the graph is weakly connected.", ret = String, simple = "false", params = [])]
 /// Determine if a digraph is weakly connected.
 pub fn is_weakly_connected<G: DigraphProjection>(g: &G) -> bool {
     is_connected(&g.as_simple())
 }
 
+#[register(name = "Is Strongly Connected", desc = "Returns if the graph is strongly connected.", ret = String, simple = "false", params = [])]
 /// Determine if a digraph is strongly connected.
 pub fn is_strongly_connected<G: DiGraph>(g: &G) -> bool {
     strongly_connected_components(g).len() == 1
 }
 
+#[register(name = "Strongly Connected Components", desc = "Colors each vertex in accordance to the component they belong to.", ret = VertexCluster, simple = "false", params = [])]
 /// Return the strongly connected components of a digraph.
-pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<HashSet<VertexID>> {
+pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<impl Set<Item = VertexID>> {
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -76,8 +82,9 @@ pub fn strongly_connected_components<G: DiGraph>(g: &G) -> Vec<HashSet<VertexID>
     comps
 }
 
+#[register(name = "Cut Vertices", desc = "Highlights the graph's cut vertices.", ret = VertexList, simple = "true", params = [])]
 /// Returns a simple graph's cut vertices.
-pub fn cut_vertices<G: SimpleGraph>(g: &G) -> HashSet<VertexID> {
+pub fn cut_vertices<G: SimpleGraph>(g: &G) -> impl Set<Item = VertexID> {
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -120,11 +127,12 @@ pub fn cut_vertices<G: SimpleGraph>(g: &G) -> HashSet<VertexID> {
         }
     }
 
-    points.iter().copied().collect()
+    points
 }
 
+#[register(name = "Bridges", desc = "Highlights the graph's bridges.", ret = EdgeList, simple = "true", params = [])]
 /// Returns a simple graph's bridges.
-pub fn bridges<G: SimpleGraph>(g: &G) -> HashSet<EdgeID> {
+pub fn bridges<G: SimpleGraph>(g: &G) -> impl Set<Item = EdgeID> {
     struct VertexWrapper {
         pub disc: u32,
         pub low: u32,
@@ -162,21 +170,24 @@ pub fn bridges<G: SimpleGraph>(g: &G) -> HashSet<EdgeID> {
         }
     }
 
-    points.iter().copied().collect()
+    points
 }
 
+#[register(name = "Is Complete", desc = "Returns if the graph is complete.", ret = String, simple = "true", params = [])]
 /// Returns if a simple graph is complete.
 pub fn simple_graph_is_complete<G: SimpleGraph>(g: &G) -> bool {
     let n = g.vertex_count();
     g.edge_count() == n * (n - 1) / 2
 }
 
+#[register(name = "Is Complete", desc = "Returns if the graph is complete.", ret = String, simple = "false", params = [])]
 /// Returns if a digraph is complete.
 pub fn digraph_is_complete<G: DiGraph>(g: &G) -> bool {
     let n = g.vertex_count();
     g.edge_count() == n * (n - 1)
 }
 
+#[register(name = "Edge Connectivity", desc = "Returns the graph's edge connectivity.", ret = String, simple = "true", params = [])]
 /// Returns a graph's edge connectivity.
 pub fn edge_connectivity<G: SimpleGraph>(g: &G) -> u32 {
     if g.vertex_count() < 2 { return 0; };
@@ -194,6 +205,7 @@ pub fn edge_connectivity<G: SimpleGraph>(g: &G) -> u32 {
     vertices[1..].iter().map(|&target| max_flow(&flow_graph, source, target)).min().unwrap_or(0)
 }
 
+#[register(name = "Vertex Connectivity", desc = "Returns the graph's vertex connectivity.", ret = String, simple = "true", params = [])]
 /// Returns a graph's vertex connectivity.
 pub fn vertex_connectivity<G: SimpleGraph>(g: &G) -> u32 {
     let mut min_flow = (g.vertex_count() - 1) as u32;
@@ -362,9 +374,9 @@ mod test {
         let v1: HashSet<VertexID> = HashSet::from([6]);
         let v2: HashSet<VertexID> = HashSet::from([1, 2, 3]);
         let v3: HashSet<VertexID> = HashSet::from([4, 5]);
-        pretty_assertions::assert_eq!(true, sscs.contains(&v1));
-        pretty_assertions::assert_eq!(true, sscs.contains(&v2));
-        pretty_assertions::assert_eq!(true, sscs.contains(&v3));
+        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().map(|v| v.into_owned()).collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v1));
+        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().map(|v| v.into_owned()).collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v2));
+        pretty_assertions::assert_eq!(true, sscs.iter().map(|v| v.iter().map(|v| v.into_owned()).collect()).collect::<Vec<HashSet<VertexID>>>().contains(&v3));
     }
 
     #[test]
@@ -416,7 +428,7 @@ mod test {
         graph.add_edge((3, 4));
         graph.add_edge((4, 5));
         graph.add_edge((6, 1));
-        pretty_assertions::assert_eq!(HashSet::from([1, 3, 4]), cut_vertices(&graph));
+        pretty_assertions::assert_eq!(HashSet::from([1, 3, 4]), cut_vertices(&graph).iter().map(|v| v.into_owned()).collect());
     }
 
     #[test]
@@ -428,7 +440,7 @@ mod test {
         graph.add_edge((3, 4));
         graph.add_edge((4, 5));
         graph.add_edge((6, 1));
-        pretty_assertions::assert_eq!(HashSet::from([(1, 6), (3, 4), (4, 5)]), bridges(&graph));
+        pretty_assertions::assert_eq!(HashSet::from([(1, 6), (3, 4), (4, 5)]), bridges(&graph).iter().map(|v| v.into_owned()).collect());
     }
 
     #[test]

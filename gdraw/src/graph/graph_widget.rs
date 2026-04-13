@@ -1,98 +1,84 @@
-use eframe::egui::{Color32, Rect, Response, Sense, Stroke, Ui, Vec2, Widget};
+use eframe::egui::{Align2, Color32, FontId, Stroke, Ui, Vec2};
 
 use crate::{
-    app::GraspAppHandler,
     frame::style::Style,
     graph::storage::{Edge, Graph, Vertex},
 };
 
-pub struct VertexWidget<'a> {
-    pub vertex: &'a Vertex,
-    pub graph: &'a Graph,
-    pub style: &'a Style,
-    pub screen_center: Vec2,
-}
-
-impl<'a> Widget for VertexWidget<'a> {
-    fn ui(self, ui: &mut Ui) -> Response {
-        let screen_rect = Rect::from_center_size(
-            self.screen_center.to_pos2(),
-            Vec2::splat(2.0 * self.style.vertex_radius),
-        );
-
-        let color = if let Some(color) = self.vertex.color {
-            color
-        } else {
-            self.style.vertex_color
-        }
-        .lerp_to_gamma(
-            self.style.highlight_color,
-            if self.graph.selected_list.contains(&self.vertex.id) {
-                self.style.highlight_strength
-            } else {
-                0.0
-            },
-        );
-
-        let response = ui.allocate_rect(screen_rect, Sense::click_and_drag());
-
-        ui.painter().circle(
-            screen_rect.center(),
-            self.style.vertex_radius,
-            color,
-            Stroke::new(self.style.outline_thickness, self.style.outline_color),
-        );
-
-        response
+pub fn draw_vertex(ui: &mut Ui, vertex: &Vertex, graph: &Graph, style: &Style, screen_center: Vec2, scale: f32) {
+    let color = if let Some(color) = vertex.color {
+        color
+    } else {
+        style.vertex_color
     }
-}
-
-pub struct EdgeWidget<'a> {
-    pub edge: &'a Edge,
-    pub graph: &'a Graph,
-    pub style: &'a Style,
-    pub start_vertex_center: Vec2,
-    pub end_vertex_center: Vec2,
-}
-
-impl<'a> Widget for EdgeWidget<'a> {
-    fn ui(self, ui: &mut Ui) -> Response {
-        let mut screen_rect = Rect::NOTHING;
-        screen_rect.extend_with(self.start_vertex_center.to_pos2());
-        screen_rect.extend_with(self.end_vertex_center.to_pos2());
-
-        let response = ui.allocate_rect(screen_rect, Sense::click());
-
-        let radius = if self.style.show_vertices {
-            self.style.vertex_radius
+    .lerp_to_gamma(
+        style.select_color,
+        if graph.selected_list.contains(&vertex.id) {
+            style.select_color_strength
         } else {
             0.0
-        };
+        },
+    );
 
-        let dir_vector = (self.end_vertex_center - self.start_vertex_center).normalized();
-        let new_start = self.start_vertex_center + radius * dir_vector;
-        let new_end = self.end_vertex_center - radius * dir_vector;
+    ui.painter().circle(
+        screen_center.to_pos2(),
+        style.vertex_radius / scale,
+        color,
+        Stroke::new(style.outline_thickness / scale, style.outline_color),
+    );
 
-        if self.graph.directed {
-            let line_cutoff = new_end - self.style.arrow_size * dir_vector;
+    let mut prnt = String::new();
+    if style.display_ids {
+        prnt = vertex.id.to_string();
+    } else if style.display_vertex_data && let Some(data) = &vertex.data && data != "()" {
+        prnt = data.clone();
+    }
 
-            ui.painter().line(
-                vec![line_cutoff.to_pos2(), new_start.to_pos2()],
-                Stroke::new(self.style.edge_thickness, Color32::BLACK),
-            );
+    ui.painter().text(screen_center.to_pos2(), Align2::CENTER_CENTER, prnt, FontId::monospace(style.vertex_radius / scale), Color32::BLACK);
+}
 
-            ui.painter().arrow(
-                line_cutoff.to_pos2(),
-                new_end - line_cutoff,
-                Stroke::new(self.style.edge_thickness, Color32::BLACK),
-            );
-        } else {
-            ui.painter().line(
-                vec![new_end.to_pos2(), new_start.to_pos2()],
-                Stroke::new(self.style.edge_thickness, Color32::BLACK),
-            );
-        }
+pub fn draw_edge(ui: &mut Ui, edge: &Edge, graph: &Graph, style: &Style, start_vertex_center: Vec2, end_vertex_center: Vec2, scale: f32) {
+    let radius = if style.show_vertices {
+        (style.vertex_radius + style.outline_thickness) / scale
+    } else {
+        0.0
+    };
 
-        response
+    let color = if let Some(color) = edge.color {
+        color
+    } else {
+        style.edge_color
+    };
+
+    let dir_vector = (end_vertex_center - start_vertex_center).normalized();
+    let new_start = start_vertex_center + radius * dir_vector;
+    let new_end = end_vertex_center - radius * dir_vector;
+    let thickness = style.edge_thickness / scale;
+
+    if graph.directed {
+        let line_cutoff = new_end - f32::min(style.arrow_size / scale, (end_vertex_center - start_vertex_center).length()) * dir_vector;
+
+        ui.painter().line(
+            vec![line_cutoff.to_pos2(), new_start.to_pos2()],
+            Stroke::new(thickness, color),
+        );
+
+        ui.painter().arrow(
+            line_cutoff.to_pos2(),
+            new_end - line_cutoff,
+            Stroke::new(thickness, color),
+        );
+    } else {
+        ui.painter().line(
+            vec![new_end.to_pos2(), new_start.to_pos2()],
+            Stroke::new(thickness, color),
+        );
+    }
+
+    if style.display_edge_data {
+        let midpoint = (start_vertex_center + end_vertex_center) / 2.0;
+        let offset = Vec2::new(-dir_vector.y, dir_vector.x);
+
+        ui.painter().text((midpoint + offset * style.vertex_radius / scale).to_pos2(), Align2::CENTER_CENTER, edge.data.clone().unwrap_or_default(), FontId::monospace(style.vertex_radius / scale), Color32::BLACK);
     }
 }
