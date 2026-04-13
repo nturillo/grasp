@@ -1,8 +1,11 @@
 import grasp
+import gdraw
 
+# -----------------------
+# Build original graph
+# -----------------------
 g = grasp.SparseGraph()
 
-# Build graph (same structure as before)
 edges = [
     (0, 1),
     (0, 2),
@@ -19,7 +22,6 @@ edges = [
 for u, v in edges:
     g.add_edge(u, v)
 
-# Assign weights
 weights = {
     (0, 1): 4.0,
     (0, 2): 2.0,
@@ -33,17 +35,40 @@ weights = {
     (6, 7): 5.0,
 }
 
-# Pretty print MST
-def print_mst(title, mst_edges, total_weight):
-    print(f"\n=== {title} ===")
-    print("Edges in MST:")
-    for u, v in mst_edges:
-        w = weights.get((u, v), weights.get((v, u), None))
-        print(f"{u} -- {v} (weight={w})")
-    print(f"Total weight: {total_weight}")
+# -----------------------
+# Show original graph
+# -----------------------
+print("\nOpening ORIGINAL graph...")
+gdraw.open_app_with_graph(g)
 
-
+# -----------------------
 # Run Kruskal
+# -----------------------
 mst_edges, total_weight = g.kruskal(weights)
 
-print_mst("KRUSKAL MST", mst_edges, total_weight)
+print("\n=== KRUSKAL MST ===")
+for u, v in mst_edges:
+    w = weights.get((u, v), weights.get((v, u), None))
+    print(f"{u} -- {v} (weight={w})")
+print(f"Total weight: {total_weight}")
+
+# -----------------------
+# Build MST graph
+# -----------------------
+mst_graph = grasp.SparseGraph()
+
+# IMPORTANT: add all vertices (so layout stays consistent)
+for v in g.vertices():
+    mst_graph.add_vertex(v)
+
+# Add only MST edges
+for u, v in mst_edges:
+    mst_graph.add_edge(u, v)
+
+# -----------------------
+# Show MST graph
+# -----------------------
+print("\nOpening MST graph (after Kruskal)...")
+gdraw.open_app_with_graph(mst_graph)
+
+print("Done.")
