@@ -1,3 +1,10 @@
+/*
+    This example creates a permutation graph where edge weights are defined by their minimal super-permutation
+    We then run Kruskal's algorithm to find the mst of this graph.
+    This is a crude lower bound for the length of the shortest hamiltonian path.
+    When the permutation size is 14, this is known as the haruhi problem.
+*/
+
 use std::{collections::{HashMap, HashSet}, env};
 use eframe::egui::Color32;
 use grasp::graph::{graph_ops::SubgraphView, permutation::{PermutationDiGraph, lehmer_from_natural, permutation_from_lehmer}, prelude::*};
@@ -37,26 +44,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
         let perm_v = permutations.get(&v)?;
         Some(permutation_distance(perm_u, perm_v))
     })?;
-    let mst = SubgraphView::new(&graph, None, Some(
-        kruskal.into_iter().map(|(u, v, _)| (u, v)).collect()
-    ), true);
-    // Display graph with mst highlight
-    let mut app = GraspApp::new();
-    app.load(&mst);
-    // TODO: Highlight mst in app
-    let edge_set = mst.edges().collect::<HashSet<EdgeID>>();
-    app.highlight_edges(&edge_set, Color32::RED);
-    // TODO: Show labels in app
-    for (id, label) in app.graph.vertex_labels.iter_mut(){
-        let Some(permutation) = permutations.get(id) else {continue;};
-        label.data = Some(format!("{:?}", *permutation));
+    // Calculate lower bound
+    let path_weight: usize = kruskal.iter().map(|(_, _, w)| *w).sum();
+    println!("A Minimal Hamiltonian path of the super-permutation graph of {}-permutations will have length at least {}", permutation_size, path_weight);
+    println!("Thus a sequence containing every permutation must have at least {} elements", path_weight+permutation_size);
+    if permutation_size <=5 {
+        println!("The known shortest sequence is {} elements long", vec![1, 3, 9, 33, 153][permutation_size-1]);
     }
-    for ((a, b), label) in app.graph.edge_labels.iter_mut(){
-        let Some(perm_a) = permutations.get(a) else {continue;};
-        let Some(perm_b) = permutations.get(b) else {continue;};
-        let weight = permutation_distance(perm_a, perm_b);
-        label.data = Some(format!("{}", weight));
+    // Dont try rendering more than 5, its just too much
+    if permutation_size <= 5 {
+        let mst = SubgraphView::new(&graph, None, Some(
+            kruskal.into_iter().map(|(u, v, _)| (u, v)).collect()
+        ), true);
+        // Display graph with mst highlight
+        let mut app = GraspApp::new();
+        app.load(&mst);
+        // TODO: Highlight mst in app
+        let edge_set = mst.edges().collect::<HashSet<EdgeID>>();
+        app.highlight_edges(&edge_set, Color32::RED);
+        // TODO: Show labels in app
+        for (id, label) in app.graph.vertex_labels.iter_mut(){
+            let Some(permutation) = permutations.get(id) else {continue;};
+            label.data = Some(format!("{:?}", *permutation));
+        }
+        for ((a, b), label) in app.graph.edge_labels.iter_mut(){
+            let Some(perm_a) = permutations.get(a) else {continue;};
+            let Some(perm_b) = permutations.get(b) else {continue;};
+            let weight = permutation_distance(perm_a, perm_b);
+            label.data = Some(format!("{}", weight));
+        }
+        app.start()?;
     }
-    app.start()?;
     Ok(())
 }
