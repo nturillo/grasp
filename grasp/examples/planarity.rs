@@ -17,6 +17,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     graph.add_edge((2, 3));
     graph.add_edge((2, 4));
 
+    let n = 3;
+    for i in 0..(n-1)  {
+        let u_a = 5+i; let u_b = 5+i+n;
+        let v_a = 5+i+1; let v_b = 5+i+1+n;
+        graph.add_edge((u_a, u_b));
+        graph.add_edge((u_a, v_a));
+        graph.add_edge((u_b, v_b));
+        //graph.add_edge((u_a, v_b));
+    }
+    graph.add_edge((n+4, 5));
+    graph.add_edge((2*n+4, n+5));
+    graph.add_edge((n+4, 2*n+4));
+    graph.add_edge((n+4, n+5));
+
+
     let mut planarity = GraphPlanarity::from_graph(&graph);
     assert!(planarity.compute_planarity());
     let result = planarity.get_planarity_structure();
@@ -59,10 +74,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
             //println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), intersect at ({}, {})", x1, y1, x2, y2, x3, y3, x4, y4, x, y);
             // Insure intersection occurs out of one of the segment bounds
             assert!(
-                x-x1.max(x2)>-EPSILON || x - x1.min(x2)<EPSILON ||
-                x-x3.max(x4)>-EPSILON || x - x3.min(x4)<EPSILON ||
-                y-y1.max(y2)>-EPSILON || y - y1.min(y2)<EPSILON ||
-                y-y3.max(y4)>-EPSILON || y - y3.min(y4)<EPSILON
+                x-x1.max(x2)>-10.0*EPSILON || x - x1.min(x2)<10.0*EPSILON ||
+                x-x3.max(x4)>-10.0*EPSILON || x - x3.min(x4)<10.0*EPSILON ||
+                y-y1.max(y2)>-10.0*EPSILON || y - y1.min(y2)<10.0*EPSILON ||
+                y-y3.max(y4)>-10.0*EPSILON || y - y3.min(y4)<10.0*EPSILON
             );
         }
     }

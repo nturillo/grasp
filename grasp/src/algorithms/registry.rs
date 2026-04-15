@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::graph::{EdgeID, VertexID, prelude::{SparseDiGraph, SparseSimpleGraph}};
 
@@ -108,6 +108,7 @@ pub enum ReturnType {
     Vertex(VertexID),
     Edge(EdgeID),
     VertexList(Vec<VertexID>),
+    Planarity(Result<HashMap<VertexID, (f32, f32)>, HashSet<EdgeID>>),
     EdgeList(Vec<EdgeID>),
     VertexCluster(Vec<HashSet<VertexID>>),
     SimpleGraph(SparseSimpleGraph),

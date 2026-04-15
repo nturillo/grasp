@@ -26,10 +26,10 @@ pub fn dfs_simple_recursive<G: GraphTrait, V: DfsSimpleVisitor>(
     visitor.root_vertex(vertex);
     dfs_recurse(graph, vertex, None, &mut dfs_index, &mut current_dfs_index, visitor);
     // Run over any remaining vtcs
-    for i in 0..graph.vertex_count() {
-        if dfs_index.contains_key(&i) {continue;}
-        visitor.root_vertex(i);
-        dfs_recurse(graph, i, None, &mut dfs_index, &mut current_dfs_index, visitor);
+    for v in graph.vertices() {
+        if dfs_index.contains_key(&v) {continue;}
+        visitor.root_vertex(v);
+        dfs_recurse(graph, v, None, &mut dfs_index, &mut current_dfs_index, visitor);
     }
 }
 fn dfs_recurse<G: GraphTrait, V: DfsSimpleVisitor>(

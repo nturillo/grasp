@@ -1,4 +1,5 @@
-use std::{collections::HashMap, env};
+use std::{collections::{HashMap, HashSet}, env};
+use eframe::egui::Color32;
 use grasp::graph::{graph_ops::SubgraphView, permutation::{PermutationDiGraph, lehmer_from_natural, permutation_from_lehmer}, prelude::*};
 use gdraw::app::GraspApp;
 
@@ -7,9 +8,7 @@ fn permutation_distance(perm_1: &Vec<usize>, perm_2: &Vec<usize>) -> usize{
     assert!(perm_1.len() == perm_2.len());
     for i in 0..perm_1.len() {
         // test if perm_1[i..] == perm_2[..i]
-        if perm_1[i..] == perm_2[..i] {
-            return i;
-        }
+        if perm_1[i..] == perm_2[..(perm_2.len()-i)] {return i;}
     }
     perm_1.len()
 }
@@ -43,9 +42,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     ), true);
     // Display graph with mst highlight
     let mut app = GraspApp::new();
-    app.load_labeled_subgraph(&mst);
+    app.load(&mst);
     // TODO: Highlight mst in app
+    let edge_set = mst.edges().collect::<HashSet<EdgeID>>();
+    app.highlight_edges(&edge_set, Color32::RED);
     // TODO: Show labels in app
+    for (id, label) in app.graph.vertex_labels.iter_mut(){
+        let Some(permutation) = permutations.get(id) else {continue;};
+        label.data = Some(format!("{:?}", *permutation));
+    }
+    for ((a, b), label) in app.graph.edge_labels.iter_mut(){
+        let Some(perm_a) = permutations.get(a) else {continue;};
+        let Some(perm_b) = permutations.get(b) else {continue;};
+        let weight = permutation_distance(perm_a, perm_b);
+        label.data = Some(format!("{}", weight));
+    }
     app.start()?;
     Ok(())
 }
