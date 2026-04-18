@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use crate::graph::prelude::*;
 use crate::algorithms::algo_traits::Number;
+use graph_ops_macros::register;
 
 struct DSU {
     parent: HashMap<VertexID, VertexID>,
@@ -35,6 +36,42 @@ impl DSU {
         self.parent.insert(root_a, root_b);
         true
     }
+}
+
+
+#[register(
+    name = "Kruskal MST Crop",
+    desc = "Removes edges from the graph to create a minimum spanning tree.",
+    ret = SimpleGraph,
+    simple = "true",
+    params = []
+)]
+pub fn kruskal_mst_crop<G: SimpleGraph>(g: &G) -> SparseSimpleGraph {
+    let mst = kruskal_mst(g, |_, _| Some(1usize)).unwrap_or_default();
+
+    let mut out = SparseSimpleGraph::with_capacity(g.vertex_count(), mst.len());
+    for v in g.vertices() {
+        out.add_vertex(v);
+    }
+    for (u, v, _) in mst {
+        out.add_edge((u, v));
+    }
+    out
+}
+
+#[register(
+    name = "Kruskal MST Highlight",
+    desc = "Highlights the edges in the minimum spanning tree.",
+    ret = EdgeList,
+    simple = "true",
+    params = []
+)]
+pub fn kruskal_mst_highlight<G: SimpleGraph>(g: &G) -> impl Set<Item = EdgeID> {
+    let mst = kruskal_mst(g, |_, _| Some(1usize)).unwrap_or_default();
+
+    mst.into_iter()
+        .map(|(u, v, _)| (u.min(v), u.max(v))) // normalize like bridges
+        .collect::<HashSet<EdgeID>>()
 }
 
 pub fn kruskal_mst<G, WF, N>(g: &G, weight: WF) -> Result<Vec<(VertexID, VertexID, N)>, GraphError>
