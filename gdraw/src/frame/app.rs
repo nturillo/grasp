@@ -4,7 +4,7 @@ use crate::{
     },
     graph::{
         layout::{self, LayoutConfig},
-        storage::Graph,
+        storage::{Edge, Graph},
     },
 };
 use eframe::{egui::{
@@ -92,6 +92,11 @@ impl GraspApp {
     /// Highlight a set of vertices.
     pub fn highlight_set<S: Set<Item = VertexID>>(&mut self, set: &S, color: Color32) {
         self.graph.highlight_set(set, color);
+    }
+
+    /// Highlight a set of edge.
+    pub fn highlight_edges<S: Set<Item = EdgeID>>(&mut self, set: &S, color: Color32) {
+        self.graph.highlight_edges(set, color);
     }
 
     /// Returns a copy of the [`grasp::graph::adjacency_list::SparseDiGraph`] underlying the visualizer.

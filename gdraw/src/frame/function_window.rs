@@ -1,6 +1,6 @@
 use std::collections::{HashSet};
 
-use eframe::egui::{Align, Color32, Context, DragValue, Layout, Rgba, Window};
+use eframe::egui::{Align, Color32, Context, DragValue, Layout, Rgba, Vec2, Window};
 use grasp::{algorithms::registry::{ArgType, FunctionData, ReturnType}, graph::{EdgeID, VertexID}};
 
 use crate::{frame::style::Style, graph::{layout::apply, storage::Graph}};
@@ -147,6 +147,24 @@ impl FunctionWindow {
                                 },
                                 ReturnType::DiGraph(rgraph) => {*graph = Graph::from(&rgraph); apply(graph); graph.directed = true;},
                                 ReturnType::SimpleGraph(rgraph) => {*graph = Graph::from(&rgraph); apply(graph); graph.directed = false;},
+                                ReturnType::Planarity(planarity) => {
+                                    match planarity {
+                                        Ok(embedding) => {
+                                            self.string_result = Some("Graph is Planar".to_string());
+                                            for (id, label) in graph.vertex_labels.iter_mut(){
+                                                let Some((x, y)) = embedding.get(id) else {continue;};
+                                                label.center = Vec2::new(*x, *y);
+                                            }
+                                        },
+                                        Err(mut subgraph) => {
+                                            self.string_result = Some("Graph is not Planar".to_string());
+                                            graph.clear_highlights();
+                                            let inv: HashSet<(usize, usize)> = subgraph.iter().map(|(a, b)| (*b, *a)).collect();
+                                            subgraph.extend(inv);
+                                            graph.highlight_edges(&subgraph, style.edge_highlight_color);
+                                        }
+                                    }
+                                }
                                 _ => (),
                             }
 

@@ -1,4 +1,5 @@
-use crate::graph::{BuildableGraph, GraphMut, VertexID};
+use graph_ops_macros::register;
+use crate::graph::{BuildableGraph, GraphMut, VertexID, directed::DigraphProjection, prelude::{SimpleGraph, SparseSimpleGraph}};
 
 pub fn build_complete_graph<G: GraphMut+BuildableGraph>(size: usize) -> G{
     let mut graph = G::with_capacity(size, size*(size-1)/2);
@@ -74,8 +75,8 @@ pub fn build_binary_tree<G: GraphMut+BuildableGraph>(layers: usize) -> G{
         let _ = graph.try_add_edge((vertex, child_1));
         let _ = graph.try_add_edge((vertex, child_2));
         if layer < layers-2{
-            stack.push((vertex, layer+1));
-            stack.push((vertex, layer+1));
+            stack.push((child_1, layer+1));
+            stack.push((child_2, layer+1));
         }
     }
     graph

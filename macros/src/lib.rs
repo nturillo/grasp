@@ -82,8 +82,8 @@ pub fn register(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     match return_type.as_str() {
-        "String" | "Vertex" | "VertexList" | "Edge" | "EdgeList" | "VertexCluster" | "SimpleGraph" | "DiGraph" | "None" => (),
-        _ => { return new_error(format!("Expected one of [String, Vertex, VertexList, Edge, EdgeList, VertexCluster, SimpleGraph, DiGraph, None], found {}", return_type)); }
+        "String" | "Vertex" | "VertexList" | "Edge" | "EdgeList" | "VertexCluster" | "SimpleGraph" | "DiGraph" | "None" | "Planarity" => (),
+        _ => { return new_error(format!("Expected one of [String, Vertex, VertexList, Edge, EdgeList, VertexCluster, SimpleGraph, DiGraph, None, Planarity], found {}", return_type)); }
     }
 
     let return_type_ident = format_ident!("{}", return_type);

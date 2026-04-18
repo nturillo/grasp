@@ -1,6 +1,19 @@
+use core::panic;
 use std::{collections::{HashMap, HashSet, VecDeque}, f32::consts::TAU, fmt::Debug, hash::Hash, mem::swap, usize};
+use graph_ops_macros::register;
+
 use crate::graph::prelude::*;
 use super::search_visitors::*;
+
+#[register(name = "Planarity", desc = "Determines the planarity of the graph. Returns an embedding if planar, or a kuratowski minor if not.", simple = "true", ret = Planarity, params = [])]
+/// Get planarity
+pub fn get_straightedge_embedding<G: SimpleGraph>(g: &G) -> Result<HashMap<usize, (f32, f32)>, HashSet<(usize, usize)>> {
+    let mut embedding = GraphPlanarity::from_graph(g);
+    match embedding.get_planarity_structure() {
+        Ok(mut embedding) => Ok(embedding.calculate_euclidean_embedding()),
+        Err(subgraph) => Err(subgraph.edge_set)
+    }
+}
 
 /// Struct used to calculate planarity and build planarity structures
 #[derive(Clone)]
@@ -141,9 +154,10 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
             self.pertinence[descendent].pertinence = reference;
 
             let mut l_vertex = descendent; let mut r_vertex = descendent;
-            let mut l_on_first = true; let mut r_on_first = false; // Different directions.
+            let mut l_on_first = EdgeDescriptor::First; let mut r_on_first = EdgeDescriptor::Second; // Different directions.
             // Find pertinent roots
             loop {
+                // println!("Walkup: {} {:?} {} {:?}", l_vertex, self.embedding[l_vertex].canonical_child, r_vertex, self.embedding[r_vertex].canonical_child);
                 // Visit current vertex
                 self.pertinence[l_vertex].visited = reference; self.pertinence[r_vertex].visited = reference;
                 // Check if next vertex is root
@@ -155,10 +169,11 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
                     } else { // Internally Active
                         self.pertinence[root].pertinent_roots.push_back(canon);
                     }
+                    // println!("Found pertinent root {} of {}", canon, root);
                     // Finished walkup if we got to the reference or the root is visited
                     if root == reference || self.pertinence[root].visited == reference {break;} 
                     // Start searching root's bicomp
-                    l_vertex = root; r_vertex = root; l_on_first = true; r_on_first = false;
+                    l_vertex = root; r_vertex = root; l_on_first = EdgeDescriptor::First; r_on_first = EdgeDescriptor::Second;
                     continue;
                 }
                 // Otherwise continue along external face
@@ -174,7 +189,7 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
     /// Returns false if failure occurs
     fn walkdown(&mut self, reference: usize) {
         // Stores visited bicomp canonical children and for each bicomp, how it entered the root vertex, and how it left the root vertex in the bicomp
-        let mut stack: Vec<(usize, bool, bool)> = vec![];
+        let mut stack: Vec<(usize, EdgeDescriptor, EdgeDescriptor)> = vec![];
         loop{
             // Get next pertinent root (canonical child) of reference
             let Some(canon) = self.pertinence[reference].pertinent_roots.pop_front() 
@@ -188,56 +203,72 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         }
     }
     /// For each child of reference, this proc is run twice, once for both directions. Returns false if non planarity detected
-    fn walkdown_proc(&mut self, reference: usize, canon: usize, leave_root_on_first: bool, stack: &mut Vec<(usize, bool, bool)>) {
+    fn walkdown_proc(&mut self, reference: usize, canon: usize, leave_root_on_first: bool, stack: &mut Vec<(usize, EdgeDescriptor, EdgeDescriptor)>) {
         let root: usize = self.dfs_data[canon].parent.unwrap();
-        //println!("Begin walkdown: {}, leave_root_on_first: {}", root, leave_root_on_first);
-        let (mut vertex, mut in_on_first) = self.get_next_external_vertex_root(canon, !leave_root_on_first);
+        // println!("Begin walkdown: {}, leave_root_on_first: {}", root, leave_root_on_first);
+        let (mut vertex, mut edge_desc) = self.get_next_external_vertex_root(
+            canon, 
+            if leave_root_on_first {EdgeDescriptor::Second} else {EdgeDescriptor::First}
+        );
         while vertex != root{
-            //println!("Vertex: {}", vertex);
+            // println!("Vertex: {}", vertex);
             // Found a backedge to embed
             if self.pertinence[vertex].pertinence == reference {
-                //println!("Embed: {}", vertex);
+                // println!("Embed: {}", vertex);
                 // Merge bicomps in stack
-                while let Some((merged_canon, iof, oof)) = stack.pop(){
+                let mut prior_external_first = !leave_root_on_first;
+                let mut last_real_direction = EdgeDescriptor::Both;
+                while let Some((merged_canon, mut in_desc, out_desc)) = stack.pop(){
+                    if out_desc != EdgeDescriptor::Both {last_real_direction = out_desc;}
+                    // Ensures roots first/second pointer is free to move to the descendant vertex
+                    if stack.is_empty() && in_desc == EdgeDescriptor::Both {
+                        in_desc = if leave_root_on_first {EdgeDescriptor::Second} else {EdgeDescriptor::First};
+                    }
                     // If we swapped directions, flip bicomp
-                    if !(oof ^ iof) {self.flip_bicomp(merged_canon);}
-                    self.merge_bicomps(merged_canon, iof);
+                    match (in_desc, last_real_direction) {
+                        (EdgeDescriptor::First, EdgeDescriptor::First) => {self.flip_bicomp(merged_canon);}
+                        (EdgeDescriptor::Second, EdgeDescriptor::Second) => {self.flip_bicomp(merged_canon);}
+                        _ => {}
+                    }
+                    prior_external_first = self.merge_bicomps(merged_canon, in_desc, out_desc, prior_external_first);
                 }
                 // Embed backedge
-                self.embed_backedge(reference, canon, vertex, leave_root_on_first, in_on_first, false);
+                self.embed_backedge(reference, canon, vertex, leave_root_on_first, edge_desc, false);
                 // Clear Backedge Flag
                 self.pertinence[vertex].pertinence = self.vtx_count;
             }
             if !self.pertinence[vertex].pertinent_roots.is_empty() {
-                //println!("Descend: {}", vertex);
+                // println!("Descend: {}", vertex);
                 // Traverse into pertinent bicomp to merge next backedge. Once the backedge in that bicomp is merged, \
                 // the bicomp will return to being 'canon' (as the bicomps were merged)
                 // Get next bicomp, start with internally active (back of list)
                 let new_canon = *self.pertinence[vertex].pertinent_roots.back().unwrap(); 
-                let (x, x_on_first) = self.find_active_successor(reference, new_canon, true);
-                let (y, y_on_first) = self.find_active_successor(reference, new_canon, false);
+                let (x, x_desc, x_out) = self.find_active_successor(reference, new_canon, true);
+                let (y, y_desc, y_out) = self.find_active_successor(reference, new_canon, false);
+
                 if self.is_internally_active(x, reference) {
-                    stack.push((new_canon, in_on_first, false));
-                    vertex = x; in_on_first = x_on_first;
+                    stack.push((new_canon, edge_desc, x_out));
+                    vertex = x; edge_desc = x_desc;
                 } else if self.is_internally_active(y, reference) {
-                    stack.push((new_canon, in_on_first, true));
-                    vertex = y; in_on_first = y_on_first;
+                    stack.push((new_canon, edge_desc, y_out));
+                    vertex = y; edge_desc = y_desc;
                 } else if self.is_pertinent(x, reference) {
-                    stack.push((new_canon, in_on_first, false));
-                    vertex = x; in_on_first = x_on_first;
+                    stack.push((new_canon, edge_desc, x_out));
+                    vertex = x; edge_desc = x_desc;
                 } else {
-                    stack.push((new_canon, in_on_first, true));
-                    vertex = y; in_on_first = y_on_first;
+                    stack.push((new_canon, edge_desc, y_out));
+                    vertex = y; edge_desc = y_desc;
                 }
             } else if !self.is_pertinent(vertex, reference) && !self.is_externally_active(vertex, reference) {
                 // vertex is inactive, move forward
-                (vertex, in_on_first) = self.get_next_external_vertex(vertex, in_on_first);
+                (vertex, edge_desc) = self.get_next_external_vertex(vertex, edge_desc);
             } else {
                 // vertex is a stopping vertex, cannot proceed since it is either pertinent, or externally active. \
                 // It is not pertinent, since it has no backedgeFlag (already imbedded above) and has no pertinent roots (prior if). \
                 // Thus it is externally active, and thus a stopping vertex
                 if self.dfs_data[canon].lowpoint < reference && stack.is_empty(){
-                    self.embed_backedge(reference, canon, vertex, leave_root_on_first, in_on_first, true);
+                    // TODO: Figure out why this breaks the algorithm.
+                    // self.embed_backedge(reference, canon, vertex, leave_root_on_first, edge_desc, true);
                 }
                 break;
             }
@@ -247,53 +278,70 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
     /// embed vertex -> reference into bicomp rooted at reference with canon. \
     /// Keeps first canonical edge on the inside if dir is true. \
     /// Needs to know if vertex was reached with its first external edge.
-    fn embed_backedge(&mut self, reference: usize, canon: usize, vertex: usize, left_root_on_first: bool, in_on_first: bool, short_circuit: bool) {
+    fn embed_backedge(&mut self, reference: usize, canon: usize, vertex: usize, left_root_on_first: bool, in_on_first: EdgeDescriptor, short_circuit: bool) {
         let to_r = self.edge_data.len();
         let to_v = to_r+1;
 
         let (v_first, v_second) = self.embedding[vertex].external_edges;
         let (r_first, r_second) = self.embedding[canon].canonical_edges;
 
-        //println!("Setting {} {} next to {} {}", vertex, self.edge_data[v_second].neighbor, vertex, reference);
+        // println!("Setting {} {} next to {} {}", vertex, self.edge_data[v_second].neighbor, vertex, reference);
         self.edge_data[v_second].next = to_r;
-        //println!("Setting {} {} next to {} {}", reference, self.edge_data[r_second].neighbor, reference, vertex);
+        // println!("Setting {} {} next to {} {}", reference, self.edge_data[r_second].neighbor, reference, vertex);
         self.edge_data[r_second].next = to_v;
 
-        //println!("Setting {} {} next to {} {}", vertex, reference, vertex, self.edge_data[v_first].neighbor);
+        // println!("Setting {} {} next to {} {}", vertex, reference, vertex, self.edge_data[v_first].neighbor);
         self.edge_data.push(HalfEdge { twin: to_v, next: v_first, neighbor: reference, short_circuit });
-        //println!("Setting {} {} next to {} {}", reference, vertex, reference, self.edge_data[r_first].neighbor);
+        // println!("Setting {} {} next to {} {}", reference, vertex, reference, self.edge_data[r_first].neighbor);
         self.edge_data.push(HalfEdge { twin: to_r, next: r_first, neighbor: vertex, short_circuit });
         
-        // If we are biconnecting a tree edge, just make it work with the canon edges
-        if self.embedding[vertex].external_edges.0 == self.embedding[vertex].external_edges.1 {
-            if left_root_on_first {
-                //println!("Setting {} second -> {}", vertex, reference);
-                self.embedding[vertex].external_edges.1 = to_r;
-            } else {
-                //println!("Setting {} first -> {}", vertex, reference);
+        match in_on_first {
+            EdgeDescriptor::First => {
+                // println!("Setting {} first -> {}", vertex, reference);
                 self.embedding[vertex].external_edges.0 = to_r;
+                // We want to make sure vertices on the external face have correct canonical child
+                let neighbor = self.edge_data[self.embedding[vertex].external_edges.1].neighbor;
+                self.embedding[neighbor].canonical_child = None;
+            },
+            EdgeDescriptor::Second => {
+                // println!("Setting {} second -> {}", vertex, reference);
+                self.embedding[vertex].external_edges.1 = to_r;
+                let neighbor = self.edge_data[self.embedding[vertex].external_edges.0].neighbor;
+                self.embedding[neighbor].canonical_child = None;
+            },
+            EdgeDescriptor::Both => {
+                // If we are biconnecting a tree edge, just make it work with the neighbor edges
+                let neighbor = self.edge_data[self.embedding[vertex].external_edges.0].neighbor;
+                let from_neighbors_first = self.edge_data[self.embedding[neighbor].external_edges.0].neighbor == vertex;
+                if from_neighbors_first {
+                    // println!("Setting {} first -> {}", vertex, reference);
+                    self.embedding[vertex].external_edges.0 = to_r;
+                } else {
+                    // println!("Setting {} second -> {}", vertex, reference);
+                    self.embedding[vertex].external_edges.1 = to_r;
+                }
+                self.embedding[neighbor].canonical_child = None;
             }
-        }else if in_on_first {
-            //println!("Setting {} first -> {}", vertex, reference);
-            self.embedding[vertex].external_edges.0 = to_r;
-        } else {
-            //println!("Setting {} second -> {}", vertex, reference);
-            self.embedding[vertex].external_edges.1 = to_r;
         }
         if left_root_on_first {
-            //println!("Setting canon {} first -> {}", reference, vertex);
+            // println!("Setting canon {} first -> {}", reference, vertex);
             self.embedding[canon].canonical_edges.0 = to_v;
         } else {
-            //println!("Setting canon {} second -> {}", reference, vertex);
+            // println!("Setting canon {} second -> {}", reference, vertex);
             self.embedding[canon].canonical_edges.1 = to_v;
         }
         // Setup canonical child pointer
-        self.embedding[vertex].canonical_child = Some(canon);
+        let (f, s) = self.embedding[canon].canonical_edges;
+        self.embedding[self.edge_data[f].neighbor].canonical_child = Some(canon);
+        self.embedding[self.edge_data[s].neighbor].canonical_child = Some(canon);
+        // println!("Setting {} canonical child to {}", self.edge_data[f].neighbor, canon);
+        // println!("Setting {} canonical child to {}", self.edge_data[s].neighbor, canon);
     }
     /// Merges a bicomp into the bicomp containing its root. Assumes bicomp needs not be flipped. \
     /// Requires whether the root was visited using its first external edge. \
     /// If so, the first external edge is replaced with the bicomps first canonical edge. (traversed path is kept inside).
-    fn merge_bicomps(&mut self, canon: usize, in_on_first: bool, ) {
+    /// Returns which external edge of root got updated to an canonical edge of canon. Used in later merges potentially
+    fn merge_bicomps(&mut self, canon: usize, in_desc: EdgeDescriptor, out_desc: EdgeDescriptor, prior_external_first: bool) -> bool {
         let root = self.dfs_data[canon].parent.unwrap();
         // remove merged_canon from pertinent roots of merged_canon's parent
         self.pertinence[root].pertinent_roots.retain(|r| *r!=canon);
@@ -310,25 +358,61 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         //     root, self.edge_data[self.embedding[canon].canonical_edges.0].neighbor
         // );
         self.edge_data[self.embedding[root].external_edges.1].next = self.embedding[canon].canonical_edges.0;
-        // Update external Edges
-        if in_on_first {
-            //println!("Merge: Setting {} first -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.0].neighbor);
-            self.embedding[root].external_edges.0 = self.embedding[canon].canonical_edges.0;
-        }else {
-            //println!("Merge: Setting {} second -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.1].neighbor);
-            self.embedding[root].external_edges.1 = self.embedding[canon].canonical_edges.1;
+        // Update external Edges to remain outside even after the future edge is embedded
+        let external_update_first;
+        match in_desc{
+            EdgeDescriptor::First => {
+                // println!("Merge: Setting {} first -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.0].neighbor);
+                self.embedding[root].external_edges.0 = self.embedding[canon].canonical_edges.0;
+                external_update_first = true;
+            },
+            EdgeDescriptor::Second => {
+                // println!("Merge: Setting {} second -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.1].neighbor);
+                self.embedding[root].external_edges.1 = self.embedding[canon].canonical_edges.1;
+                external_update_first = false;
+            },
+            EdgeDescriptor::Both => {
+                match out_desc {
+                    EdgeDescriptor::First => {
+                        // println!("Merge: Setting {} second -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.1].neighbor);
+                        self.embedding[root].external_edges.1 = self.embedding[canon].canonical_edges.1;
+                        external_update_first = false;
+                    },
+                    EdgeDescriptor::Second => {
+                        // println!("Merge: Setting {} first -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.0].neighbor);
+                        self.embedding[root].external_edges.0 = self.embedding[canon].canonical_edges.0;
+                        external_update_first = true;
+                    },
+                    EdgeDescriptor::Both => {
+                        if prior_external_first {
+                            // println!("Merge: Setting {} first -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.0].neighbor);
+                            self.embedding[root].external_edges.0 = self.embedding[canon].canonical_edges.0;
+                            external_update_first = true;
+                        } else {
+                            // println!("Merge: Setting {} second -> {}", root, self.edge_data[self.embedding[canon].canonical_edges.1].neighbor);
+                            self.embedding[root].external_edges.1 = self.embedding[canon].canonical_edges.1;
+                            external_update_first = false;
+                        }
+                    }
+                }
+            }
         }
         // Reset canon option
         let (a,b) = self.embedding[canon].canonical_edges;
         self.embedding[self.edge_data[a].neighbor].canonical_child = None;
         self.embedding[self.edge_data[b].neighbor].canonical_child = None;
+        //return 
+        external_update_first
     }
     /// Flips a bicomp from canonical child.
     fn flip_bicomp(&mut self, canon: usize){
         // If we are a singleton bicomp, don't flip its extraneous and messes up the planar embedding
-        if self.embedding[canon].external_edges.0 == self.embedding[canon].external_edges.1 {return;}
+        if self.embedding[canon].canonical_edges.0 == self.embedding[canon].canonical_edges.1 {
+            self.embedding[canon].flipped = true;
+            return;
+        }
         let (start, end) = &mut self.embedding[canon].canonical_edges;
-        //println!("Reversing list from {} {} to {} {}", self.dfs_data[canon].parent.unwrap(), self.edge_data[*start].neighbor, self.dfs_data[canon].parent.unwrap(), self.edge_data[*end].neighbor);
+        // println!("Reversing list from {} {} to {} {}", self.dfs_data[canon].parent.unwrap(), self.edge_data[*start].neighbor, self.dfs_data[canon].parent.unwrap(), self.edge_data[*end].neighbor);
         // Swap adjacency list direction
         let start_edge = *start;
         let mut prev = start_edge;
@@ -343,50 +427,59 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
         self.edge_data[start_edge].next = prev;
         
         // Swap external edge pointers
-        //println!("Swapping vertex {}'s external edges, {} {}", self.dfs_data[canon].parent.unwrap(), self.edge_data[*start].neighbor, self.edge_data[*end].neighbor);
+        // println!("Swapping vertex {}'s external edges, {} {}", self.dfs_data[canon].parent.unwrap(), self.edge_data[*start].neighbor, self.edge_data[*end].neighbor);
         std::mem::swap(start, end);
         self.embedding[canon].flipped = true;
     }
     
     /// Same as get_next_external_vertex, but explicitly for root vtcs, described by their canonical child
-    fn get_next_external_vertex_root(&self, canon: usize, in_on_first: bool) -> (usize, bool){
+    fn get_next_external_vertex_root(&self, canon: usize, in_descriptor: EdgeDescriptor) -> (usize, EdgeDescriptor){
         // Get the edge we didn't come in on
-        let out_edge = if in_on_first {self.embedding[canon].canonical_edges.1} else {self.embedding[canon].canonical_edges.0};
+        let out_edge = match in_descriptor{
+            EdgeDescriptor::Both | EdgeDescriptor::Second => {self.embedding[canon].canonical_edges.0}
+            EdgeDescriptor::First => {self.embedding[canon].canonical_edges.1}
+        };
+        let twin = self.edge_data[out_edge].twin;
         // Next vertex should be whatever vtx the out edge points to
         let next_vertex = self.edge_data[out_edge].neighbor;
-        // If next vertexs first external edge is the twin of out edge, then we came in_on_first.
-        let on_first = self.edge_data[self.embedding[next_vertex].external_edges.0].twin == out_edge;
-        // If next vertex is end of tree edge, then in_on_first is always false
-        if self.embedding[canon].canonical_edges.1 == self.embedding[canon].canonical_edges.0 {
-            (next_vertex, false)
-        }else {
-            (next_vertex, on_first)
-        }
-    }
-    /// Given current vertex and whether the first external edge was used to traverse to it,\
-    /// returns next vertex and whether the first external edge was used to traverse to it
-    fn get_next_external_vertex(&self, vertex: usize, in_on_first: bool) -> (usize, bool){
-        // Get the edge we didn't come in on
-        let out_edge = if in_on_first {self.embedding[vertex].external_edges.1} else {self.embedding[vertex].external_edges.0};
-        // Next vertex should be whatever vtx the out edge points to
-        let next_vertex = self.edge_data[out_edge].neighbor;
-        // If next vertexs first external edge is the twin of out edge, then we came in_on_first.
-        let on_first = self.edge_data[self.embedding[next_vertex].external_edges.0].twin == out_edge;
-        // If next vertex is end of tree edge, then in_on_first is always false
-        if self.embedding[vertex].external_edges.1 == self.embedding[vertex].external_edges.0 {
-            (next_vertex, false)
-        }else {
-            (next_vertex, on_first)
-        }
+        // Determine which edge we are traversing on in neighbors external tuple
+        let (nf, ns) = self.embedding[next_vertex].external_edges;
+        let out_descriptor = if nf == ns {EdgeDescriptor::Both} else if nf == twin {EdgeDescriptor::First} else {EdgeDescriptor::Second};
+        return (next_vertex, out_descriptor);
     }
     
-    /// Finds the first active (pertinent or externally active) vertex on the external face of a bicomp
-    fn find_active_successor(&self, reference: usize, canon: usize, dir: bool) -> (usize, bool){
-        let (mut vertex, mut in_on_first) = self.get_next_external_vertex_root(canon, dir);
+    /// Given current vertex and what edge was used to traverse to it \
+    /// returns next vertex and what edge was used to traverse to it \
+    fn get_next_external_vertex(&self, vertex: usize, in_descriptor: EdgeDescriptor) -> (usize, EdgeDescriptor){
+        // Get the edge we didn't come in on
+        let out_edge = match in_descriptor{
+            EdgeDescriptor::Both | EdgeDescriptor::Second => {self.embedding[vertex].external_edges.0}
+            EdgeDescriptor::First => {self.embedding[vertex].external_edges.1}
+        };
+        let twin = self.edge_data[out_edge].twin;
+        // Next vertex should be whatever vtx the out edge points to
+        let next_vertex = self.edge_data[out_edge].neighbor;
+        // Determine which edge we are traversing on in neighbors external tuple
+        let (nf, ns) = self.embedding[next_vertex].external_edges;
+        let out_descriptor = if nf == ns {EdgeDescriptor::Both} else if nf == twin {EdgeDescriptor::First} else {EdgeDescriptor::Second};
+        return (next_vertex, out_descriptor);
+    }
+    
+    /// Finds the first active (pertinent or externally active) vertex on the external face of a bicomp. \
+    /// Returns the vertex, how the vertex was reached, and how the root was exited
+    fn find_active_successor(&self, reference: usize, canon: usize, dir: bool) -> (usize, EdgeDescriptor, EdgeDescriptor){
+        let root_out = if self.embedding[canon].canonical_edges.0 == self.embedding[canon].canonical_edges.1 {
+            EdgeDescriptor::Both
+        } else if dir {EdgeDescriptor::Second} 
+        else {EdgeDescriptor::First};
+        let (mut vertex, mut edge_descriptor) = self.get_next_external_vertex_root(
+            canon, 
+            if dir {EdgeDescriptor::First} else {EdgeDescriptor::Second}
+        );
         while !self.is_pertinent(vertex, reference) && !self.is_externally_active(vertex, reference) {
-            (vertex, in_on_first) = self.get_next_external_vertex(vertex, in_on_first);
+            (vertex, edge_descriptor) = self.get_next_external_vertex(vertex, edge_descriptor);
         }
-        (vertex, in_on_first)
+        (vertex, edge_descriptor, root_out)
     }
     
     /// Whether the vertex is pertinent relative to reference
@@ -425,7 +518,7 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
     }
         
     pub fn get_circular_adjacency_list(&self) -> HashMap<VertexID, Vec<VertexID>>{
-        println!("{:?}", self);
+        // println!("{:?}", self);
         // Starting at top vtx, create clockwise adjacency lists. Keep a stack of booleans for flipping
         let mut flip_stack = vec![];
         let mut adjacency_list = HashMap::with_capacity(self.vtx_count);
@@ -461,7 +554,7 @@ impl<'a, G: GraphTrait> GraphPlanarity<'a, G>{
             let adj_list = self.get_adjacency_list(start, flip).into_iter().map(|vtx| self.ids[vtx]).collect();
             adjacency_list.insert(self.ids[vertex], adj_list);
         }
-        println!("{:?}", adjacency_list);
+        // println!("{:?}", adjacency_list);
         //panic!();
         adjacency_list
     }
@@ -566,6 +659,7 @@ pub struct PlanarEmbedding{
 impl PlanarEmbedding{
     /// Given a circular adjacency list, calculates the DCEL embedding structure. This is definitely not an optimal solution, but it works
     pub fn from_circular_adjacency_list(list: HashMap<VertexID, Vec<VertexID>>) -> Self{
+        // println!("{:?}", list);
         let mut embedding = Self::default();
         embedding.vertex_group = list.keys().map(|v| (*v, usize::MAX)).collect();
         let mut half_edge_index: HashMap<(usize, usize), usize> = HashMap::default();
@@ -858,7 +952,9 @@ impl PlanarEmbedding{
 
             let mut cur_edge = start_edge;
             let mut next_edge = self.half_edges[start_edge].face_trav.1;
+            let mut i = 0;
             loop{
+                i += 1; if i > 20 {panic!();}
                 // If first and last not adjacent, merge the edges
                 if !self.vertex_adjacency[&self.half_edges[cur_edge].endpoints.0].contains(&self.half_edges[next_edge].endpoints.1) {
                     next_edge = self.half_edges[next_edge].face_trav.1;
@@ -1093,6 +1189,14 @@ impl PlanarEmbedding{
     }
 }
 
+/// Descriptor for an edge of a vertices external or canonical edges. Both is used if both edges are the same
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum EdgeDescriptor{
+    First,
+    Second,
+    Both
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct DCELHalfEdge{
     // Half edge vertex endpoints
@@ -1197,9 +1301,60 @@ struct HalfEdge{
 
 #[cfg(test)]
 mod test{
-    use std::f32::EPSILON;
+    use std::{collections::HashMap, f32::EPSILON};
+    use crate::{algorithms::planarity::GraphPlanarity, graph::{homogenous::HomogenousView, prelude::*}};
 
-    use crate::{algorithms::planarity::GraphPlanarity, graph::prelude::*};
+    pub fn test_line_crossing<G: GraphTrait>(graph: &G, positions: &HashMap<usize, (f32, f32)>) -> bool{
+        let edges: Vec<EdgeID> = graph.edges().collect();
+        for i in 0..edges.len()-1 {
+            for j in i+1..edges.len(){
+                let (v_a, v_b) = edges[i];
+                let (u_a, u_b) = edges[j];
+                let (x1, y1) = positions[&v_a];
+                let (x2, y2) = positions[&v_b];
+                let (x3, y3) = positions[&u_a];
+                let (x4, y4) = positions[&u_b];
+                let denom = (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4);
+                if denom == 0.0 {
+                    // Cant intersect lines parallel. Determine if they are colinear
+                    if (x1-x2).abs() < EPSILON || (x3-x4).abs() < EPSILON {
+                        println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), are vertical", x1, y1, x2, y2, x3, y3, x4, y4);
+                        if x1!=x3 {continue;}
+                        let (a1, b1) = (y1.min(y2), y1.max(y2));
+                        let (a2, b2) = (y3.min(y4), y3.max(y4));
+                        let overlap = b1.min(b2) - a1.max(a2);
+                        if overlap>= EPSILON {return false;}
+                        continue;
+                    }
+                    //ensure colinear
+                    let m1 = (y2-y1) / (x2-x1);
+                    let m2 = (y4-y3) / (x4-x3);
+                    let b1 = y1 - m1*x1; let b2 = y3 - m2*x3;
+                    if (m1-m2).abs() < EPSILON && (b1-b2).abs() < EPSILON{
+                        // Check for x overlap
+                        println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), are collinear", x1, y1, x2, y2, x3, y3, x4, y4);
+                        let (a1, b1) = (x1.min(x2), x1.max(x2));
+                        let (a2, b2) = (x3.min(x4), x3.max(x4));
+                        let overlap = b1.min(b2) - a1.max(a2);
+                        if overlap>= EPSILON {return false;}
+                    }else {
+                        println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), are parallel but non collinear", x1, y1, x2, y2, x3, y3, x4, y4);
+                    }
+                    continue;
+                }
+                let x = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4)) / denom;
+                let y = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4)) / denom;
+                println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), intersect at ({}, {})", x1, y1, x2, y2, x3, y3, x4, y4, x, y);
+                // Insure intersection occurs out of one of the segment bounds
+                if !(x-x1.max(x2)>-10.0*EPSILON || x - x1.min(x2)<10.0*EPSILON ||
+                    x-x3.max(x4)>-10.0*EPSILON || x - x3.min(x4)<10.0*EPSILON ||
+                    y-y1.max(y2)>-10.0*EPSILON || y - y1.min(y2)<10.0*EPSILON ||
+                    y-y3.max(y4)>-10.0*EPSILON || y - y3.min(y4)<10.0*EPSILON)
+                {return false;}
+            }
+        }
+        true
+    }
 
     #[test]
     fn test_planarity(){
@@ -1218,7 +1373,10 @@ mod test{
         k33.add_edge((2, 5));
         assert!(!GraphPlanarity::from_graph(&k33).compute_planarity());
         let mut k5 = SparseSimpleGraph::default();
-        assert!(GraphPlanarity::from_graph(&k5).compute_planarity());
+        let mut planarity = GraphPlanarity::from_graph(&k5);
+        let result = planarity.get_planarity_structure();
+        println!("{:?}", planarity);
+        assert!(result.is_ok());
         k5.add_edge((0, 1));
         k5.add_edge((0, 2));
         k5.add_edge((0, 3));
@@ -1228,9 +1386,15 @@ mod test{
         k5.add_edge((1, 4));
         k5.add_edge((2, 3));
         k5.add_edge((2, 4));
-        assert!(GraphPlanarity::from_graph(&k5).compute_planarity());
+        let mut planarity = GraphPlanarity::from_graph(&k5);
+        let result = planarity.get_planarity_structure();
+        println!("{:?}", planarity);
+        assert!(result.is_ok());
         k5.add_edge((3, 4));
-        assert!(!GraphPlanarity::from_graph(&k5).compute_planarity());
+        let mut planarity = GraphPlanarity::from_graph(&k5);
+        let result = planarity.get_planarity_structure();
+        println!("{:?}", planarity);
+        assert!(result.is_err());
         let mut p5 = SparseSimpleGraph::default();
         p5.add_vertex(0); p5.add_vertex(1); p5.add_vertex(2); p5.add_vertex(3); p5.add_vertex(4);
         p5.add_edge((0, 1));
@@ -1454,6 +1618,52 @@ mod test{
     }
 
     #[test]
+    fn test_k23_planarity(){
+        let mut k23 = SparseSimpleGraph::default();
+        k23.add_edge((0, 2));
+        k23.add_edge((0, 3));
+        k23.add_edge((0, 4));
+        k23.add_edge((1, 2));
+        k23.add_edge((1, 3));
+        k23.add_edge((1, 4));
+        let mut planarity = GraphPlanarity::from_graph(&k23);
+        let result = planarity.get_planarity_structure();
+        assert!(result.is_ok());
+        let mut embedding = result.unwrap();
+        let positions = embedding.calculate_euclidean_embedding();
+        test_line_crossing(&k23, &positions);
+    }
+
+    #[test]
+    fn test_band_planarity(){
+        // run enough times to ensure all random permutations of the graph
+        for _ in 0..100{
+            let mut graph = SparseSimpleGraph::default();
+            graph.add_edge((0, 1));
+            graph.add_edge((2, 3));
+            graph.add_edge((4, 5));
+            graph.add_edge((0, 2));
+            graph.add_edge((1, 3));
+            graph.add_edge((2, 4));
+            graph.add_edge((3, 5));
+            graph.add_edge((4, 0));
+            graph.add_edge((5, 1));
+            graph.add_edge((0, 5));
+            let scrambled = HomogenousView::from_graph(&graph);
+            let mut planarity = GraphPlanarity::from_graph(&scrambled);
+            let result = planarity.get_planarity_structure();
+            assert!(result.is_ok());
+            let mut embedding = result.unwrap();
+            for edge in embedding.half_edges.iter() {
+                let (a, b) = edge.endpoints;
+                assert!(scrambled.has_edge((a, b)));
+            }
+            let positions = embedding.calculate_euclidean_embedding();
+            assert!(test_line_crossing(&scrambled, &positions));
+        }
+    }
+
+    #[test]
     fn test_straight_edge_embedding(){
         // Create a pentagon
         let mut graph = SparseSimpleGraph::default();
@@ -1471,37 +1681,6 @@ mod test{
 
         let positions = embedding.calculate_euclidean_embedding();
 
-        let edges: Vec<EdgeID> = graph.edges().collect();
-        for i in 0..edges.len()-1 {
-            for j in i+1..edges.len(){
-                let (v_a, v_b) = edges[i];
-                let (u_a, u_b) = edges[j];
-                let (x1, y1) = positions[&v_a];
-                let (x2, y2) = positions[&v_b];
-                let (x3, y3) = positions[&u_a];
-                let (x4, y4) = positions[&u_b];
-                let denom = (x1-x2)*(y3-y4) - (y1-y2)*(x3-x4);
-                if denom == 0.0 {
-                    // Cant intersect lines, unsure non colinear, or non overlapping
-                    println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), are vertical", x1, y1, x2, y2, x3, y3, x4, y4);
-                    if x1!=x3 {continue;}
-                    let (a1, b1) = (y1.min(y2), y1.max(y2));
-                    let (a2, b2) = (y3.min(y4), y3.max(y4));
-                    let start = a1.max(b1); let end = a2.min(b2);
-                    assert!(end-start < EPSILON);
-                    continue;
-                }
-                let x = ((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4)) / denom;
-                let y = ((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4)) / denom;
-                println!("Edge ({}, {})->({}, {}), and ({}, {})->({}, {}), intersect at ({}, {})", x1, y1, x2, y2, x3, y3, x4, y4, x, y);
-                // Insure intersection occurs out of one of the segment bounds
-                assert!(
-                    x-x1.max(x2)>-EPSILON || x - x1.min(x2)<EPSILON ||
-                    x-x3.max(x4)>-EPSILON || x - x3.min(x4)<EPSILON ||
-                    y-y1.max(y2)>-EPSILON || y - y1.min(y2)<EPSILON ||
-                    y-y3.max(y4)>-EPSILON || y - y3.min(y4)<EPSILON
-                );
-            }
-        }
+        test_line_crossing(&graph, &positions);
     }
 }
